@@ -1,0 +1,91 @@
+
+table {
+  border-collapse: collapse;
+//  width: 98%;
+}
+.ui-datepicker-header {
+  background: $green_title;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+
+  .ui-datepicker-prev {
+    float: left;
+    width: 18px;
+    height: 35px;
+    cursor: pointer;
+    span {
+      width: 6px;
+      height: 7px;
+      display: block;
+      text-indent: -9999px;
+      background: image-url($sprite2) no-repeat -57px -42px;
+      margin: 15px 0 0 12px;
+    }
+  }
+
+  .ui-datepicker-next {
+    float: right;
+    width: 18px;
+    height: 35px;
+    cursor: pointer;
+
+    span {
+      text-indent: -9999px;
+      display: block;
+      background: image-url($sprite2) no-repeat -74px -42px;
+      width: 6px;
+      height: 7px;
+      margin: 15px 12px 0 0;
+    }
+  }
+
+  .ui-datepicker-title {
+    text-align: center;
+    @include montserratregular;
+    font-size: 14px;
+    color: #ffffff;
+    padding: 11px 0 10px;
+  }
+}
+
+
+
+.ui-datepicker-calendar {
+  @include montserratregular;
+
+  th {
+    height: 24px;
+
+    span {
+      font-size: 9px;
+      color: #000000;
+      font-weight: normal;
+    }
+  }
+
+  td {
+    text-align: center;
+    height: 30px;
+
+    a {
+      color: $text_datepicker;
+      display: block;
+      width: 30px;
+      padding: 7px 0 6px;
+
+       &.ui-state-active {
+        color: #ffffff;
+        background: $green_title;
+      }
+    }
+    &.ui-datepicker-other-month {
+
+      .ui-state-default {
+        display: block;
+        background: image-url($bg_other_month) no-repeat 0 0;
+        padding: 7px 0 6px;
+        width: 30px;
+      }
+    }
+  }
+}

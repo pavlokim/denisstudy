@@ -1,0 +1,152 @@
+#words-section {
+
+  .letters-section {
+    background: $content_blocks_bg;
+    padding: 0 20px;
+    overflow: hidden;
+    margin-bottom: 40px;
+
+    ul {
+      margin-right: -10px;
+    }
+
+    li {
+      color: $dark_grey_text;
+      font-size: 24px;
+      display: block;
+      float: left;
+      padding: 21px 5px;
+      @include montserratregular;
+      text-transform: uppercase;
+      cursor: pointer;
+      list-style: none;
+
+      *+html & {
+        width: 17px;
+        text-align: center;
+      }
+
+      &.active {
+        background: image-url($sprite2) no-repeat 0 -1px;
+        color: $green_title;
+      }
+      &.disabled {
+        color: $light_grey_text;
+        &:hover {
+          cursor: default;
+          color: $light_grey_text;
+        }
+
+        a {
+          color: $light_grey_text;
+          &:hover {
+            cursor: default;
+            color: $light_grey_text;
+          }
+        }
+      }
+      &:hover {
+        color: $green_title;
+      }
+
+      a {
+        color: $dark_grey_text;
+
+        &:hover {
+          color: $green_title;
+        }
+      }
+
+    }
+  }
+
+  .dictionary-section {
+    margin-left: -20px;
+    zoom: 1;
+
+    .content-section {
+      float: left;
+      width: 235px;
+      margin-left: 20px;
+
+      li {
+        list-style: none;
+        a {
+          font-size: 14px;
+          @include montserratregular;
+          color: $dark_text;
+          line-height: 23px;
+
+          &:hover {
+            color: $green_title;
+          }
+        }
+      }
+    }
+
+    h2 {
+      background: image-url($title_line) repeat-x 0 50%;
+      @include montserratbold;
+      font-size: 17px;
+      line-height: 120%;
+      text-transform: uppercase;
+      color: #008e7f;
+
+      span {
+        background: #ffffff;
+        padding-right: 10px;
+      }
+
+      a {
+        color: #008e7f;
+      }
+    }
+
+    .words-section {
+      padding: 10px 0 38px;
+    }
+
+    .more-info {
+      &.active {
+        color: $green_title;
+      }
+    }
+  }
+
+  .section-line {
+    position: relative;
+    overflow: visible !important;
+    zoom: 1;
+    &.last {
+      .words-section {
+        padding-bottom: 0;
+      }
+    }
+  }
+
+  .block-info-more {
+    width: 745px;
+    margin: 0 0 20px 20px;
+    &.onplace {
+      top: auto;
+      bottom: 22px;
+      left: 0;
+    }
+
+    h2 {
+      background: none;
+      padding-bottom: 14px;
+
+      font-size: 16px;
+    }
+
+    .text {
+      padding: 20px 32px 8px 32px;
+    }
+
+    p {
+      color: $dark_text;
+      line-height: 20px;
+    }
+  }
+}

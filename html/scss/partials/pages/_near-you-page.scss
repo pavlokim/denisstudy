@@ -1,0 +1,369 @@
+.main-content {
+  padding-bottom: 40px;
+}
+
+.tabs-list {
+  overflow: hidden;
+  padding-bottom: 34px;
+}
+
+.tab-content {
+  h2 {
+    background: image-url($title_line) repeat-x 0 50%;
+    margin-bottom: 25px;
+
+    @include montserratregular;
+    font-size: 16px;
+    line-height: 120%;
+    text-transform: uppercase;
+    color: #008e7f;
+
+    span {
+      background: #ffffff;
+      padding-right: 10px;
+    }
+
+    a {
+      color: #008e7f;
+    }
+  }
+
+  .block-text {
+    margin-top: -10px;
+    padding-bottom: 37px;
+
+    p {
+      font-family: $default-font-family;
+      font-size: 14px;
+      line-height: 18px;
+      color: $dark_text;
+    }
+  }
+}
+
+.block-region {
+  border: 1px solid #DBDBDB;
+  position: relative;
+  margin-bottom: 20px;
+  &.last {
+    margin-bottom: 0;
+  }
+
+  .image {
+    position: relative;
+    float: left;
+    width: 234px;
+
+    img {
+      display: block;
+      width: 234px;
+      height: 233px;
+    }
+
+    .description {
+      position: absolute;
+      bottom: 26px;
+      left: 0;
+      width: 100%;
+
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 120%;
+      text-align: center;
+      color: $dark_text;
+    }
+  }
+
+  .left-column {
+    float: left;
+    width: 185px;
+    padding: 28px 0 0 69px;
+  }
+
+  .right-column {
+    float: left;
+    width: 203px;
+    padding: 28px 0 0 51px;
+  }
+
+  ul {
+    margin: 0;
+    padding: 0;
+  }
+
+  li {
+    background: image-url($list_reg_arrow) no-repeat -294px 3px;
+    float: left;
+    list-style: none;
+    margin-bottom: 12px;
+    padding: 0 0 0 18px;
+
+    @include montserratregular;
+    font-size: 16px;
+    line-height: 120%;
+    color: $dark_text;
+    &:hover {
+      background-position: 0 3px;
+
+      > a {
+        color: #91ba3a;
+      }
+    }
+    *+html & {
+      float: none;
+    }
+    a {
+      color: $dark_text;
+      &:hover {
+        color: #91ba3a;
+      }
+    }
+  }
+
+  .block-info-more {
+    margin: 5px 0 0 5px;
+
+    text-align: center;
+    &.block-info-more-cl {
+      text-align: left;
+
+      .text {
+        padding-top: 21px;
+      }
+
+      .left-column {
+        width: 225px;
+        padding: 0 10px 0 0;
+      }
+
+      .right-column {
+        width: 194px;
+        padding: 0;
+      }
+
+      .info {
+        padding-bottom: 20px;
+      }
+    }
+
+    .text {
+      padding-top: 53px;
+    }
+
+    .title {
+      padding: 0 0 15px 0;
+    }
+
+    h2 {
+      background: none;
+      margin: 0;
+      padding: 0;
+
+      @include montserratbold;
+      font-size: 16px;
+      line-height: 120%;
+      text-transform: uppercase;
+      color: $green_title;
+
+      a {
+        color: $green_title;
+      }
+    }
+
+    h3 {
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 120%;
+      color: $green_title;
+
+      a {
+        color: $green_title;
+      }
+    }
+
+    .subtitle {
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 20px;
+      color: $dark_text;
+    }
+
+    p {
+      padding: 0;
+
+      line-height: 20px;
+      color: $dark_text;
+    }
+
+    li {
+      background: image-url($sprite) no-repeat -121px -24px;
+      float: none;
+      display: inline;
+      margin: 0 0 0 1px;
+      padding: 0 0 0 7px;
+
+      font-family: $default-font-family;
+      font-size: 14px;
+      color: $dark_text;
+      &.first {
+        background: none;
+      }
+    }
+  }
+}
+
+.roll-section {
+  clear: both;
+  &.last {
+    .link-more {
+      margin-bottom: 0;
+    }
+  }
+
+  h2 {
+    background: none;
+    margin-bottom: 0;
+  }
+
+  .content {
+    position: static;
+    top: auto;
+    left: auto;
+  }
+
+  .block-contacts {
+    margin: 18px -30px 4px 0;
+  }
+
+  .block-contact {
+    float: left;
+    width: 253px;
+    //margin-right: 2px;
+    padding: 16px 1px 18px 1px;
+
+    text-align: left;
+    /*&:hover {
+      border: 1px solid #DCDCDC;
+      padding: 15px 0 17px 0;
+    }*/
+    *+html & {
+      width: 246px;
+    }
+    &.last {
+      margin-right: 0;
+    }
+
+    .image {
+      position: relative;
+      float: left;
+      width: 69px;
+      height: 69px;
+      margin: 0 15px 7px 0;
+
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+    }
+
+    .text {
+      padding: 0 10px;
+    }
+
+    h3 {
+      padding-bottom: 6px;
+
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 120%;
+      color: $dark_text;
+    }
+
+    p {
+      font-family: $default-font-family;
+      font-size: 14px;
+      line-height: 16px;
+      color: $dark_text;
+    }
+  }
+
+  .link-more {
+    display: block;
+    float: left;
+    margin-bottom: 36px;
+
+    font-family: $default-font-family;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 120%;
+    color: #4c4c4c;
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    span {
+      background: image-url($sprite) no-repeat -84px -145px;
+      display: block;
+      float: left;
+      position: relative;
+      top: 6px;
+      width: 7px;
+      height: 7px;
+      margin-right: 5px;
+    }
+  }
+
+  .block-event {
+    margin-bottom: 14px;
+  }
+
+  .block-info-more {
+    h2 {
+      color: $tittle_block_text;
+    }
+  }
+
+  .block-table {
+    margin: 20px 0 14px 0;
+  }
+
+  table {
+    width: 100%;
+
+    text-align: center;
+
+    th {
+      background: $content_blocks_bg;
+      border: 1px solid #DBDBDB;
+      //min-width: 148px;
+      padding: 11px 5px 13px 5px;
+      vertical-align: middle;
+
+      @include montserratregular;
+      font-size: 14px;
+      line-height: 120%;
+      color: $tittle_block_text;
+    }
+
+    td {
+      border: 1px solid #DBDBDB;
+      height: 37px;
+      padding: 10px 5px 10px 5px;
+      vertical-align: middle;
+
+      font-family: $default-font-family;
+      font-size: 14px;
+      line-height: 120%;
+      color: $dark_text;
+    }
+
+    .price {
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 18px;
+      color: $tittle_block_text;
+    }
+  }
+}

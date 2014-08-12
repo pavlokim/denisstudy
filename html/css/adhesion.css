@@ -1,0 +1,745 @@
+/*fonts*/
+/*colors*/
+/*backgrounds*/
+/*background colors*/
+/*shadows*/
+.main-content {
+  padding-bottom: 11px;
+}
+
+.main-title {
+  padding-bottom: 28px;
+}
+
+.left-section {
+  width: 1000px;
+  margin: 0 auto;
+}
+
+.title-line h2 {
+  background: url('../images/title_line.gif') repeat-x 0 50%;
+  margin-bottom: 23px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  text-transform: uppercase;
+  color: #008e7f;
+}
+.title-line h2 span {
+  background: #ffffff;
+  padding-right: 10px;
+}
+.title-line h2 a {
+  color: #008e7f;
+}
+
+.form-section {
+  padding-bottom: 28px;
+}
+.form-section.form-contact-info .form-item-line {
+  padding-bottom: 18px;
+}
+.form-section.form-contact-info .combo-wrapper {
+  font-size: 14px;
+  font-weight: normal;
+  color: #666666;
+}
+.form-section.form-contact-info label {
+  padding-bottom: 6px;
+}
+.form-section.form-contact-info .form-type-textfield-small {
+  width: 150px;
+}
+.form-section.form-contact-info .form-type-textfield-small .form-item {
+  padding-bottom: 0;
+}
+.form-section.form-contact-info .form-type-textfield-small .form-text-wrap .form-text {
+  height: 19px;
+}
+.form-section.form-contact-info .form-type-textfield-small .form-text {
+  height: 31px;
+}
+.form-section.form-contact-info .form-type-textfield-small label {
+  padding-top: 0;
+  padding-bottom: 6px;
+}
+.form-section .left-column {
+  float: left;
+  width: 660px;
+}
+.form-section .left-column .block {
+  width: 320px;
+  float: right;
+}
+.form-section .left-column .block:first-child {
+  float: left;
+}
+.form-section .left-column .block:first-child .form-type-select {
+  padding-bottom: 18px;
+}
+.form-section .left-column .block .form-type-select {
+  padding-bottom: 10px;
+}
+.form-section .left-column .block .form-type-textfield-small .form-item {
+  padding-bottom: 0;
+}
+.form-section .left-column label {
+  display: block;
+  padding-bottom: 6px;
+}
+.form-section .left-column .form-item {
+  padding-bottom: 18px;
+}
+.form-section .left-column .radio-inline {
+  margin-right: -15px;
+}
+.form-section .left-column .radio-inline .form-type-radio {
+  padding-right: 19px;
+}
+.page-ie .form-section .left-column .radio-inline .form-type-radio {
+  padding-right: 18px;
+}
+.form-section .left-column .form-type-radio label {
+  padding-left: 25px;
+  font-size: 18px;
+}
+.form-section .left-column .form-type-radio .jquery-checkbox-radio .mark {
+  background-position: -102px -303px;
+  width: 15px;
+  height: 15px;
+}
+.form-section .left-column .form-type-radio .jquery-checkbox-radio.jquery-checkbox-radio-checked .mark {
+  background-position: -102px -319px;
+}
+.form-section .right-column {
+  background: #F4F4F4;
+  float: right;
+  width: 278px;
+  padding: 25px 26px 23px 16px;
+}
+.form-section .right-column h3 {
+  padding-bottom: 1px;
+  font-family: arial, sans-serif;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 120%;
+  color: #008e7f;
+}
+.form-section .right-column .text {
+  border-bottom: 1px solid #DBDBDB;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+}
+.form-section .right-column p {
+  padding-bottom: 7px;
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  line-height: 17px;
+  color: #666666;
+}
+.form-section .right-column label {
+  display: block;
+  padding-bottom: 8px;
+  line-height: 16px;
+}
+.form-section .right-column .form-item {
+  padding-bottom: 10px;
+}
+* + html .form-section .right-column .combo-selected {
+  width: 240px !important;
+}
+.form-section label {
+  display: block;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 14px;
+  line-height: 120%;
+  color: #666666;
+}
+.form-section .form-text {
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 14px;
+  color: #666666;
+}
+.form-section .radio-inline {
+  overflow: hidden;
+}
+.form-section .radio-inline label {
+  display: block;
+  padding-bottom: 9px;
+}
+.form-section .radio-inline .form-type-radio {
+  float: left;
+  padding-right: 14px;
+  padding-bottom: 0;
+  width: auto;
+}
+.form-section .radio-inline .form-type-radio input {
+  top: 3px;
+}
+.form-section .radio-inline .form-type-radio .jquery-checkbox-radio {
+  top: 3px;
+}
+.form-section .form-type-radio {
+  padding-right: 27px;
+  padding-bottom: 12px;
+}
+.form-section .form-type-radio input {
+  top: 4px;
+}
+.form-section .form-type-radio .jquery-checkbox-radio {
+  top: 4px;
+}
+* + html .form-section .form-type-radio .jquery-checkbox-radio {
+  top: 3px;
+}
+.form-section .form-type-radio label {
+  cursor: pointer;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  color: #666666;
+}
+.form-section .form-type-radio label.jquery-checkbox-radio-label-checked {
+  font-family: 'Montserrat';
+  font-weight: 700;
+  color: #008e7f;
+}
+.form-section .form-type-textfield-small {
+  overflow: hidden;
+}
+.form-section .form-type-textfield-small .form-text-wrap {
+  background: url('../images/sprite-btn.png') no-repeat 100% -1085px;
+  padding-right: 10px;
+}
+.form-section .form-type-textfield-small .form-text-wrap .form-text-wrap-inner {
+  background: url('../images/sprite-btn.png') no-repeat 0 -1052px;
+  padding-left: 10px;
+}
+.form-section .form-type-textfield-small .form-text-wrap .form-text {
+  background: none;
+  border: none;
+  width: 130px;
+  height: 19px;
+  padding: 7px 0 7px 0;
+}
+.form-section .form-type-textfield-small .form-text {
+  border: 1px solid #A8A8A8;
+  border-radius: 6px;
+  width: 128px;
+  height: 30px;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-right: 10px;
+  padding-left: 10px;
+}
+.form-section .form-type-textfield-small label {
+  float: left;
+  padding: 8px 12px 0 0;
+}
+.page-ie .form-section .form-type-textfield-small label {
+  float: none;
+}
+.form-section .form-type-textfield-small .form-item {
+  clear: none;
+  float: left;
+  position: relative;
+}
+.form-section .form-text-static-val {
+  overflow: hidden;
+}
+.form-section .form-text-static-val label {
+  float: right;
+  padding: 8px 12px 0 0;
+}
+.page-ie .form-section .form-text-static-val label {
+  float: none;
+}
+.form-section .form-text-static-val .form-text-wrap {
+  padding-right: 20px;
+}
+.form-section .form-text-static-val .form-text-wrap .form-text {
+  background: none;
+  border: none;
+  width: 110px;
+  height: 19px;
+  padding: 7px 10px 7px 0;
+}
+.form-section .form-text-static-val .form-text {
+  width: 111px;
+  padding-right: 30px;
+  padding-left: 7px;
+}
+.form-section .form-text-static-val .form-item {
+  clear: none;
+  float: right;
+  position: relative;
+}
+.form-section .static-value {
+  display: block;
+  position: absolute;
+  top: 5px;
+  right: 9px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 18px;
+  text-transform: uppercase;
+  line-height: 120%;
+  color: #b2b2b2;
+}
+.form-section .combo-wrapper {
+  background-position: 0 -1052px;
+  padding-right: 0;
+  font-weight: bold;
+  color: #4c4c4c;
+}
+.form-section .combo-wrapper:hover {
+  background-position: 0 -1592px;
+}
+.form-section .combo-wrapper:hover .combo-button {
+  background-position: -464px -728px;
+}
+.form-section .combo-wrapper.combo-wrapper-active {
+  background-position: 0 -1592px;
+}
+.form-section .combo-wrapper.combo-wrapper-active .combo-button {
+  background-position: -464px -728px;
+}
+.form-section .combo-selected {
+  margin-right: -23px;
+  line-height: 33px;
+}
+* + html .form-section .combo-selected {
+  width: 280px !important;
+}
+.form-section .combo-button {
+  background: url('../images/sprite-btn.png') no-repeat -464px -693px;
+  width: 32px !important;
+  height: 33px !important;
+  margin: 0 -5px 0 0;
+}
+
+.block-soit {
+  background: url('../images/soit_bg.png') repeat-y 0 0;
+  clear: both;
+  overflow: hidden;
+  margin-bottom: 10px;
+  padding: 0;
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  line-height: 120%;
+  color: #ffffff;
+}
+.block-soit .top-section {
+  float: left;
+  width: 302px;
+  padding: 19px 19px 25px 19px;
+}
+.block-soit .top-section p {
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 34px;
+  line-height: 120%;
+}
+.block-soit .bottom-section {
+  float: right;
+  width: 291px;
+  padding: 17px 10px 17px 19px;
+  font-style: italic;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.form-item-line {
+  overflow: hidden;
+  margin-right: -20px;
+  padding-bottom: 8px;
+}
+* + html .form-item-line {
+  margin-right: -40px;
+}
+.form-item-line.last {
+  padding-bottom: 17px;
+}
+.form-item-line .form-item {
+  clear: none;
+  float: left;
+  width: 320px;
+  padding-right: 20px;
+}
+.form-item-line .form-text-wrap {
+  background: url('../images/sprite-btn.png') no-repeat 100% -1085px;
+  padding-right: 10px;
+}
+.form-item-line .form-text-wrap .form-text-wrap-inner {
+  background: url('../images/sprite-btn.png') no-repeat 0 -1052px;
+  padding-left: 10px;
+}
+.form-item-line .form-text-wrap .form-text {
+  background: none;
+  border: none;
+  width: 300px;
+  height: 19px;
+  padding: 7px 0 7px 0;
+}
+.form-item-line .form-text {
+  border: 1px solid #A8A8A8;
+  border-radius: 6px;
+  width: 304px;
+  height: 17px;
+  padding: 7px;
+}
+.form-item-line left-column
+label {
+  display: block;
+  padding-bottom: 7px;
+}
+* + html .form-item-line left-column
+label {
+  padding-bottom: 2px;
+}
+
+.payment-section {
+  clear: both;
+  width: 1000px;
+  margin: 0 auto;
+  padding-bottom: 29px;
+}
+.payment-section .jquery-checkbox-radio {
+  display: none;
+}
+.payment-section .form-item {
+  clear: both;
+}
+.payment-section label {
+  display: block;
+  padding-bottom: 22px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 14px;
+  color: #666666;
+}
+.payment-section .form-type-radio {
+  float: left;
+  margin-right: 20px;
+  margin-bottom: 20px;
+  clear: none;
+}
+.payment-section .form-type-radio input {
+  display: none;
+}
+.payment-section .form-type-radio.last {
+  margin-right: 0;
+}
+.payment-section .form-type-radio label {
+  background: #F4F4F4;
+  display: block;
+  position: relative;
+  width: 208px;
+  min-height: 40px;
+  padding: 26px 10px 26px 102px;
+  cursor: pointer;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 20px;
+  color: #666666;
+}
+.payment-section .form-type-radio label:hover {
+  background: url('../images/radio_label_bg.png') repeat-x 0 0;
+  color: #ffffff;
+}
+.payment-section .form-type-radio label.jquery-checkbox-radio-label-checked {
+  background: url('../images/radio_label_bg.png') repeat-x 0 0;
+  color: #ffffff;
+}
+.payment-section .form-type-radio label span {
+  background: url('../images/sprite.png') no-repeat 0 0;
+  position: absolute;
+}
+.payment-section .form-type-radio label .small {
+  background: none;
+  position: static;
+  font-size: 12px;
+}
+.payment-section .text-3-lines label {
+  padding-top: 19px;
+  padding-bottom: 10px;
+  height: 63px;
+}
+.payment-section .pay-card label span {
+  background-position: 0 -441px;
+  width: 57px;
+  height: 53px;
+  top: 19px;
+  left: 24px;
+}
+.payment-section .pay-card label:hover span {
+  background-position: -61px -441px;
+}
+.payment-section .pay-card .jquery-checkbox-radio-label-checked span {
+  background-position: -61px -441px;
+}
+.payment-section .pay-check label span {
+  background-position: 0 -390px;
+  width: 59px;
+  height: 49px;
+  top: 24px;
+  left: 21px;
+}
+.payment-section .pay-check label:hover span {
+  background-position: -61px -390px;
+}
+.payment-section .pay-check .jquery-checkbox-radio-label-checked span {
+  background-position: -61px -390px;
+}
+.payment-section .pay-prelevement label span {
+  background-position: 0 -336px;
+  width: 60px;
+  height: 52px;
+  top: 22px;
+  left: 21px;
+}
+.payment-section .pay-prelevement label:hover span {
+  background-position: -62px -336px;
+}
+.payment-section .pay-prelevement .jquery-checkbox-radio-label-checked span {
+  background-position: -62px -336px;
+}
+.payment-section .form-submit {
+  background: url('../images/sprite-btn.png') no-repeat -332px -865px;
+  border: none;
+  display: block;
+  width: 320px;
+  height: 57px;
+  margin: 0;
+  cursor: pointer;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  color: #ffffff;
+}
+.payment-section .buttons {
+  padding-bottom: 40px;
+}
+.payment-section .buttons .form-item {
+  float: right;
+  clear: none;
+}
+
+.form-return {
+  width: 457px;
+  margin-bottom: 32px;
+}
+.form-return .form-submit {
+  border: none;
+  background: url('../images/sprite-btn.png') no-repeat 0 -689px;
+  width: 457px;
+  height: 65px;
+  margin: 0 0 0 -4px;
+  padding: 0 0 0 59px;
+  font-family: 'Montserrat';
+  font-weight: 700;
+  font-size: 17px;
+  color: #666666;
+}
+* + html .form-return .form-submit {
+  font-size: 15px;
+}
+.form-return .form-submit:hover {
+  background-position: 0 -753px;
+  color: #008e7f;
+}
+
+.return-btn {
+  background: url('../images/sprite-btn.png') no-repeat 0 -1628px;
+  display: block;
+  float: left;
+  width: 578px;
+  height: 57px;
+  padding: 0 0 0 81px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 17px;
+  line-height: 59px;
+  color: #666666;
+}
+.return-btn:hover {
+  background-position: 0 -1687px;
+  color: #008e7f;
+}
+* + html .return-btn {
+  width: 590px;
+  padding: 0 0 0 69px;
+}
+
+.form-contact-info .block-members .form-type-textfield-small {
+  width: 143px;
+}
+.form-contact-info .block-members .form-item-line {
+  padding-bottom: 8px;
+}
+* + html .form-contact-info .combo-selected {
+  width: 110px !important;
+}
+
+.block-members {
+  padding: 12px 0 8px 0;
+}
+.block-members .title {
+  background: #E8E8E8;
+  padding: 14px 21px 13px 21px;
+}
+.block-members .title h2 {
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 18px;
+  line-height: 120%;
+  color: #4c4c4c;
+}
+.block-members .member {
+  background: #F4F4F4;
+  position: relative;
+  margin-bottom: 1px;
+  padding: 17px 0 9px 20px;
+}
+.block-members .btn-close {
+  background: url('../images/sprite.png') no-repeat -103px -224px;
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  width: 12px;
+  height: 12px;
+}
+.block-members .form-item-line .form-text {
+  width: 291px;
+}
+.block-members .form-item {
+  width: auto;
+}
+.block-members .form-item.form-type-select {
+  padding-right: 25px;
+}
+.block-members .form-type-textfield-small {
+  width: auto;
+}
+.block-members .form-type-textfield-small .form-text-wrap .form-text {
+  background: none;
+  border: none;
+  width: 116px;
+  height: 19px;
+  padding: 7px 0 7px 0;
+}
+.block-members .form-type-textfield-small .form-text {
+  width: 121px;
+}
+.block-members .radio-inline {
+  width: 163px;
+  padding-right: 2px;
+}
+.block-members .radio-inline .form-type-radio {
+  padding-right: 7px;
+}
+.block-members .radio-inline .form-type-radio input {
+  top: 1px;
+}
+.block-members .radio-inline .form-type-radio .jquery-checkbox-radio {
+  top: 1px;
+}
+.block-members .radio-inline label {
+  padding-bottom: 14px;
+  font-size: 14px;
+}
+
+.form-description {
+  font-family: arial, sans-serif;
+  font-size: 11px;
+  line-height: 120%;
+  color: #666666;
+}
+
+.block-info {
+  border: 1px solid #E3E3E3;
+  clear: both;
+  margin-bottom: 10px;
+  padding: 18px 19px 21px 19px;
+}
+.block-info h2 {
+  padding-bottom: 10px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 18px;
+  line-height: 120%;
+  color: #666666;
+}
+.block-info p {
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  line-height: 18px;
+  color: #666666;
+}
+
+.block-legal {
+  background: url('../images/separator_line3.png') repeat-x 0 0;
+  padding: 31px 0 15px 0;
+}
+.block-legal h2 {
+  padding-bottom: 23px;
+  font-family: arial, sans-serif;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 120%;
+  color: #008e7f;
+}
+.block-legal p {
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  line-height: 17px;
+  color: #666666;
+}
+.block-legal .left-column {
+  float: left;
+  width: 660px;
+}
+.block-legal .left-column img {
+  float: right;
+  margin-top: -47px;
+}
+.block-legal .right-column {
+  float: right;
+  width: 320px;
+}
+.block-legal .right-column h2 {
+  padding-bottom: 8px;
+}
+.block-legal .info {
+  overflow: hidden;
+  padding-top: 8px;
+  padding-bottom: 9px;
+}
+.block-legal .info p {
+  padding-left: 41px;
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 17px;
+  color: #666666;
+}
+.block-legal .ico {
+  float: left;
+  width: 32px;
+  height: 32px;
+  margin-top: -7px;
+}
+.block-legal .ico-mail {
+  background: url('../images/sprite2.png') no-repeat -95px -6px;
+}
+.block-legal .ico-phone {
+  background: url('../images/sprite.png') no-repeat -36px -554px;
+}
+.block-legal .ico-doc {
+  background: url('../images/sprite.png') no-repeat -70px -554px;
+}

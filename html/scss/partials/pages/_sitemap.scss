@@ -1,0 +1,126 @@
+.main-content {
+  padding-bottom: 69px;
+}
+
+.site-map-content {
+  .column {
+    float: left;
+    width: 171px;
+    margin-left: 20px;
+    &.first {
+      margin-left: 0;
+    }
+  }
+
+  .title {
+    padding-bottom: 27px;
+
+    h2 {
+      min-height: 32px;
+
+      font-weight: normal;
+      font-size: 14px;
+      line-height: 16px;
+    }
+
+    a {
+      background: $content_blocks_bg;
+      display: block;
+      position: relative;
+      width: 100%;
+      padding: 15px 0;
+
+      @include montserratregular;
+      font-size: 14px;
+      text-transform: uppercase;
+      text-align: center;
+      color: $green_title;
+      &:hover {
+        color: $tittle_block_text;
+      }
+    }
+
+    span {
+      display: block;
+
+      @include montserratbold;
+    }
+
+    .arrow {
+      background: image-url($sprite) no-repeat -82px -228px;
+      display: block;
+      position: absolute;
+      left: 50%;
+      bottom: -8px;
+      width: 13px;
+      height: 8px;
+      margin-left: -6.5px;
+    }
+  }
+
+  h3 {
+    padding-bottom: 10px;
+
+    @include montserratregular;
+    font-size: 14px;
+    line-height: 120%;
+    text-transform: uppercase;
+    color: $green_title;
+
+    a {
+      color: $green_title;
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+
+  .block {
+    padding-bottom: 16px;
+
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0 0 2px 0;
+
+      a {
+        @include montserratbold;
+        font-size: 14px;
+        line-height: 120%;
+        color: $tittle_block_text;
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+
+      ul {
+        padding-bottom: 0;
+
+        a {
+          padding: 0;
+
+          font-family: $default-font-family;
+          font-size: 14px;
+          font-weight: normal;
+          color: $dark_text;
+        }
+
+        li {
+          background: none;
+          padding: 0;
+        }
+      }
+    }
+
+    li {
+      background: image-url($list_circle) no-repeat 1px 6px;
+      margin: 0;
+      padding: 0 0 4px 10px;
+
+      a {
+        display: block;
+        padding-bottom: 3px;
+      }
+    }
+  }
+}

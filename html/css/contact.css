@@ -1,0 +1,190 @@
+/*fonts*/
+/*colors*/
+/*backgrounds*/
+/*background colors*/
+/*shadows*/
+.radio-inline {
+  overflow: hidden;
+}
+.radio-inline.form-item label {
+  display: block;
+  padding-bottom: 9px;
+}
+.radio-inline .form-type-radio {
+  padding-right: 14px;
+  padding-bottom: 0;
+}
+.radio-inline .form-type-radio input {
+  top: 3px;
+}
+.radio-inline .form-type-radio .jquery-checkbox-radio {
+  top: 3px;
+}
+
+.form-section-wrapper h2 {
+  border-bottom: 1px solid #DBDBDB;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  font-family: 'Montserrat';
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 120%;
+  text-transform: uppercase;
+  color: #008e7f;
+}
+.form-section-wrapper h2 a {
+  color: #008e7f;
+}
+.form-section-wrapper h3 {
+  padding-bottom: 12px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  color: #008e7f;
+}
+.form-section-wrapper h3 a {
+  color: #008e7f;
+}
+.form-section-wrapper .form-item {
+  clear: both;
+}
+.form-section-wrapper label {
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 14px;
+  line-height: 120%;
+  color: #666666;
+}
+.form-section-wrapper .form-type-radio {
+  float: left;
+  clear: none;
+  padding-right: 13px;
+  padding-bottom: 5px;
+}
+.form-section-wrapper .form-type-radio input {
+  top: 3px;
+}
+.form-section-wrapper .form-type-radio .jquery-checkbox-radio {
+  top: 3px;
+}
+* + html .form-section-wrapper .form-type-radio .jquery-checkbox-radio {
+  top: 3px;
+}
+.form-section-wrapper .form-type-radio label {
+  cursor: pointer;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  color: #666666;
+}
+.form-section-wrapper .form-type-radio label.jquery-checkbox-radio-label-checked {
+  font-family: 'Montserrat';
+  font-weight: 700;
+  color: #008e7f;
+}
+.form-section-wrapper .form-text {
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 14px;
+  color: #666666;
+}
+
+.form-item-line {
+  overflow: hidden;
+  margin-right: -20px;
+  padding-bottom: 17px;
+}
+* + html .form-item-line {
+  margin-right: -40px;
+}
+.form-item-line.last {
+  padding-bottom: 17px;
+}
+.form-item-line .form-item {
+  clear: none;
+  float: left;
+  padding-right: 20px;
+}
+.form-item-line .form-text-wrap {
+  background: url('../images/sprite-btn.png') no-repeat 100% -1085px;
+  padding-right: 10px;
+}
+.form-item-line .form-text-wrap .form-text-wrap-inner {
+  background: url('../images/sprite-btn.png') no-repeat 0 -1052px;
+  padding-left: 10px;
+}
+.form-item-line .form-text-wrap .form-text {
+  background: none;
+  border: none;
+  width: 215px;
+  height: 19px;
+  padding: 7px 0 7px 0;
+}
+.form-item-line .form-item-big .form-text-wrap .form-text {
+  width: 470px;
+}
+.form-item-line .form-item-big .form-text {
+  width: 474px;
+}
+.form-item-line .form-text {
+  border: 1px solid #A8A8A8;
+  border-radius: 6px;
+  width: 219px;
+  height: 17px;
+  padding: 7px;
+}
+.form-item-line label {
+  display: block;
+  padding-bottom: 7px;
+}
+* + html .form-item-line label {
+  padding-bottom: 2px;
+}
+
+.form-item label {
+  display: block;
+  padding-bottom: 7px;
+}
+* + html .form-item label {
+  padding-bottom: 2px;
+}
+.form-item .form-textarea-wrap {
+  background: url('../images/sprite-btn.png') no-repeat 100% -1377px;
+  padding-right: 10px;
+}
+.form-item .form-textarea-wrap .form-textarea-wrap-inner {
+  background: url('../images/sprite-btn.png') no-repeat 0 -1164px;
+  padding-left: 10px;
+}
+.form-item .form-textarea-wrap .form-textarea {
+  background: none;
+  border: none;
+  width: 719px;
+  height: 197px;
+  padding: 7px 0 7px 0;
+}
+.form-item .form-textarea {
+  border: 1px solid #A8A8A8;
+  border-radius: 6px;
+  width: 723px;
+  height: 191px;
+  margin-bottom: 20px;
+  padding: 10px;
+  overflow: auto;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 14px;
+  color: #666666;
+}
+.form-item .form-submit {
+  background: url('../images/sprite-btn.png') no-repeat -332px -821px;
+  float: right;
+  width: 235px;
+  height: 40px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 14px;
+  color: #ffffff;
+}

@@ -1,0 +1,48 @@
+.block-content-info {
+  border-bottom: 1px solid #DCDCDC;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 30px;
+  padding-bottom: 30px;
+  &.last {
+    margin-bottom: 15px;
+  }
+
+  img {
+    float: left;
+    padding-right: 20px;
+  }
+
+  .text {
+    padding-bottom: 40px;
+    overflow: hidden;
+  }
+
+  h2 {
+    padding-bottom: 9px;
+
+    @include montserratregular;
+    font-size: 18px;
+    line-height: 120%;
+    color: #4c4c4c;
+  }
+
+  P {
+    padding-bottom: 10px;
+
+    font-family: $default-font-family;
+    font-size: 14px;
+    line-height: 18px;
+    color: $dark_text;
+  }
+
+  .default-btn {
+    position: absolute;
+    left: 255px;
+    bottom: 30px;
+    text-align: center;
+    span {
+      min-width: 215px;
+    }
+  }
+}

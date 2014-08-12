@@ -1,0 +1,152 @@
+.block-map {
+  padding-bottom: 61px;
+
+  .mimagemap {
+    float: left;
+    margin-left: 14px;
+  }
+
+  .block-right {
+    width: 363px;
+    float: right;
+  }
+
+  h3 {
+    padding-bottom: 16px;
+
+    @include montserratbold;
+    font-size: 14px;
+    line-height: 120%;
+    text-transform: uppercase;
+    color: $green_title;
+
+    a {
+      color: $green_title;
+    }
+  }
+
+  .block-search {
+    background: image-url($sprite_btn) no-repeat 0 -1011px;
+    width: 347px;
+    margin: 0 17px 0 0;
+    padding: 10px 9px 13px 8px;
+    overflow: hidden;
+
+    .form-item {
+      float: left;
+    }
+
+    .form-text {
+      background: none;
+      border: none;
+      width: 314px;
+
+      font-family: $default-font-family;
+      font-size: 14px;
+      color: $dark_text;
+    }
+
+    .watermark {
+      font-family: $default-font-family;
+      font-size: 14px;
+      color: $dark_text;
+    }
+
+    .form-submit {
+      background: image-url($sprite) no-repeat -82px -208px;
+      float: right;
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
+.mimagemap {
+  width: 334px;
+  height: auto;
+  position: relative;
+  z-index: 1;
+
+  img {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+  }
+
+  .image-main {
+    z-index: 3;
+  }
+
+  .image-fake {
+    position: relative;
+    z-index: 1;
+  }
+
+  canvas {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+  }
+}
+
+.regions {
+  margin-top: 28px;
+  margin-right: -10px;
+
+  ul {
+    float: left;
+    //width: 50%;
+
+    @include montserratregular;
+    font-size: 14px;
+    line-height: 120%;
+    color: $dark_text;
+    &.first {
+      padding-right: 28px;
+      width: 166px;
+    }
+  }
+
+  li {
+    padding-bottom: 5px;
+    list-style: none;
+    cursor: pointer;
+    &.hover {
+      color: #91ba3a;
+    }
+    &:hover {
+      color: #91ba3a;
+    }
+    &.active {
+      background: image-url($list_mp_arrow) no-repeat 0 3.5px;
+      padding-left: 12px;
+      @include montserratbold;
+      color: #91ba3a;
+    }
+  }
+}
+
+.imagemap-mark {
+  background: image-url($sprite) no-repeat 0 -497px;
+  display: none;
+  position: absolute;
+  width: 33px;
+  height: 33px;
+  z-index: 5;
+
+  text-indent: -9999px;
+  &.visible {
+    display: block;
+  }
+  &.show {
+    display: block;
+  }
+  &.hidden {
+    display: none;
+  }
+}

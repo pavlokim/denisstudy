@@ -1,0 +1,94 @@
+@mixin margin-auto {
+  margin: 0 auto;
+}
+
+@mixin text-hide {
+  font-size: 0;
+  letter-spacing: -9999px;
+  text-indent: -9999px;
+}
+@mixin text-show {
+  font-size: $default-font-size;
+  letter-spacing: 0;
+  text-indent: 0;
+}
+
+@mixin clear-box {
+  clear: both;
+  overflow: hidden;
+  .page-ie6 & {
+    zoom: 1;
+  }
+}
+
+@mixin clear-list {
+  list-style: none;
+}
+@mixin clear-block-indent {
+  margin: 0;
+  padding: 0;
+}
+
+@mixin u($underline: true, $important: false) {
+  @if $important {
+    $important: ' !important';
+  }
+  @else {
+    $important: '';
+  }
+  @if $underline {
+    text-decoration: underline#{$important};
+  }
+  @else {
+    text-decoration: none#{$important};
+  }
+}
+
+@mixin bold($bold: true, $important: false) {
+  @if $important {
+    $important: ' !important';
+  }
+  @else {
+    $important: '';
+  }
+  @if $bold {
+    font-weight: bold #{$important};
+  }
+  @else {
+    font-weight: normal #{$important};
+  }
+}
+
+@mixin upper($upper: true) {
+  @if $upper {
+    text-transform: uppercase;
+  }
+  @else {
+    text-transform: none;
+  }
+}
+
+@mixin uhover($default: true) {
+  @if $default {
+    @include u(true);
+    &:hover {
+      @include u(false);
+    }
+  }
+  @else {
+    @include u(false);
+    &:hover {
+      @include u(true);
+    }
+  }
+}
+
+@mixin montserratregular {
+  font-family: 'Montserrat';
+  font-weight: normal;
+}
+
+@mixin montserratbold {
+  font-family: 'Montserrat';
+  font-weight: 700;
+}

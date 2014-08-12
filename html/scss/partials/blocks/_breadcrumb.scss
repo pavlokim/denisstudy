@@ -1,0 +1,36 @@
+.breadcrumb {
+  overflow: hidden;
+  width: 745px;
+  padding-bottom: 11px;
+
+  @include montserratbold;
+  font-size: 12px;
+  line-height: 120%;
+  color: $dark_text;
+
+  .page-virades & {
+    padding-bottom: 5px;
+  }
+
+  li {
+    background: image-url($sprite) no-repeat -41px 0;
+    float: left;
+    margin-left: 3px;
+    padding-left: 9px;
+
+    list-style: none;
+    &.first {
+      background: none;
+      margin: 0;
+      padding: 0;
+    }
+  }
+
+  a {
+    @include montserratregular;
+    color: $dark_text;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}

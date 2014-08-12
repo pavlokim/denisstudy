@@ -1,0 +1,213 @@
+.roll-section {
+  margin: 0 0 10px 0;
+
+  &.first {
+    .page-evenements & {
+      margin-top: 10px;
+    }
+  }
+
+  .content {
+    display: none;
+    width: 745px;
+    &.open {
+      display: block;
+    }
+  }
+
+  .title {
+    background: #F4F4F4;
+    overflow: hidden;
+    position: relative;
+    padding: 15px 19px;
+
+    cursor: pointer;
+    &.active {
+      background: #008E7F;
+
+      h2 {
+        color: #ffffff;
+      }
+
+      .state-ico {
+        background-position: -53px -25px;
+        width: 21px;
+        height: 11px;
+        top: 20px;
+        right: 19px;
+      }
+
+      .counter {
+        background: image-url($sprite) no-repeat -77px -86px;
+
+        color: #008e7f;
+      }
+
+      .ico {
+        background: image-url($sprite) no-repeat -55px -208px;
+        &.ico-programme {
+          background-position: -27px -208px;
+        }
+        &.ico-contacts {
+          background-position: -39px -498px;
+        }
+        &.ico-location {
+          background-position: -95px -498px;
+        }
+        &.ico-doc {
+          background-position: -39px -526px;
+        }
+        &.ico-plus {
+          background-position: 0 -208px;
+        }
+      }
+    }
+    &:hover {
+      background: #008E7F;
+
+      h2 {
+        color: #ffffff;
+      }
+
+      .state-ico {
+        background-position: -53px -25px;
+        width: 21px;
+        height: 11px;
+        top: 20px;
+        right: 19px;
+      }
+
+      .counter {
+        background: image-url($sprite) no-repeat -77px -86px;
+
+        color: #008e7f;
+      }
+
+      .ico {
+        background: image-url($sprite) no-repeat -55px -208px;
+        &.ico-programme {
+          background-position: -27px -208px;
+        }
+        &.ico-contacts {
+          background-position: -39px -498px;
+        }
+        &.ico-location {
+          background-position: -95px -498px;
+        }
+        &.ico-doc {
+          background-position: -39px -526px;
+        }
+        &.ico-plus {
+          background-position: 0 -208px;
+        }
+      }
+    }
+
+    h2 {
+      float: left;
+
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 120%;
+      text-transform: uppercase;
+      color: #008e7f;
+      .page-chrome & {
+        line-height: 20px;
+      }
+    }
+
+    .ico {
+      background: image-url($sprite) no-repeat -55px -235px;
+      display: block;
+      float: left;
+      width: 26px;
+      height: 26px;
+      margin: -3px 9px 0 0;
+      &.ico-programme {
+        background-position: -27px -235px;
+      }
+      &.ico-contacts {
+        background-position: -67px -498px;
+      }
+      &.ico-location {
+        background-position: -95px -526px;
+      }
+      &.ico-doc {
+        background-position: -67px -526px;
+      }
+      &.ico-plus {
+        background-position: 0 -235px;
+        width: 25px;
+        height: 25px;
+      }
+    }
+  }
+
+  .counter {
+    background: image-url($sprite) no-repeat -77px -108px;
+    display: block;
+    float: left;
+    width: 20px;
+    height: 20px;
+    margin-left: 10px;
+    text-align: center;
+
+    @include montserratbold;
+    font-size: 11px;
+    line-height: 20px;
+    color: #ffffff;
+    .page-chrome & {
+      line-height: 21px;
+    }
+  }
+
+  .state-ico {
+    background: image-url($sprite) no-repeat -76px -25px;
+    display: block;
+    width: 11px;
+    height: 20px;
+    position: absolute;
+    top: 16px;
+    right: 24px;
+  }
+
+  .block-text {
+    padding: 18px 0 20px 0;
+
+    font-family: $default-font-family;
+    font-size: 14px;
+    line-height: 18px;
+    color: $dark_text;
+
+    p {
+      padding-bottom: 18px;
+      strong {
+        font-family: $default-font-family;
+        font-weight: bold;
+      }
+    }
+  }
+
+  .block-content-info {
+    border: none;
+    margin-bottom: 10px;
+    padding: 20px 0 0 0;
+
+    p {
+      padding-bottom: 17px;
+    }
+
+    .text {
+      padding-bottom: 0;
+    }
+  }
+}
+
+.roll-section-with-icon {
+  margin-bottom: 1px;
+
+  .title {
+    padding-bottom: 13px;
+    padding-left: 10px;
+  }
+}

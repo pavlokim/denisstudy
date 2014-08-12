@@ -1,0 +1,317 @@
+/*fonts*/
+/*colors*/
+/*backgrounds*/
+/*background colors*/
+/*shadows*/
+.main-content {
+  padding-bottom: 40px;
+}
+
+.tabs-list {
+  overflow: hidden;
+  padding-bottom: 34px;
+}
+
+.tab-content h2 {
+  background: url('../images/title_line.gif') repeat-x 0 50%;
+  margin-bottom: 25px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  text-transform: uppercase;
+  color: #008e7f;
+}
+.tab-content h2 span {
+  background: #ffffff;
+  padding-right: 10px;
+}
+.tab-content h2 a {
+  color: #008e7f;
+}
+.tab-content .block-text {
+  margin-top: -10px;
+  padding-bottom: 37px;
+}
+.tab-content .block-text p {
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  line-height: 18px;
+  color: #666666;
+}
+
+.block-region {
+  border: 1px solid #DBDBDB;
+  position: relative;
+  margin-bottom: 20px;
+}
+.block-region.last {
+  margin-bottom: 0;
+}
+.block-region .image {
+  position: relative;
+  float: left;
+  width: 234px;
+}
+.block-region .image img {
+  display: block;
+  width: 234px;
+  height: 233px;
+}
+.block-region .image .description {
+  position: absolute;
+  bottom: 26px;
+  left: 0;
+  width: 100%;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  text-align: center;
+  color: #666666;
+}
+.block-region .left-column {
+  float: left;
+  width: 185px;
+  padding: 28px 0 0 69px;
+}
+.block-region .right-column {
+  float: left;
+  width: 203px;
+  padding: 28px 0 0 51px;
+}
+.block-region ul {
+  margin: 0;
+  padding: 0;
+}
+.block-region li {
+  background: url('../images/list_reg_arrow.png') no-repeat -294px 3px;
+  float: left;
+  list-style: none;
+  margin-bottom: 12px;
+  padding: 0 0 0 18px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  color: #666666;
+}
+.block-region li:hover {
+  background-position: 0 3px;
+}
+.block-region li:hover > a {
+  color: #91ba3a;
+}
+* + html .block-region li {
+  float: none;
+}
+.block-region li a {
+  color: #666666;
+}
+.block-region li a:hover {
+  color: #91ba3a;
+}
+.block-region .block-info-more {
+  margin: 5px 0 0 5px;
+  text-align: center;
+}
+.block-region .block-info-more.block-info-more-cl {
+  text-align: left;
+}
+.block-region .block-info-more.block-info-more-cl .text {
+  padding-top: 21px;
+}
+.block-region .block-info-more.block-info-more-cl .left-column {
+  width: 225px;
+  padding: 0 10px 0 0;
+}
+.block-region .block-info-more.block-info-more-cl .right-column {
+  width: 194px;
+  padding: 0;
+}
+.block-region .block-info-more.block-info-more-cl .info {
+  padding-bottom: 20px;
+}
+.block-region .block-info-more .text {
+  padding-top: 53px;
+}
+.block-region .block-info-more .title {
+  padding: 0 0 15px 0;
+}
+.block-region .block-info-more h2 {
+  background: none;
+  margin: 0;
+  padding: 0;
+  font-family: 'Montserrat';
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 120%;
+  text-transform: uppercase;
+  color: #008e7f;
+}
+.block-region .block-info-more h2 a {
+  color: #008e7f;
+}
+.block-region .block-info-more h3 {
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  color: #008e7f;
+}
+.block-region .block-info-more h3 a {
+  color: #008e7f;
+}
+.block-region .block-info-more .subtitle {
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 20px;
+  color: #666666;
+}
+.block-region .block-info-more p {
+  padding: 0;
+  line-height: 20px;
+  color: #666666;
+}
+.block-region .block-info-more li {
+  background: url('../images/sprite.png') no-repeat -121px -24px;
+  float: none;
+  display: inline;
+  margin: 0 0 0 1px;
+  padding: 0 0 0 7px;
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  color: #666666;
+}
+.block-region .block-info-more li.first {
+  background: none;
+}
+
+.roll-section {
+  clear: both;
+}
+.roll-section.last .link-more {
+  margin-bottom: 0;
+}
+.roll-section h2 {
+  background: none;
+  margin-bottom: 0;
+}
+.roll-section .content {
+  position: static;
+  top: auto;
+  left: auto;
+}
+.roll-section .block-contacts {
+  margin: 18px -30px 4px 0;
+}
+.roll-section .block-contact {
+  float: left;
+  width: 253px;
+  padding: 16px 1px 18px 1px;
+  text-align: left;
+  /*&:hover {
+    border: 1px solid #DCDCDC;
+    padding: 15px 0 17px 0;
+  }*/
+}
+* + html .roll-section .block-contact {
+  width: 246px;
+}
+.roll-section .block-contact.last {
+  margin-right: 0;
+}
+.roll-section .block-contact .image {
+  position: relative;
+  float: left;
+  width: 69px;
+  height: 69px;
+  margin: 0 15px 7px 0;
+}
+.roll-section .block-contact .image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.roll-section .block-contact .text {
+  padding: 0 10px;
+}
+.roll-section .block-contact h3 {
+  padding-bottom: 6px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 120%;
+  color: #666666;
+}
+.roll-section .block-contact p {
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  line-height: 16px;
+  color: #666666;
+}
+.roll-section .link-more {
+  display: block;
+  float: left;
+  margin-bottom: 36px;
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 120%;
+  color: #4c4c4c;
+}
+.roll-section .link-more:hover {
+  text-decoration: underline;
+}
+.roll-section .link-more span {
+  background: url('../images/sprite.png') no-repeat -84px -145px;
+  display: block;
+  float: left;
+  position: relative;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+}
+.roll-section .block-event {
+  margin-bottom: 14px;
+}
+.roll-section .block-info-more h2 {
+  color: #4c4c4c;
+}
+.roll-section .block-table {
+  margin: 20px 0 14px 0;
+}
+.roll-section table {
+  width: 100%;
+  text-align: center;
+}
+.roll-section table th {
+  background: #f4f4f4;
+  border: 1px solid #DBDBDB;
+  padding: 11px 5px 13px 5px;
+  vertical-align: middle;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 14px;
+  line-height: 120%;
+  color: #4c4c4c;
+}
+.roll-section table td {
+  border: 1px solid #DBDBDB;
+  height: 37px;
+  padding: 10px 5px 10px 5px;
+  vertical-align: middle;
+  font-family: arial, sans-serif;
+  font-size: 14px;
+  line-height: 120%;
+  color: #666666;
+}
+.roll-section table .price {
+  font-family: 'Montserrat';
+  font-weight: normal;
+  font-size: 16px;
+  line-height: 18px;
+  color: #4c4c4c;
+}

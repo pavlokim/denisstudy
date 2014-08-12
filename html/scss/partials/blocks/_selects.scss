@@ -1,0 +1,235 @@
+.combo-wrapper {
+  background: image-url($sprite_btn) no-repeat -1px -150px;
+  padding-right: 4px;
+
+  font-family: $default-font-family;
+  font-size: 14px;
+  color: $dark_text;
+  cursor: pointer;
+  zoom: 1;
+}
+
+.combo-selected {
+  margin-right: -10px;
+
+  line-height: 38px;
+  text-indent: 15px;
+
+  *+html & {
+    width: 138px !important;
+  }
+}
+
+.combo-button {
+  background: image-url($sprite) no-repeat -89px -26px;
+  float: right;
+  width: 9px;
+  height: 17px !important;
+  margin: 11px 3px 0 0;
+
+  text-indent: -9999px;
+}
+
+.combo-form-type-select, .combo-form-section-select {
+  background: #FCFCFC;
+  border: 1px solid #E1E1E1;
+  padding-top: 5px;
+  padding-bottom: 5px;
+
+  font-family: $default-font-family;
+  font-size: 14px;
+  color: $dark_text;
+
+  li {
+    padding: 0 5px 5px 5px;
+    cursor: pointer;
+    &:hover {
+      color: $grey_text;
+    }
+  }
+}
+
+.block-filters {
+  background: #F4F4F4;
+  overflow: hidden;
+  padding: 20px 20px 16px 20px;
+  margin-bottom: 27px;
+
+  .top-section {
+    border-bottom: 1px solid #DCDCDC;
+    //overflow: hidden;
+    margin-bottom: 17px;
+    padding-bottom: 16px;
+  }
+
+  h2 {
+    float: left;
+
+    @include montserratregular;
+    font-size: 16px;
+    line-height: 120%;
+    color: $dark_text;
+
+    span {
+      @include montserratbold;
+      color: $green_title;
+    }
+  }
+
+  .results {
+    float: right;
+
+    @include montserratregular;
+    font-size: 16px;
+    line-height: 120%;
+    color: #4c4c4c;
+  }
+
+  .form-type-select {
+    float: left;
+    margin-right: 14px;
+    width: 167px;
+  }
+
+  .form-submit {
+    background: image-url($sprite_btn) no-repeat 0 -193px;
+    border: none;
+    width: 161px;
+    height: 37px;
+    float: right;
+
+    font-size: 14px;
+    @include montserratregular;
+    color: #ffffff;
+  }
+
+  .select-big {
+    width: 242px;
+
+    .combo-selected {
+      *+html & {
+        width: 213px !important;
+      }
+    }
+  }
+
+  .select-100 {
+    margin-left: -2px;
+    width: 684px;
+
+    .combo-selected {
+      *+html & {
+        width: 655px !important;
+      }
+    }
+
+    .combo-wrapper {
+      background-position: 0 -1120px;
+    }
+  }
+
+  .block-search {
+    float: left;
+    background: image-url($sprite_btn) no-repeat 0 -358px;
+    width: 342px;
+    margin: 0 17px 0 0;
+    padding: 10px 9px 13px 8px;
+
+    .form-item {
+      float: left;
+    }
+
+    .form-text {
+      background: none;
+      border: none;
+      width: 314px;
+
+      font-family: $default-font-family;
+      font-size: 14px;
+      color: $dark_text;
+    }
+
+    .watermark {
+      font-family: $default-font-family;
+      font-size: 14px;
+      color: $dark_text;
+    }
+
+    .form-submit {
+      background: image-url($sprite) no-repeat -82px -208px;
+      float: right;
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
+.top-section {
+  .form-type-select {
+    width: 157px;
+    zoom: 1;
+    &.last {
+      margin-right: 0;
+    }
+
+    .combo-selected {
+      *+html & {
+        width: 130px !important;
+      }
+    }
+  }
+
+  .combo-wrapper {
+    background-position: -172px -150px;
+  }
+
+  .select-100 {
+    margin-left: -2px;
+    width: 684px;
+
+    .combo-wrapper {
+      background-position: 0 -1120px;
+    }
+  }
+}
+
+.select-big {
+  width: 243px;
+
+  .combo-wrapper {
+    background-position: 0 -313px;
+  }
+}
+
+.user-filters {
+  background: image-url($sprite-btn) no-repeat 100% -426px;
+  position: relative;
+  float: left;
+  height: 27px;
+  margin: 0 10px 0 0;
+  padding-right: 25px;
+
+  font-family: $default-font-family;
+  font-size: 14px;
+  line-height: 26px;
+  color: #ffffff;
+
+  span {
+    background: image-url($sprite-btn) no-repeat 0 -399px;
+    float: left;
+    min-width: 134px;
+    height: 27px;
+    padding-left: 10px;
+  }
+
+  .btn-close {
+    background: image-url($sprite) no-repeat -83px -131px;
+    display: block;
+    position: absolute;
+    top: 9px;
+    right: 8px;
+    width: 10px;
+    height: 10px;
+    cursor: pointer;
+  }
+}

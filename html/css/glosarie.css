@@ -1,0 +1,130 @@
+/*fonts*/
+/*colors*/
+/*backgrounds*/
+/*background colors*/
+/*shadows*/
+#words-section .letters-section {
+  background: #f4f4f4;
+  padding: 0 20px;
+  overflow: hidden;
+  margin-bottom: 40px;
+}
+#words-section .letters-section ul {
+  margin-right: -10px;
+}
+#words-section .letters-section li {
+  color: #8c8c8c;
+  font-size: 24px;
+  display: block;
+  float: left;
+  padding: 21px 5px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+* + html #words-section .letters-section li {
+  width: 17px;
+  text-align: center;
+}
+#words-section .letters-section li.active {
+  background: url('../images/sprite2.png') no-repeat 0 -1px;
+  color: #008e7f;
+}
+#words-section .letters-section li.disabled {
+  color: #bfbfbf;
+}
+#words-section .letters-section li.disabled:hover {
+  cursor: default;
+  color: #bfbfbf;
+}
+#words-section .letters-section li.disabled a {
+  color: #bfbfbf;
+}
+#words-section .letters-section li.disabled a:hover {
+  cursor: default;
+  color: #bfbfbf;
+}
+#words-section .letters-section li:hover {
+  color: #008e7f;
+}
+#words-section .letters-section li a {
+  color: #8c8c8c;
+}
+#words-section .letters-section li a:hover {
+  color: #008e7f;
+}
+#words-section .dictionary-section {
+  margin-left: -20px;
+  zoom: 1;
+}
+#words-section .dictionary-section .content-section {
+  float: left;
+  width: 235px;
+  margin-left: 20px;
+}
+#words-section .dictionary-section .content-section li {
+  list-style: none;
+}
+#words-section .dictionary-section .content-section li a {
+  font-size: 14px;
+  font-family: 'Montserrat';
+  font-weight: normal;
+  color: #666666;
+  line-height: 23px;
+}
+#words-section .dictionary-section .content-section li a:hover {
+  color: #008e7f;
+}
+#words-section .dictionary-section h2 {
+  background: url('../images/title_line.gif') repeat-x 0 50%;
+  font-family: 'Montserrat';
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 120%;
+  text-transform: uppercase;
+  color: #008e7f;
+}
+#words-section .dictionary-section h2 span {
+  background: #ffffff;
+  padding-right: 10px;
+}
+#words-section .dictionary-section h2 a {
+  color: #008e7f;
+}
+#words-section .dictionary-section .words-section {
+  padding: 10px 0 38px;
+}
+#words-section .dictionary-section .more-info.active {
+  color: #008e7f;
+}
+#words-section .section-line {
+  position: relative;
+  overflow: visible !important;
+  zoom: 1;
+}
+#words-section .section-line.last .words-section {
+  padding-bottom: 0;
+}
+#words-section .block-info-more {
+  width: 745px;
+  margin: 0 0 20px 20px;
+}
+#words-section .block-info-more.onplace {
+  top: auto;
+  bottom: 22px;
+  left: 0;
+}
+#words-section .block-info-more h2 {
+  background: none;
+  padding-bottom: 14px;
+  font-size: 16px;
+}
+#words-section .block-info-more .text {
+  padding: 20px 32px 8px 32px;
+}
+#words-section .block-info-more p {
+  color: #666666;
+  line-height: 20px;
+}

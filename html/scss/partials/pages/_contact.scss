@@ -1,0 +1,218 @@
+.radio-inline {
+  overflow: hidden;
+
+  &.form-item {
+    label {
+      display: block;
+      padding-bottom: 9px;
+    }
+  }
+
+  .form-type-radio {
+    padding-right: 14px;
+    padding-bottom: 0;
+
+    input {
+      top: 3px;
+    }
+
+    .jquery-checkbox-radio {
+      top: 3px;
+    }
+  }
+}
+
+.form-section-wrapper {
+  h2 {
+    border-bottom: 1px solid #DBDBDB;
+    margin-bottom: 18px;
+    padding-bottom: 16px;
+
+    @include montserratbold;
+    font-size: 16px;
+    line-height: 120%;
+    text-transform: uppercase;
+    color: $green_title;
+
+    a {
+      color: $green_title;
+    }
+  }
+
+  h3 {
+    padding-bottom: 12px;
+
+    @include montserratregular;
+    font-size: 16px;
+    line-height: 120%;
+    color: $green_title;
+
+    a {
+      color: $green_title;
+    }
+  }
+
+  .form-item {
+    clear: both;
+  }
+
+  label {
+    @include montserratregular;
+    font-size: 14px;
+    line-height: 120%;
+    color: $dark_text;
+  }
+
+  .form-type-radio {
+    float: left;
+    clear: none;
+    padding-right: 13px;
+    padding-bottom: 5px;
+
+    input {
+      top: 3px;
+    }
+
+    .jquery-checkbox-radio {
+      top: 3px;
+      *+html & {
+        top: 3px;
+      }
+    }
+
+    label {
+      cursor: pointer;
+
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 120%;
+      color: $dark_text;
+      &.jquery-checkbox-radio-label-checked {
+        @include montserratbold;
+        color: $green_title;
+      }
+    }
+  }
+
+  .form-text {
+    @include montserratregular;
+    font-size: 14px;
+    color: $dark_text;
+  }
+}
+
+.form-item-line {
+  overflow: hidden;
+  margin-right: -20px;
+  padding-bottom: 17px;
+  *+html & {
+    margin-right: -40px;
+  }
+  &.last {
+    padding-bottom: 17px;
+  }
+
+  .form-item {
+    clear: none;
+    float: left;
+    padding-right: 20px;
+  }
+
+  .form-text-wrap {
+    background: image-url($sprite_btn) no-repeat 100% -1085px;
+    padding-right: 10px;
+
+    .form-text-wrap-inner {
+      background: image-url($sprite_btn) no-repeat 0 -1052px;
+      padding-left: 10px;
+    }
+    .form-text {
+      background: none;
+      border: none;
+      width: 215px;
+      height: 19px;
+      padding: 7px 0 7px 0;
+    }
+  }
+
+  .form-item-big {
+    .form-text-wrap {
+      .form-text {
+        width: 470px;
+      }
+    }
+
+    .form-text {
+       width: 474px;
+    }
+  }
+
+  .form-text {
+    //background: image-url($sprite_btn) no-repeat -215px -622px;
+    border: 1px solid #A8A8A8;
+    border-radius: 6px;
+    width: 219px;
+    height: 17px;
+    padding: 7px;
+  }
+
+  label {
+    display: block;
+    padding-bottom: 7px;
+    *+html & {
+      padding-bottom: 2px;
+    }
+  }
+}
+
+.form-item {
+  label {
+    display: block;
+    padding-bottom: 7px;
+    *+html & {
+      padding-bottom: 2px;
+    }
+  }
+
+  .form-textarea-wrap {
+    background: image-url($sprite_btn) no-repeat 100% -1377px;
+    padding-right: 10px;
+
+    .form-textarea-wrap-inner {
+      background: image-url($sprite_btn) no-repeat 0 -1164px;
+      padding-left: 10px;
+    }
+    .form-textarea {
+      background: none;
+      border: none;
+      width: 719px;
+      height: 197px;
+      padding: 7px 0 7px 0;
+    }
+  }
+
+  .form-textarea {
+    border: 1px solid #A8A8A8;
+    border-radius: 6px;
+    width: 723px;
+    height: 191px;
+    margin-bottom: 20px;
+    padding: 10px;
+    overflow: auto;
+
+    @include montserratregular;
+    font-size: 14px;
+    color: $dark_text;
+  }
+
+  .form-submit {
+    background: image-url($sprite_btn) no-repeat -332px -821px;
+    float: right;
+    width: 235px;
+    height: 40px;
+
+    @include montserratregular;
+    font-size: 14px;
+    color: #ffffff;
+  }
+}

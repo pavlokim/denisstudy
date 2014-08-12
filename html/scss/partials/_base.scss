@@ -1,0 +1,157 @@
+* {
+  @include clear-block-indent;
+  outline: 0;
+  word-wrap: break-word;
+}
+.item-list {
+  @include clear-block-indent;
+  ul {
+    @include clear-block-indent;
+    li {
+      @include clear-list;
+      @include clear-block-indent;
+      list-style-image: none;
+    }
+  }
+}
+/*
+.panel-display {
+  &.clear-block {
+    overflow: visible;
+  }
+}
+
+.show-hide-block-non {
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+}*/
+
+body {
+  background: $default-body-bg;
+
+  font-family: $default-font-family;
+  font-size: $default-font-size;
+  line-height: 120%;
+  color: $default-body-color;
+}
+
+.col {
+  float: left;
+}
+.colr {
+  float: right;
+}
+.clear-block {
+  @include clear-box;
+}
+.endcol {
+  clear: both;
+  height: 0;
+  line-height: 0;
+  font-size: 0;
+  overflow: hidden;
+}
+.enddiv {
+  clear: both;
+}
+.block-hideme {
+  display: none;
+}
+.block-hidden {
+  visibility: hidden;
+}
+
+a span {
+  cursor: pointer;
+}
+
+a {
+  text-decoration: none;
+}
+
+img { border: none; }
+
+h1, h2, h3, h4, h5, h6 {
+  line-height: 120%;
+  a {
+    color: inherit;
+  }
+}
+
+strong {
+  @include montserratbold;
+}
+
+.tabs-list {
+  li {
+    float: left;
+    list-style: none;
+  }
+
+  .first {
+    a {
+      border-left: none;
+      width: 244px;
+      padding-left: 1px;
+    }
+  }
+
+  .middle {
+    a {
+      width: 252px;
+    }
+  }
+
+  .last {
+    a {
+      &.active {
+        border-right: 1px solid #D9D9D9;
+      }
+    }
+  }
+
+  a {
+    background: #F4F4F4;
+    border: 1px solid #D9D9D9;
+    border-top: none;
+    border-right: none;
+    display: block;
+    width: 245px;
+    padding: 21px 0;
+
+    @include montserratregular;
+    font-size: 14px;
+    line-height: 120%;
+    text-align: center;
+    color: $dark_text;
+    &:hover {
+      color: $green_title;
+    }
+    &.active {
+      background: #FFFFFF;
+      border-top: 1px solid #D9D9D9;
+      border-left: 1px solid #D9D9D9;
+      border-bottom: none;
+      padding: 20px 0;
+
+      @include montserratbold;
+      color: $green_title;
+    }
+  }
+}
+
+.tab-content {
+  clear: both;
+
+  .content {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
+    &.active {
+      position: static;
+      top: auto;
+      left: auto;
+    }
+  }
+}

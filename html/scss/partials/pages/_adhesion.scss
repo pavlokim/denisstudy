@@ -1,0 +1,917 @@
+.main-content {
+  padding-bottom: 11px;
+}
+
+.main-title {
+  padding-bottom: 28px;
+}
+
+.left-section {
+  width: 1000px;
+  margin: 0 auto;
+}
+
+.title-line {
+  h2 {
+    background: image-url($title_line) repeat-x 0 50%;
+    margin-bottom: 23px;
+
+    @include montserratregular;
+    font-size: 16px;
+    line-height: 120%;
+    text-transform: uppercase;
+    color: #008e7f;
+
+    span {
+      background: #ffffff;
+      padding-right: 10px;
+    }
+
+    a {
+      color: #008e7f;
+    }
+  }
+}
+
+.form-section {
+  padding-bottom: 28px;
+  &.form-contact-info {
+    .form-item-line {
+      padding-bottom: 18px;
+    }
+
+    .combo-wrapper {
+      font-size: 14px;
+      font-weight: normal;
+      color: $dark_text;
+    }
+
+    label {
+      padding-bottom: 6px;
+    }
+
+    .form-type-textfield-small {
+      width: 150px;
+
+      .form-item {
+        padding-bottom: 0;
+      }
+      .form-text-wrap {
+        .form-text {
+          height: 19px;
+        }
+      }
+
+      .form-text {
+        height: 31px;
+      }
+
+      label {
+        padding-top: 0;
+        padding-bottom: 6px;
+      }
+    }
+  }
+
+  .left-column {
+    float: left;
+    width: 660px;
+
+    .block {
+      width: 320px;
+      float: right;
+      &:first-child {
+        float: left;
+
+        .form-type-select {
+          padding-bottom: 18px;
+        }
+      }
+
+      .form-type-select {
+        padding-bottom: 10px;
+      }
+
+      .form-type-textfield-small {
+        .form-item {
+          padding-bottom: 0;
+        }
+      }
+    }
+
+    label {
+      display: block;
+      padding-bottom: 6px;
+    }
+
+    .form-item  {
+      padding-bottom: 18px;
+    }
+
+    .radio-inline {
+      margin-right: -15px;
+      .form-type-radio {
+        padding-right: 19px;
+        .page-ie & {
+          padding-right: 18px;
+        }
+      }
+    }
+
+    .form-type-radio {
+
+      label {
+        padding-left: 25px;
+
+        font-size: 18px;
+      }
+
+      .jquery-checkbox-radio {
+        .mark {
+          background-position: -102px -303px;
+          width: 15px;
+          height: 15px;
+        }
+        &.jquery-checkbox-radio-checked {
+          .mark {
+            background-position: -102px -319px;
+          }
+        }
+      }
+    }
+  }
+
+  .right-column {
+    background: #F4F4F4;
+    float: right;
+    width: 278px;
+    padding: 25px 26px 23px 16px;
+
+    h3 {
+      padding-bottom: 1px;
+
+      font-family: $default-font-family;
+      font-size: 16px;
+      font-weight: bold;
+      line-height: 120%;
+      color: $green_title;
+    }
+
+    .text {
+      border-bottom: 1px solid #DBDBDB;
+      margin-bottom: 18px;
+      padding-bottom: 10px;
+    }
+
+    p {
+      padding-bottom: 7px;
+
+      font-family: $default-font-family;
+      font-size: 14px;
+      line-height: 17px;
+      color: $dark_text;
+    }
+
+    label {
+      display: block;
+      padding-bottom: 8px;
+
+      line-height: 16px;
+    }
+
+    .form-item {
+      padding-bottom: 10px;
+    }
+
+    .combo-selected {
+      *+html & {
+        width: 240px !important;
+      }
+    }
+  }
+
+  label {
+    display: block;
+
+    @include montserratregular;
+    font-size: 14px;
+    line-height: 120%;
+    color: $dark_text;
+  }
+
+  .form-text {
+    @include montserratregular;
+    font-size: 14px;
+    color: $dark_text;
+  }
+
+  .radio-inline {
+    overflow: hidden;
+
+    label {
+      display: block;
+      padding-bottom: 9px;
+    }
+
+    .form-type-radio {
+      float: left;
+      padding-right: 14px;
+      padding-bottom: 0;
+      width: auto;
+
+      input {
+        top: 3px;
+      }
+
+      .jquery-checkbox-radio {
+        top: 3px;
+      }
+    }
+  }
+
+  .form-type-radio {
+    padding-right: 27px;
+    padding-bottom: 12px;
+
+    input {
+      top: 4px;
+    }
+
+    .jquery-checkbox-radio {
+      top: 4px;
+      *+html & {
+        top: 3px;
+      }
+    }
+
+    label {
+      cursor: pointer;
+
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 120%;
+      color: $dark_text;
+      &.jquery-checkbox-radio-label-checked {
+        @include montserratbold;
+        color: $green_title;
+      }
+    }
+  }
+
+  .form-type-textfield-small {
+    overflow: hidden;
+
+    .form-text-wrap {
+      background: image-url($sprite_btn) no-repeat 100% -1085px;
+      padding-right: 10px;
+
+      .form-text-wrap-inner {
+        background: image-url($sprite_btn) no-repeat 0 -1052px;
+        padding-left: 10px;
+      }
+      .form-text {
+        background: none;
+        border: none;
+        width: 130px;
+        height: 19px;
+        padding: 7px 0 7px 0;
+      }
+    }
+
+    .form-text {
+      //background: image-url($sprite_btn) no-repeat 0 -656px;
+      border: 1px solid #A8A8A8;
+      border-radius: 6px;
+      //border: none;
+      width: 128px;
+      height: 30px;
+      padding-top: 0;
+      padding-bottom: 0;
+      padding-right: 10px;
+      padding-left: 10px;
+    }
+
+    label {
+      float: left;
+      padding: 8px 12px 0 0;
+      .page-ie & {
+        float: none;
+      }
+    }
+
+    .form-item {
+      clear: none;
+      float: left;
+      position: relative;
+    }
+  }
+
+  .form-text-static-val {
+    overflow: hidden;
+
+    label {
+      float: right;
+      padding: 8px 12px 0 0;
+      .page-ie & {
+        float: none;
+      }
+    }
+
+    .form-text-wrap {
+      padding-right: 20px;
+
+      .form-text {
+        background: none;
+        border: none;
+        width: 110px;
+        height: 19px;
+        padding: 7px 10px 7px 0;
+      }
+    }
+
+    .form-text {
+      width: 111px;
+      padding-right: 30px;
+      padding-left: 7px;
+    }
+
+    .form-item {
+      clear: none;
+      float: right;
+      position: relative;
+    }
+  }
+
+  .static-value {
+    display: block;
+    position: absolute;
+    top: 5px;
+    right: 9px;
+
+    @include montserratregular;
+    font-size: 18px;
+    text-transform: uppercase;
+    line-height: 120%;
+    color: #b2b2b2;
+  }
+
+  .combo-wrapper {
+    background-position: 0 -1052px;
+    padding-right: 0;
+
+    font-weight: bold;
+    color: #4c4c4c;
+    &:hover {
+      background-position: 0 -1592px;
+      .combo-button {
+        background-position: -464px -728px;
+      }
+    }
+    &.combo-wrapper-active {
+      background-position: 0 -1592px;
+
+      .combo-button {
+        background-position: -464px -728px;
+      }
+    }
+  }
+
+  .combo-selected {
+    margin-right: -23px;
+
+    line-height: 33px;
+    *+html & {
+      width: 280px !important;
+    }
+  }
+
+  .combo-button {
+    background: image-url($sprite_btn) no-repeat -464px -693px;
+    width: 32px !important;
+    height: 33px !important;
+    margin: 0 -5px 0 0;
+  }
+}
+
+.block-soit {
+  background: image-url($soit_bg) repeat-y 0 0;
+  clear: both;
+  overflow: hidden;
+  margin-bottom: 10px;
+  padding: 0;
+
+
+  font-family: $default-font-family;
+  font-size: 14px;
+  line-height: 120%;
+  color: #ffffff;
+
+  .top-section {
+    //background: #008E7F;
+    float: left;
+    width: 302px;
+    padding: 19px 19px 25px 19px;
+
+    p {
+      @include montserratregular;
+      font-size: 34px;
+      line-height: 120%;
+    }
+  }
+
+  .bottom-section {
+    //background: #008275;
+    float: right;
+    width: 291px;
+    padding: 17px 10px 17px 19px;
+
+    font-style: italic;
+    font-size: 13px;
+    line-height: 16px;
+  }
+}
+
+.form-item-line {
+  overflow: hidden;
+  margin-right: -20px;
+  padding-bottom: 8px;
+  *+html & {
+    margin-right: -40px;
+  }
+  &.last {
+    padding-bottom: 17px;
+  }
+
+  .form-item {
+    clear: none;
+    float: left;
+    width: 320px;
+    padding-right: 20px;
+  }
+
+  .form-text-wrap {
+    background: image-url($sprite_btn) no-repeat 100% -1085px;
+    padding-right: 10px;
+
+    .form-text-wrap-inner {
+      background: image-url($sprite_btn) no-repeat 0 -1052px;
+      padding-left: 10px;
+    }
+    .form-text {
+      background: none;
+      border: none;
+      width: 300px;
+      height: 19px;
+      padding: 7px 0 7px 0;
+    }
+  }
+
+  .form-text {
+    //background: image-url($sprite_btn) no-repeat -215px -622px;
+    border: 1px solid #A8A8A8;
+    border-radius: 6px;
+    width: 304px;
+    height: 17px;
+    padding: 7px;
+  }left-column
+
+  label {
+    display: block;
+    padding-bottom: 7px;
+    *+html & {
+      padding-bottom: 2px;
+    }
+  }
+}
+
+.payment-section {
+  clear: both;
+  width: 1000px;
+  margin: 0 auto;
+  padding-bottom: 29px;
+
+  .jquery-checkbox-radio {
+    display: none;
+  }
+
+  .form-item {
+    clear: both;
+  }
+
+  label {
+    display: block;
+    padding-bottom: 22px;
+
+    @include montserratregular;
+    font-size: 14px;
+    color: $dark_text;
+  }
+
+  .form-type-radio {
+    float: left;
+    margin-right: 20px;
+    margin-bottom: 20px;
+    clear: none;
+
+    input {
+      display: none;
+    }
+
+    &.last {
+      margin-right: 0;
+    }
+
+    label {
+      background: #F4F4F4;
+      display: block;
+      position: relative;
+      width: 208px;
+      min-height: 40px;
+      padding: 26px 10px 26px 102px;
+      cursor: pointer;
+
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 20px;
+      color: $dark_text;
+      &:hover {
+        background: image-url($radio_label_bg) repeat-x 0 0;
+        color: #ffffff;
+      }
+      &.jquery-checkbox-radio-label-checked {
+        background: image-url($radio_label_bg) repeat-x 0 0;
+        color: #ffffff;
+      }
+
+      span {
+        background: image-url($sprite) no-repeat 0 0;
+        position: absolute;
+      }
+
+      .small {
+        background: none;
+        position: static;
+
+        font-size: 12px;
+      }
+    }
+  }
+
+  .text-3-lines {
+    label {
+      padding-top: 19px;
+      padding-bottom: 10px;
+      height: 63px;
+    }
+  }
+
+  .pay-card {
+    label {
+      span {
+        background-position: 0 -441px;
+        width: 57px;
+        height: 53px;
+        top: 19px;
+        left: 24px;
+      }
+      &:hover {
+        span {
+          background-position: -61px -441px;
+        }
+      }
+    }
+
+    .jquery-checkbox-radio-label-checked {
+      span {
+        background-position: -61px -441px;
+      }
+    }
+  }
+
+  .pay-check {
+    label {
+      span {
+        background-position: 0 -390px;
+        width: 59px;
+        height: 49px;
+        top: 24px;
+        left: 21px;
+      }
+      &:hover {
+        span {
+          background-position: -61px -390px;
+        }
+      }
+    }
+
+    .jquery-checkbox-radio-label-checked {
+      span {
+        background-position: -61px -390px;
+      }
+    }
+  }
+
+  .pay-prelevement {
+    label {
+      span {
+        background-position: 0 -336px;
+        width: 60px;
+        height: 52px;
+        top: 22px;
+        left: 21px;
+      }
+      &:hover {
+        span {
+          background-position: -62px -336px;
+        }
+      }
+    }
+
+    .jquery-checkbox-radio-label-checked {
+      span {
+        background-position: -62px -336px;
+      }
+    }
+  }
+
+  .form-submit {
+    background: image-url($sprite_btn) no-repeat -332px -865px;
+    border: none;
+    display: block;
+    width: 320px;
+    height: 57px;
+    margin: 0;
+    cursor: pointer;
+
+    @include montserratregular;
+    font-size: 16px;
+    color: #ffffff;
+  }
+
+  .buttons {
+    padding-bottom: 40px;
+
+    .form-item {
+      float: right;
+      clear: none;
+    }
+  }
+}
+
+.form-return {
+  width: 457px;
+  margin-bottom: 32px;
+
+  .form-submit {
+    border: none;
+    background: image-url($sprite_btn) no-repeat 0 -689px;
+    width: 457px;
+    height: 65px;
+    margin: 0 0 0 -4px;
+    padding: 0 0 0 59px;
+
+    @include montserratbold;
+    font-size: 17px;
+    //text-indent: 59px;
+    color: $dark_text;
+    *+html & {
+      font-size: 15px;
+    }
+    &:hover {
+      background-position: 0 -753px;
+      color: $green_title;
+    }
+  }
+}
+
+.return-btn {
+  background: image-url($sprite_btn) no-repeat 0 -1628px;
+  display: block;
+  float: left;
+  width: 578px;
+  height: 57px;
+  padding: 0 0 0 81px;
+
+  @include montserratregular;
+  font-size: 17px;
+  line-height: 59px;
+  color: $dark_text;
+  &:hover {
+    background-position: 0 -1687px;
+    color: $green_title;
+  }
+  *+html & {
+    width: 590px;
+    padding: 0 0 0 69px;
+  }
+}
+
+.form-contact-info {
+  .block-members {
+    .form-type-textfield-small {
+      width: 143px;
+    }
+
+    .form-item-line {
+      padding-bottom: 8px;
+    }
+  }
+
+  .combo-selected {
+    *+html & {
+      width: 110px !important;
+    }
+  }
+}
+
+.block-members {
+  padding: 12px 0 8px 0;
+
+  .title {
+    background: #E8E8E8;
+    padding: 14px 21px 13px 21px;
+
+    h2 {
+      @include montserratregular;
+      font-size: 18px;
+      line-height: 120%;
+      color: $tittle_block_text;
+    }
+  }
+
+  .member {
+    background: #F4F4F4;
+    position: relative;
+    margin-bottom: 1px;
+    padding: 17px 0 9px 20px;
+  }
+
+  .btn-close {
+    background: image-url($sprite) no-repeat -103px -224px;
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    width: 12px;
+    height: 12px;
+  }
+
+  .form-item-line {
+    .form-text {
+      width: 291px;
+    }
+  }
+
+  .form-item {
+    width: auto;
+    &.form-type-select {
+      padding-right: 25px;
+    }
+  }
+
+  .form-type-textfield-small {
+    width: auto;
+
+    .form-text-wrap {
+      .form-text {
+        background: none;
+        border: none;
+        width: 116px;
+        height: 19px;
+        padding: 7px 0 7px 0;
+      }
+    }
+
+    .form-text {
+      width: 121px;
+    }
+  }
+
+  .radio-inline {
+    width: 163px;
+    padding-right: 2px;
+
+    .form-type-radio {
+      padding-right: 7px;
+
+      input {
+        top: 1px;
+      }
+
+      .jquery-checkbox-radio {
+        top: 1px;
+      }
+    }
+
+    label {
+      padding-bottom: 14px;
+
+      font-size: 14px;
+    }
+  }
+}
+
+.form-description {
+  font-family: $default-font-family;
+  font-size: 11px;
+  line-height: 120%;
+  color: $dark_text;
+}
+
+.block-info {
+  border: 1px solid #E3E3E3;
+  clear: both;
+  margin-bottom: 10px;
+  padding: 18px 19px 21px 19px;
+
+  h2 {
+    padding-bottom: 10px;
+
+    @include montserratregular;
+    font-size: 18px;
+    line-height: 120%;
+    color: $dark_text;
+  }
+
+  p {
+    font-family: $default-font-family;
+    font-size: 14px;
+    line-height: 18px;
+    color: $dark_text;
+  }
+}
+
+.block-legal {
+  background: image-url($separator_line3) repeat-x 0 0;
+  padding: 31px 0 15px 0;
+
+  h2 {
+    padding-bottom: 23px;
+
+    font-family: $default-font-family;
+    font-size: 16px;
+    font-weight: bold;
+    line-height: 120%;
+    color: $green_title;
+  }
+
+  p {
+    font-family: $default-font-family;
+    font-size: 14px;
+    line-height: 17px;
+    color: $dark_text;
+  }
+
+  .left-column {
+    float: left;
+    width: 660px;
+
+    img {
+      float: right;
+      margin-top: -47px;
+    }
+  }
+
+  .right-column {
+    float: right;
+    width: 320px;
+
+    h2 {
+      padding-bottom: 8px;
+    }
+  }
+
+  .info {
+    overflow: hidden;
+    padding-top: 8px;
+    padding-bottom: 9px;
+
+    p {
+      padding-left: 41px;
+
+      font-family: $default-font-family;
+      font-size: 14px;
+      font-weight: bold;
+      line-height: 17px;
+      color: $dark_text;
+    }
+  }
+
+  .ico {
+    float: left;
+    width: 32px;
+    height: 32px;
+    margin-top: -7px;
+  }
+
+  .ico-mail {
+    background: image-url($sprite2) no-repeat -95px -6px;
+  }
+
+  .ico-phone {
+    background: image-url($sprite) no-repeat -36px -554px;
+  }
+
+  .ico-doc {
+    background: image-url($sprite) no-repeat -70px -554px;
+  }
+}

@@ -1,0 +1,635 @@
+.main-content {
+  width: auto;
+  padding-bottom: 30px;
+}
+
+.breadcrumb {
+  margin: 0 auto;
+  width: 1000px;
+}
+
+.left-section {
+  width: auto;
+  float: none;
+}
+
+.main-title {
+  width: 1000px;
+  margin: 0 auto;
+}
+
+.form-section-wrapper {
+  background: image-url($bg_boy) no-repeat center 100%;
+  overflow: hidden;
+  min-height: 466px;
+  margin-bottom: 25px;
+
+  .inner {
+    width: 1000px;
+    margin: 0 auto;
+  }
+}
+
+.form-section {
+  background: #F3F3F3;
+  width: 450px;
+  min-height: 544px;
+  float: left;
+  padding: 19px 20px;
+  &.form-section-right {
+    float: right;
+  }
+
+  h2 {
+    border-bottom: 1px solid #DBDBDB;
+    margin-bottom: 18px;
+    padding-bottom: 16px;
+
+    @include montserratbold;
+    font-size: 16px;
+    line-height: 120%;
+    text-transform: uppercase;
+    color: $green_title;
+
+    a {
+      color: $green_title;
+    }
+  }
+
+  h3 {
+    padding-bottom: 12px;
+
+    @include montserratregular;
+    font-size: 16px;
+    line-height: 120%;
+    color: $green_title;
+
+    a {
+      color: $green_title;
+    }
+  }
+
+  .form-item {
+    clear: both;
+  }
+
+  label {
+    @include montserratregular;
+    font-size: 14px;
+    line-height: 120%;
+    color: $dark_text;
+  }
+
+  .form-type-radio {
+    float: left;
+    padding-right: 27px;
+    padding-bottom: 12px;
+    &.form-item {
+      clear: none;
+    }
+
+    input {
+      top: 4px;
+    }
+
+    .jquery-checkbox-radio {
+      top: 4px;
+      *+html & {
+        top: 3px;
+      }
+    }
+
+    label {
+      cursor: pointer;
+
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 120%;
+      color: $dark_text;
+      &.jquery-checkbox-radio-label-checked {
+        @include montserratbold;
+        color: $green_title;
+      }
+    }
+  }
+
+  .form-text {
+    @include montserratregular;
+    font-size: 14px;
+    color: $dark_text;
+  }
+
+  .form-type-textfield-small {
+    overflow: hidden;
+
+    .form-text-wrap {
+      background: image-url($sprite_btn) no-repeat 100% -1085px;
+      padding-right: 10px;
+
+      .form-text-wrap-inner {
+        background: image-url($sprite_btn) no-repeat 0 -1052px;
+        padding-left: 10px;
+      }
+      .form-text {
+        background: none;
+        border: none;
+        width: 130px;
+        height: 19px;
+        padding: 7px 0 7px 0;
+      }
+    }
+
+    .form-text {
+      //background: image-url($sprite_btn) no-repeat 0 -656px;
+      border: 1px solid #A8A8A8;
+      border-radius: 6px;
+      //border: none;
+      width: 128px;
+      height: 30px;
+
+      padding-right: 10px;
+      padding-left: 10px;
+    }
+
+    label {
+      float: left;
+      padding: 8px 12px 0 0;
+    }
+
+    .form-item {
+      clear: none;
+      float: left;
+      position: relative;
+    }
+  }
+
+  .form-text-static-val {
+    overflow: hidden;
+
+    label {
+      float: left;
+      padding: 8px 12px 0 0;
+    }
+
+    .form-text-wrap {
+      padding-right: 20px;
+
+      .form-text {
+        background: none;
+        border: none;
+        width: 110px;
+        height: 19px;
+        padding: 7px 10px 7px 0;
+      }
+    }
+
+    .form-text {
+      width: 111px;
+      padding-right: 30px;
+      padding-left: 7px;
+    }
+
+    .form-item {
+      clear: none;
+      float: left;
+      position: relative;
+    }
+  }
+
+  .static-value {
+    display: block;
+    position: absolute;
+    top: 5px;
+    right: 9px;
+
+    @include montserratregular;
+    font-size: 18px;
+    text-transform: uppercase;
+    line-height: 120%;
+    color: #b2b2b2;
+  }
+
+  .separator {
+    background: image-url($separator_line) repeat-x 0 50%;
+    margin: 31px 0 17px 0;
+
+    @include montserratregular;
+    font-size: 14px;
+    line-height: 120%;
+    text-align: center;
+    color: $tittle_block_text;
+
+    span {
+      background: image-url($sprite) no-repeat -68px -301px;
+      display: block;
+      width: 32px;
+      height: 32px;
+      margin: 0 auto;
+
+      line-height: 31px;
+    }
+  }
+
+  .form-return {
+    width: 457px;
+    margin-bottom: 32px;
+
+    .form-submit {
+      border: none;
+      background: image-url($sprite_btn) no-repeat 0 -689px;
+      width: 457px;
+      height: 65px;
+      margin: 0 0 0 -4px;
+      padding: 0 0 0 59px;
+
+      @include montserratbold;
+      font-size: 17px;
+      //text-indent: 59px;
+      color: $dark_text;
+      *+html & {
+        font-size: 15px;
+      }
+      &:hover {
+        background-position: 0 -753px;
+        color: $green_title;
+      }
+    }
+  }
+
+  .return-btn {
+    background: image-url($sprite_btn) no-repeat 0 -689px;
+    display: block;
+    width: 368px;
+    height: 65px;
+    margin: 0 0 32px -4px;
+    padding: 0 0 0 85px;
+
+    @include montserratbold;
+    font-size: 17px;
+    line-height: 65px;
+    color: $dark_text;
+    &:hover {
+      background-position: 0 -753px;
+      color: $green_title;
+    }
+  }
+}
+
+.block-soit {
+  background: #008E7F;
+  margin-bottom: 3px;
+  padding: 27px 0 0 0;
+
+
+  font-family: $default-font-family;
+  font-size: 14px;
+  line-height: 120%;
+  color: #ffffff;
+
+  .top-section {
+    padding: 0 19px 29px 19px;
+
+    p {
+      @include montserratregular;
+      font-size: 39px;
+      line-height: 120%;
+    }
+  }
+
+  .bottom-section {
+    background: #008275;
+    padding: 15px 19px 17px 19px;
+
+    font-style: italic;
+    font-size: 13px;
+    line-height: 15px;
+  }
+}
+
+.radio-inline {
+  overflow: hidden;
+
+  label {
+    display: block;
+    padding-bottom: 9px;
+  }
+
+  .form-type-radio {
+    padding-right: 14px;
+    padding-bottom: 0;
+
+    input {
+      top: 3px;
+    }
+
+    .jquery-checkbox-radio {
+      top: 3px;
+    }
+  }
+}
+
+.form-item-line {
+  overflow: hidden;
+  margin-right: -20px;
+  padding-bottom: 8px;
+  *+html & {
+    margin-right: -40px;
+  }
+  &.last {
+    padding-bottom: 17px;
+  }
+
+  .form-item {
+    clear: none;
+    float: left;
+    padding-right: 19px;
+  }
+
+  .form-text-wrap {
+    background: image-url($sprite_btn) no-repeat 100% -1085px;
+    padding-right: 10px;
+
+    .form-text-wrap-inner {
+      background: image-url($sprite_btn) no-repeat 0 -1052px;
+      padding-left: 10px;
+    }
+    .form-text {
+      background: none;
+      border: none;
+      width: 196px;
+      height: 19px;
+      padding: 7px 0 7px 0;
+    }
+  }
+
+  .form-text {
+    //background: image-url($sprite_btn) no-repeat -215px -622px;
+    border: 1px solid #A8A8A8;
+    border-radius: 6px;
+    width: 200px;
+    height: 17px;
+    padding: 7px;
+  }
+
+  label {
+    display: block;
+    padding-bottom: 7px;
+    *+html & {
+      padding-bottom: 2px;
+    }
+  }
+}
+
+.block-form {
+  .form-type-checkbox {
+    padding-bottom: 17px;
+
+    label {
+      padding-left: 22px;
+    }
+  }
+}
+
+.form-type-checkbox {
+  padding-bottom: 17px;
+
+  input {
+    top: 3px;
+  }
+
+  .jquery-checkbox {
+    top: 3px;
+  }
+
+  label {
+    padding-left: 22px;
+    cursor: pointer;
+  }
+}
+
+.form-description {
+  border-top: 1px solid #DBDBDB;
+  margin: 3px 0 0 0;
+  padding: 18px 0 0 0;
+
+  font-family: $default-font-family;
+  font-size: 12px;
+  line-height: 15px;
+  color: $dark_text;
+}
+
+.payment-section {
+  clear: both;
+  width: 1000px;
+  margin: 0 auto;
+  padding-bottom: 50px;
+
+  h2 {
+    background: image-url($title_line) repeat-x 0 50%;
+    margin-bottom: 25px;
+
+    @include montserratregular;
+    font-size: 16px;
+    line-height: 120%;
+    text-transform: uppercase;
+    color: #008e7f;
+
+    span {
+      background: #ffffff;
+      padding-right: 10px;
+    }
+
+    a {
+      color: #008e7f;
+    }
+  }
+
+  .jquery-checkbox-radio {
+    display: none;
+  }
+
+  .form-item {
+    clear: both;
+    &.form-type-radio {
+      clear: none;
+    }
+  }
+
+  label {
+    display: block;
+    padding-bottom: 22px;
+
+    @include montserratregular;
+    font-size: 14px;
+    color: $dark_text;
+  }
+
+  .form-type-radio {
+    float: left;
+    margin-right: 20px;
+    margin-bottom: 30px;
+
+    input {
+      display: none;
+    }
+
+    &.last {
+      margin-right: 0;
+    }
+
+    label {
+      background: #F4F4F4;
+      display: block;
+      position: relative;
+      width: 208px;
+      min-height: 40px;
+      padding: 26px 10px 26px 102px;
+      cursor: pointer;
+
+      @include montserratregular;
+      font-size: 16px;
+      line-height: 20px;
+      color: $dark_text;
+      &:hover {
+        background: image-url($radio_label_bg) repeat-x 0 0;
+        color: #ffffff;
+      }
+      &.jquery-checkbox-radio-label-checked {
+        background: image-url($radio_label_bg) repeat-x 0 0;
+        color: #ffffff;
+      }
+
+      span {
+        background: image-url($sprite) no-repeat 0 0;
+        position: absolute;
+      }
+    }
+  }
+
+  .pay-card {
+    label {
+      span {
+        background-position: 0 -441px;
+        width: 57px;
+        height: 53px;
+        top: 19px;
+        left: 24px;
+      }
+      &:hover {
+        span {
+          background-position: -61px -441px;
+        }
+      }
+    }
+
+    .jquery-checkbox-radio-label-checked {
+      span {
+        background-position: -61px -441px;
+      }
+    }
+  }
+
+  .pay-check {
+    label {
+      span {
+        background-position: 0 -390px;
+        width: 59px;
+        height: 49px;
+        top: 24px;
+        left: 21px;
+      }
+      &:hover {
+        span {
+          background-position: -61px -390px;
+        }
+      }
+    }
+
+    .jquery-checkbox-radio-label-checked {
+      span {
+        background-position: -61px -390px;
+      }
+    }
+  }
+
+  .pay-prelevement {
+    label {
+      span {
+        background-position: 0 -336px;
+        width: 60px;
+        height: 52px;
+        top: 22px;
+        left: 21px;
+      }
+      &:hover {
+        span {
+          background-position: -62px -336px;
+        }
+      }
+    }
+
+    .jquery-checkbox-radio-label-checked {
+      span {
+        background-position: -62px -336px;
+      }
+    }
+  }
+
+  .form-submit {
+    background: image-url($sprite_btn) no-repeat 0 -821px;
+    border: none;
+    display: block;
+    width: 320px;
+    height: 50px;
+    margin: 0 auto;
+    cursor: pointer;
+
+    @include montserratregular;
+    font-size: 16px;
+    color: #ffffff;
+  }
+}
+
+.block-c3 {
+  border: 1px solid #DCDCDC;
+  overflow: hidden;
+  width: 960px;
+  margin: 0 auto;
+  margin-bottom: 10px;
+  padding: 18px 19px 20px 19px;
+
+  .block {
+    float: left;
+    width: 300px;
+    padding-right: 29px;
+    &.last {
+      padding-right: 0;
+    }
+
+    img {
+      float: right;
+      margin-top: -10px;
+      margin-bottom: 10px;
+    }
+  }
+
+  h2 {
+    padding-bottom: 9px;
+
+    @include montserratregular;
+    font-size: 18px;
+    line-height: 120%;
+    color: $dark_text;
+
+    a {
+      color: $dark_text;
+    }
+  }
+
+  p {
+    font-family: $default-font-family;
+    font-size: 12px;
+    line-height: 16px;
+    color: $dark_text;
+  }
+}

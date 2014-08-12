@@ -1,0 +1,115 @@
+/* Table elements */
+.block-table {
+  table {
+    border-collapse: collapse;
+    @include clear-block-indent;
+    border: none;
+    border-radius: 0;
+    tbody, tr, th, td {
+      border-collapse: collapse;
+      @include clear-block-indent;
+      border: none;
+    }
+    th {
+      text-align: center;
+      vertical-align: middle;
+      font-weight: bold;
+      &.rtecenter {
+        text-align: center;
+        &.left-title {
+          text-align: center;
+        }
+        &.right-title {
+          text-align: center;
+        }
+      }
+      &.rteright {
+        text-align: right;
+        &.left-title {
+          text-align: right;
+        }
+        &.right-title {
+          text-align: right;
+        }
+      }
+    }
+    td {
+      text-align: center;
+      vertical-align: top;
+      &.rtecenter {
+        text-align: center;
+
+        .block-country {
+          text-align: center;
+        }
+      }
+      &.rteright {
+        text-align: right;
+
+        .block-country {
+          text-align: right;
+        }
+      }
+    }
+  }
+}
+
+.table-1 {
+  th {
+    width: 100%;
+  }
+}
+
+.table-2 {
+  th {
+    width: 50%;
+  }
+}
+
+.table-3 {
+  th {
+    width: 33%;
+  }
+}
+
+.table-4 {
+  th {
+    width: 25%;
+  }
+}
+
+.table-5 {
+  th {
+    width: 20%;
+  }
+}
+
+.table-6 {
+  th {
+    width: 16%;
+  }
+}
+
+.table-7 {
+  th {
+    width: 14%;
+  }
+}
+
+.table-8 {
+  th {
+    width: 12%;
+  }
+}
+
+.table-9 {
+  th {
+    width: 11%;
+  }
+}
+
+.table-10 {
+  th {
+    width: 10%;
+  }
+}

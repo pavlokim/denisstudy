@@ -1,0 +1,13 @@
+<script type="text/javascript" src="js/jquery.js"></script>
+<script type="text/javascript" src="js/jquery-ui-1.10.4.custom.js"></script>
+<script type="text/javascript" src="js/language_datepicker_fr.js"></script>
+<script type="text/javascript" src="js/jquery.watermark.js"></script>
+<script type="text/javascript" src="js/vlm-jquerysign.js"></script>
+<script type="text/javascript" src="js/jquery.flexslider.js"></script>
+<script type="text/javascript" src="js/combobox.js"></script>
+<script type="text/javascript" src="js/checkbox.js"></script>
+<script type="text/javascript" src="js/jquery.fancybox.js"></script>
+<script type="text/javascript" src="js/justforslice.js"></script>
+<script type="text/javascript" src="js/mimagemap.js"></script>
+<script type="text/javascript" src="js/mapinit.js"></script>
+<script type="text/javascript" src="js/main.js"></script>

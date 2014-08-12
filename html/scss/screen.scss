@@ -1,0 +1,29 @@
+//import settings
+@import "partials/settings";
+
+//import mixins
+@import "mixins/mixins_default";
+
+//@import "partials/fonts";
+@import "partials/base";
+@import "partials/base_forms";
+@import "partials/base_tables";
+
+/*Regions*/
+@import "main_area";
+
+/*blocks*/
+@import "partials/blocks/top_navigation";
+@import "partials/blocks/main_navigation";
+@import "partials/blocks/breadcrumb";
+@import "partials/blocks/right_section";
+@import "partials/blocks/roll_section";
+@import "partials/blocks/block_events";
+@import "partials/blocks/slider";
+@import "partials/blocks/datepicker";
+@import "partials/blocks/selects";
+@import "partials/blocks/block_media";
+@import "partials/blocks/popups";
+@import "partials/blocks/map";
+
+@import "footer";
