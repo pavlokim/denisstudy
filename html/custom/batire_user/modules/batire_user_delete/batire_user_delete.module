@@ -1,0 +1,181 @@
+<?php
+
+/**
+ * @file
+ *
+ * Provides user delete functionality for the site
+ */
+
+/**
+ * Implementation of hook_node_operations().
+ */
+function batire_user_delete_node_operations() {
+  $operations = array(
+    'batire_user_delete_delete_node' => array(
+      'label' => t('Delete the selected users and wipe all the data'),
+      'callback' => 'batire_user_delete_delete_user_operation_node',
+    )
+  );
+
+  return $operations;
+}
+
+/**
+ * Implementation of hook_user_operations
+ */
+function batire_user_delete_user_operations() {
+  $operations = array(
+    'batire_user_delete_delete' => array(
+      'label' => t('Delete the selected users and wipe all the data'),
+      'callback' => 'batire_user_delete_delete_user_operation',
+    )
+  );
+
+  return $operations;
+}
+
+/**
+ *
+ * Performs users delete and wipe of all user data by given user profile nid;
+ */
+function batire_user_delete_delete_user_operation_node($nids) {
+  $sql = "SELECT uid FROM {node} WHERE nid = %d AND type = '%s'";
+  foreach ($nids as $nid) {
+
+    if (is_numeric($nid)) {
+      $profile_uid = db_result(db_query($sql, $nid, BATIRE_USER_PROFILE));
+      if ($profile_uid) {
+        batire_user_delete_user_delete($profile_uid, FALSE, TRUE);
+      }
+    }
+  }
+}
+
+/**
+ * Performs users delete and wipe of all user data;
+ */
+function batire_user_delete_delete_user_operation($uids) {
+  foreach ($uids as $uid) {
+    if (is_numeric($uid)) {
+      batire_user_delete_user_delete($uid, FALSE, TRUE);
+    }
+  }
+  drupal_set_message('User(s) was deleted.');
+}
+
+/**
+ * Performs a delete of sigle user with user data;
+ */
+function batire_user_delete_user_delete($uid, $is_subaccount = FALSE, $delete_user = FALSE, $force_delete_abon = FALSE) {
+  /**
+   * List of the actions to be performed:
+   *
+   * 1. if user has a free offer - we're removing his abonnement number from SVC
+   * 2. delete all saved searches, search alerts and sent alerts
+   * 3. delete all annotations and folders
+   * 4. delete all subaccounts (if applicable)
+   * 5. delete all user statistics, notification settings, document-related statistics
+   * 6. delete all records about invited subaccounts
+   */
+
+  /**
+   * if user has a free offer or we force it - we're removing his abonnement number from SVC
+   */
+  $account = user_load($uid);
+
+  if ($force_delete_abon || _batire_user_is_abbo_free($account->abo_num)) {
+    batire_svc_remove_abonnement_number($account->name, '', $account->abo_num);
+  }
+
+  /**
+   * clear all user and document-related statistics
+   */
+
+  db_query("DELETE FROM {batire_user_statistics} WHERE uid = %d", $uid);
+
+  /**
+   * clear trial notification sending reports
+   */
+  mongodb_delete(MONGODB_USER_MAIL_COLLECTION, array('uid' => (int) $uid));
+
+  /**
+   * clear documents access data
+   */
+  mongodb_delete(MONGODB_DOCS_ACCESS_COLLECTION, array('uid' => (int) $uid));
+
+  /**
+   * Clear all documents and annotations
+   * delete folders -  auto remove docs and annos
+   *
+   * Clear all saved searches, aletrs and sent alerts
+   */
+  $items = db_query(
+    "SELECT nid FROM {node} WHERE type IN('%s', '%s', '%s') AND uid = %d",
+    'batire_user_folder',
+    'batire_user_search_profile',
+    'batire_user_annotation',
+    $uid
+  );
+
+  while ($nid = db_result($items)) {
+    node_delete($nid);
+  }
+
+  $profile = batire_user_profile_load($uid, TRUE);
+
+  if (!$is_subaccount) {
+    /**
+     * Clear all subaccounts (if any)
+     */
+    if (_batire_user_is_multipost($account, TRUE)) {
+      if (count($profile->field_user_subacc)) {
+        foreach ($profile->field_user_subacc as $subaccount) {
+          if (isset($subaccount['uid']) && $subaccount['uid']) {
+            batire_user_delete_user_delete($subaccount['uid'], TRUE, $delete_user);
+          }
+        }
+      }
+    }
+  }
+  else {
+    /**
+     * Handling removing subacc for MongoDB
+     */
+    if (array_key_exists(BATIRE_USER_SUBACCOUNT, $account->roles)) {
+      $admin_id = mongodb_user_get_admin($uid);
+      $keys = array('data.uid' => (int) $admin_id);
+      $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+      if (isset($data['data']['uid']) && $data['data']['uid']) {
+        unset($data['members']['u' . $account->uid]);
+        //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+        mongodb_user_update($keys, $data, __FUNCTION__);
+      }
+    }
+  }
+
+  //delete profile
+  node_delete($profile->nid);
+
+  //delete from mongo collections
+  mongodb_delete(MONGODB_USER_COLLECTION, array('data.uid' => (int) $uid));
+  mongodb_delete(MONGODB_DOCS_COLLECTION, array('uid' => (int) $uid));
+
+  /**
+   * Deleting all invited subaccounts;
+   */
+  db_query(
+  	"DELETE FROM {batire_user_registration_requests} WHERE uid = %d AND type = %d",
+    $uid,
+    BATIRE_USER_REG_TYPE_SUB
+  );
+
+  if ($delete_user) {
+    /**
+     * Deleting user itself
+     */
+    user_delete(array(), $uid);
+  }
+
+  //Get all messages
+  drupal_get_messages();
+}

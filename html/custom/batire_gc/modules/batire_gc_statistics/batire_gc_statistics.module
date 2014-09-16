@@ -1,0 +1,343 @@
+<?php
+
+module_load_include('inc', 'batire_gc_statistics', 'includes/views');
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_gc_statistics_init() {
+  drupal_add_js(
+    array(
+      'batire_gc_statistics' => array(
+        'generate_statistics_url' => url('js/batire_gc_statistics/generate'),
+        'switch_permission_url' => url('js/batire_gc_statistics/switch_permission'),
+      )
+    ), 'setting'
+  );
+  drupal_add_js(drupal_get_path('module', 'batire_gc_statistics') . '/scripts/statistics_period_popup.js', 'module', 'footer');
+  drupal_add_js(drupal_get_path('module', 'batire_gc_statistics') . '/scripts/switch_permission.js', 'module', 'footer');
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_gc_statistics_menu() {
+  $items = array();
+  $items['js/batire_gc_statistics/generate'] = array(
+    'page callback' => 'batire_gc_statistics_generate_js',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/batire-site/gc/gc-users/permissions/%'] = array(
+    'title' => 'Statisitcs permissions',
+    'page callback' => 'drupal_get_form',
+    'access arguments' => array('access content'),
+    'page arguments' => array('batire_gc_statistics_permissions_form', 5),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['batire_gc_statistics/get/%/%/%'] = array(
+    'page callback' => 'batire_gc_statistics_get_document',
+    'access arguments' => array('access content'),
+    'page arguments' => array(2, 3, 4),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/batire-site/gc/gc-users/get_stats_for_user/%'] = array(
+    'page callback' => 'drupal_get_form',
+    'access arguments' => array('access content'),
+    'page arguments' => array('batire_gc_statistics_get_stats_for_user_form', 5),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['js/batire_gc_statistics/switch_permission'] = array(
+    'page callback' => 'batire_gc_statistics_switch_permission',
+    'access arguments' => array('administer batire configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_batire_site_popups_info().
+ */
+function batire_gc_statistics_batire_site_popups_info($type) {
+  switch ($type) {
+    case 'statistics-period':
+      return 'batire_gc_statistics';
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_batire_site_popups().
+ */
+function batire_gc_statistics_batire_site_popups($type) {
+  $result = array(
+    'error' => FALSE,
+    'data' => ''
+  );
+  switch ($type) {
+    case 'statistics-period':
+      $result['data'] = theme('batire_gc_statistics_popup_statistics_period', drupal_get_form('batire_gc_statistics_statistics_period_form'));
+      break;
+  }
+  if (!$result['data']) {
+    return array();
+  }
+  return $result;
+}
+
+/**
+ * Permissions for GC user given to him by GC commercial
+ */
+function batire_gc_statistics_permissions_form($form, $uid) {
+  module_load_include('inc', 'batire_user_statistics', 'includes/batire_user_statistics');
+  $default_fields = _batire_user_statistics_application_get_default_fields();
+  $user_profile = batire_user_profile_load($uid);
+  if (!$user_profile) {
+    return FALSE;
+  }
+  drupal_set_title(t('Statistics permissions for @name @surname', array('@name' => $user_profile->field_user_name[0]['value'], '@surname' => $user_profile->field_user_surname[0]['value'])));
+  $default_values = !empty($user_profile->field_user_gc_stat_permissions[0]['value']) ? unserialize($user_profile->field_user_gc_stat_permissions[0]['value']) : array();
+  $form = array();
+  $form['allow_export_statistics'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Can export statistics'),
+    '#default_value' => isset($default_values['allow_export_statistics']) ? $default_values['allow_export_statistics'] : FALSE,
+  );
+  $form['fields'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Fields to be included into statistics'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+  $fields = _batire_user_statistics_application_get_fields_mapping();
+  foreach ($fields as $key => $value) {
+    $form['fields'][$key] = array(
+      '#type' => 'checkbox',
+      '#title' => $value,
+      '#disabled' => in_array($key, $default_fields),
+      '#default_value' => isset($default_values[$key]) ? $default_values[$key] : TRUE,
+    );
+  }
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+  );
+  $form['#uid'] = $uid;
+  return $form;
+}
+
+/**
+ * Statistics permissions form submit handler
+ */
+function batire_gc_statistics_permissions_form_submit($form, &$form_state) {
+  $user_profile = batire_user_profile_load($form['#uid']);
+  $user_profile->field_user_gc_stat_permissions[0]['value'] = serialize($form_state['values']);
+  node_save($user_profile);
+}
+
+/**
+ * Regestration by invite form implementation.
+ */
+function batire_gc_statistics_statistics_period_form($form) {
+  $form = array();
+  $form['period_start'] = array(
+    '#value' => '<div class="period-start-wrapper"><h5>' . t('Start date') . '</h5> <span class="period-start"></span></div>',
+  );
+  $form['period_start_slider'] = array(
+    '#value' => '<div class="period-start-slider"></div>',
+  );
+  $form['period_end'] = array(
+    '#value' => '<div class="period-end-wrapper"><h5>' . t('End date') . '</h5> <span class="period-end"></span></div>',
+  );
+  $form['period_end_slider'] = array(
+    '#value' => '<div class="period-end-slider"></div>',
+  );
+  $form['error'] = array(
+    '#value' => '<div class="popup-messages messages show-hide-block-non"><div class="messages-content"></div></div>'
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider'),
+    '#prefix' => '<div class="button-form-submit">',
+    '#suffix' => '</div>'
+  );
+  $form['#theme'] = 'batire_gc_statistics_popup_statistics_period_form';
+  return $form;
+}
+
+/**
+ * Generate statistics JS callback
+ */
+function batire_gc_statistics_generate_js() {
+  global $user;
+
+  $result = array(
+    'error' => TRUE,
+    'data' => t('No data available.'),
+  );
+  if (!batire_gc_commercial_can_export_statistics()) {
+    $result['data'] = t('You dont have permissions to export statistics.');
+    return drupal_json($result);
+  }
+  $start_date = isset($_POST['period_start']) ? batire_site_check_text($_POST['period_start']) : '';
+  $end_date = isset($_POST['period_end']) ? batire_site_check_text($_POST['period_end']) : '';
+  if (!empty($start_date) && !empty($end_date)) {
+    $result = array(
+      'error' => FALSE,
+      'redir' => TRUE,
+      'data' => url("batire_gc_statistics/get/$start_date/$end_date/{$user->uid}"),
+    );
+  }
+  print drupal_json($result);
+}
+
+/**
+ * Generate statistics file and transfer it to client
+ *
+ * @param type $start_date
+ * @param type $end_date
+ * @param type $uid
+ */
+function batire_gc_statistics_get_document($start_date, $end_date, $uid) {
+  global $user;
+  $admin_export = FALSE;
+  if (isset($user->roles[BATIRE_GC_GC_COMMERCIAL_ROLE_ID]) || $user->uid == 1) {
+    $users = array();
+    if ($user->uid == $uid) {
+      $gc_users = batire_gc_statistics_get_users_for_commercial($uid);
+      foreach ($gc_users as $gc_user) {
+        $users[] = $gc_user;
+        $members = mongodb_user_get_members($gc_user);
+        foreach ($members as $member) {
+          if (!$member['is_admin']) {
+            $users[] = $member['uid'];
+          }
+        }
+      }
+    }
+    else {
+      $users[] = $uid;
+      $members = mongodb_user_get_members($uid);
+      foreach ($members as $member) {
+        if (!$member['is_admin']) {
+          $users[] = $member['uid'];
+        }
+      }
+    }
+    $admin_export = TRUE;
+  }
+  elseif (isset($user->roles[BATIRE_GC_GC_USER_ROLE_ID])) {
+    $users = array();
+    $users[] = $user->uid;
+    $members = mongodb_user_get_members($user->uid);
+    foreach ($members as $member) {
+      if (!$member['is_admin']) {
+        $users[] = $member['uid'];
+      }
+    }
+  }
+  elseif ($user->uid) {//is admin
+    $users[] = $uid;
+  }
+  $filepath = batire_user_statistics_application_create_period($start_date, $end_date, $users, $admin_export);
+  //$filepath = batire_user_statistics_application_create_period($start_date, $end_date, array());
+  if ($filepath) {
+    $client = user_load($uid);
+    $client_name = substr($client->name, 0, 6);
+    file_transfer($filepath, batire_site_get_file_headers('Kheox_' . date('dmy', $start_date) . '_au_' . date('dmy', $end_date) . '_' . $client_name));
+  }
+  else {
+    return t('Data not found.');
+  }
+}
+
+function batire_gc_statistics_get_users_for_commercial($uid, $full = FALSE) {
+  $profile = batire_user_profile_load($uid);
+  $sql = "SELECT n.uid FROM {node} n
+    LEFT JOIN {content_type_batire_user_profile} ctup ON n.vid = ctup.vid
+    LEFT JOIN {users_roles} ur ON ur.uid = n.uid
+    WHERE n.type = 'batire_user_profile' AND
+      ctup.field_user_promo_value = '%s' AND
+      ur.rid = %d AND
+      n.uid <> %d";
+  $result = db_query($sql, $profile->field_user_promo[0]['value'], BATIRE_GC_GC_USER_ROLE_ID, $uid);
+  $users = array();
+  while ($row = db_fetch_object($result)) {
+    $users[] = $full ? batire_user_profile_load($row->uid) : (int) $row->uid;
+  }
+  return $users;
+}
+
+function batire_gc_statistics_switch_permission() {
+  $result = array(
+    'error' => TRUE,
+    'data' => t('No data available.'),
+  );
+  if (!isset($_POST['uid'])) {
+    return drupal_json($result);
+  }
+  $profile = batire_user_profile_load($_POST['uid']);
+  $permissions = !empty($profile->field_user_gc_stat_permissions[0]['value']) ? unserialize($profile->field_user_gc_stat_permissions[0]['value']) : array();
+  if (!empty($permissions) && $permissions['allow_export_statistics']) {
+    $permissions['allow_export_statistics'] = !$permissions['allow_export_statistics'];
+  }
+  else {
+    $permissions['allow_export_statistics'] = TRUE;
+  }
+  $profile->field_user_gc_stat_permissions[0]['value'] = serialize($permissions);
+  node_save($profile);
+  $result = array(
+    'error' => FALSE,
+    'data' => $permissions['allow_export_statistics'] ? t('Yes') : t('No'),
+  );
+  return drupal_json($result);
+}
+
+function batire_gc_statistics_get_stats_for_user_form($form, $uid) {
+  $form = array();
+  $first_day_of_this_month = date('Y') . '-' . date('m') . '-01';//strtotime('first day of this month') didnt work on prod, see task #65975
+
+  $form['start_date'] = array(
+    '#title' => t('Select start date'),
+    '#type' => 'date_popup',
+    '#date_format' => 'Y-m-d',
+    '#date_year_range' => '-5:+1',
+    '#default_value' => $first_day_of_this_month,
+    '#required' => TRUE,
+  );
+  $form['end_date'] = array(
+    '#title' => t('Select end date'),
+    '#type' => 'date_popup',
+    '#date_format' => 'Y-m-d',
+    '#date_year_range' => '-5:+1',
+    '#default_value' => date('Y-m-d'),
+    '#required' => TRUE,
+  );
+  $form['#uid'] = $uid;
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Build'),
+  );
+
+  return $form;
+}
+
+function batire_gc_statistics_get_stats_for_user_form_validate($form, &$form_state) {
+  $values = $form_state['values'];
+  $start_date = strtotime($values['start_date']);
+  $end_date = strtotime($values['end_date']);
+  if ($start_date > $end_date) {
+    form_set_error('start_date', t('Start date must be earlier than end date'));
+    form_set_error('end_date', t('End date must be later than start date'));
+  }
+}
+
+function batire_gc_statistics_get_stats_for_user_form_submit($form, &$form_state) {
+  $values = $form_state['values'];
+  $start_date = strtotime($values['start_date']);
+  $end_date = strtotime($values['end_date']);
+  $uid = $form['#uid'];
+  //batire_gc_statistics_get_document($start_date, $end_date, $uid);
+  drupal_goto("batire_gc_statistics/get/$start_date/$end_date/$uid");
+}

@@ -1,0 +1,45 @@
+<?php
+
+/**
+ * Implementation of hook_batire_xml_parseapi()
+ *
+ * @param $op
+ *   Operation
+ * @param array &$data
+ *   Result of parse process, if already processed
+ * @param DOMDocument &$dom
+ *   DOM object parsed from XML
+ * @return
+ *   Result of parse process, if already processed
+ */
+function batire_xml_parse_xslt_batire_xml_parseapi($op, &$errors, $nid = null, $data = null, $is_new = null) {
+  switch ($op) {
+    case 'pregeneration':
+      module_load_include('inc', 'batire_xml_parse_xslt', 'xslt');
+      $page_data = mongodb_page_get_node_page($nid);
+      if ($page_data && !empty($page_data['body'])) {
+        $page_data['content'] = array();
+        $page_data['content_images'] = array();
+        $page_data['content_tables'] = array();
+        _batire_xml_parse_xslt_storage('page_data', $page_data);
+        foreach ($page_data['body'] as $id => $value) {
+          if ($value && substr($value, 0, 1) == '<') { //simple xml validation
+            try {
+              _batire_xml_parse_xslt_storage('RESET', 'images');
+              _batire_xml_parse_xslt_storage('RESET', 'tables');
+              _batire_xml_parse_xslt_storage('RESET', 'page_data');
+              _batire_xml_parse_xslt_storage("page_data", $page_data);
+              $page_data['content'][$id] = batire_xml_parse_xslt_transform($value, 'common');
+              $page_data['content_images'][$id] = _batire_xml_parse_xslt_storage('images');
+              $page_data['content_tables'][$id] = _batire_xml_parse_xslt_storage('tables');
+            } catch (Exception $e) {
+              $errors[] = $e->getMessage();
+            }
+          }
+        }
+        mongodb_page_save($page_data);
+        _batire_xml_parse_xslt_storage('RESET', 'page_data');
+      }
+      break;
+  }
+}

@@ -1,0 +1,12 @@
+; $Id$
+name = Broche Plugin
+description = Batire XML Parser Plugin for Broche
+package = Batire
+core = 6.x
+version = "6.x-1.0"
+dependencies[] = batire_xml_parse
+dependencies[] = batire_xml_parse_xslt
+dependencies[] = batire_hierarchy
+dependencies[] = mongodb_page
+
+

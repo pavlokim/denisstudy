@@ -1,0 +1,6 @@
+; $Id: batire_gc_trial_tn.info
+name = Batire GC - Trial TN
+description = "Batire Grand Comptes trial TN access support."
+package = Batire GC
+core = 6.x
+dependencies[] = batire_gc

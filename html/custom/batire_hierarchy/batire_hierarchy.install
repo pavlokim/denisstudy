@@ -1,0 +1,251 @@
+<?php
+
+/**
+ * Implementation of hook_schema().
+ */
+function batire_hierarchy_schema() {
+  $schema = array();
+  $schema['batire_hierarchy'] = array(//@TODO: link with taxonomy
+    'fields' => array(
+      'id' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE
+      ),
+      'bid' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE
+      ),
+      'nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => NULL
+      ),
+      'parent_id' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => FALSE
+      ),
+      'parent_bid' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => FALSE
+      ),
+      'type' => array(
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE
+      ),
+      'position' => array(
+        'type' => 'int',
+        'size' => 'small',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => NULL
+      ),
+      'title' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE
+      ),
+      'version' => array(//We will use varchar for future changes
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => FALSE
+      ),
+      'igroup' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => FALSE
+      )
+    ),
+    'indexes' => array(
+      'parent_bid' => array('parent_bid'),
+      'nid' => array('nid'),
+      'id' => array('id')
+    ),
+    'primary key' => array(
+      'bid'
+    )
+  );
+
+  $schema['batire_abbreviation'] = array(//@TODO: link with taxonomy
+    'fields' => array(
+      'id' => array('type' => 'varchar', 'length' => 60, 'not null' => TRUE),
+      'abbr' => array('type' => 'varchar', 'length' => 60, 'not null' => TRUE),
+      'definition' => array('type' => 'varchar', 'length' => 255, 'not null' => TRUE),
+      'super_id' => array('type' => 'varchar', 'length' => 60, 'not null' => TRUE),
+      'super_bid' => array('type' => 'varchar', 'length' => 60, 'not null' => TRUE)
+    ),
+    'indexes' => array(
+      'search_index' => array('super_bid', 'abbr')
+    ),
+    'primary key' => array(//@TODO: add here taxonomy field too
+      'super_bid', 'id'
+    )
+  );
+
+  $schema['batire_links'] = array(
+    'fields' => array(
+      'bid_from' => array('type' => 'varchar', 'length' => 64, 'not null' => TRUE),
+      'id_from' => array('type' => 'varchar', 'length' => 64, 'not null' => TRUE),
+      'bid_to' => array('type' => 'varchar', 'length' => 64, 'not null' => TRUE),
+      'id_to' => array('type' => 'varchar', 'length' => 64, 'not null' => TRUE),
+      'rel_type' => array('type' => 'varchar', 'length' => 15),
+      'title' => array('type' => 'varchar', 'length' => 200)
+    ),
+    'primary key' => array('bid_from', 'bid_to', 'rel_type')
+  );
+
+  $schema['cache_batire_hierarchy'] = drupal_get_schema_unprocessed('system', 'cache');
+
+  return $schema;
+}
+
+/**
+ * @file
+ * Implementation of hook_install().
+ */
+function batire_hierarchy_install() {
+  drupal_install_schema('batire_hierarchy');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_hierarchy_uninstall() {
+  drupal_uninstall_schema('batire_hierarchy');
+}
+
+/**
+ * @file
+ * Implementation of hook_update().
+ */
+function batire_hierarchy_update_1() {
+  $ret = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('batire_hierarchy');
+  db_add_field($ret, 'batire_hierarchy', 'title', $table_definition['fields']['title']);
+}
+
+/**
+ * @file
+ * Implementation of hook_update().
+ */
+function batire_hierarchy_update_2() {
+  module_load_include('module', 'batire_hierarchy');
+
+  $ret = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('batire_hierarchy');
+  db_add_field($ret, 'batire_hierarchy', 'bid', $table_definition['fields']['bid']);
+  db_add_field($ret, 'batire_hierarchy', 'parent_bid', $table_definition['fields']['parent_bid']);
+  db_drop_index($ret, 'batire_hierarchy', 'parent_cpid');
+  db_drop_primary_key($ret, 'batire_hierarchy');
+  $types = batire_hierarchy_get_content_types();
+  $tree = taxonomy_get_tree(BATIRE_SITE_VID_DOC_TYPE);
+  foreach ($tree as $term) {
+    db_query("UPDATE {batire_hierarchy} SET bid = CONCAT_WS('-', '%s', id), parent_bid = CONCAT_WS('-', '%s', parent_id) WHERE type='%s'", $term->description, $term->description, $types[$term->tid]);
+  }
+  db_add_primary_key($ret, 'batire_hierarchy', $table_definition['primary key']);
+  db_add_index($ret, 'batire_hierarchy', 'parent_bid', $table_definition['indexes']['parent_bid']);
+  db_add_index($ret, 'batire_hierarchy', 'id', $table_definition['indexes']['id']);
+  return $ret;
+}
+
+/**
+ * @file
+ * Implementation of hook_update().
+ */
+function batire_hierarchy_update_3() {
+  $ret = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('batire_abbreviation');
+
+  if (db_table_exists('batire_abbreviation')) {
+    if (!db_column_exists('batire_abbreviation', 'super_bid')) {
+      db_drop_table($ret, 'batire_abbreviation');
+      db_create_table($ret, 'batire_abbreviation', $table_definition);
+    }
+  }
+  else {
+    db_create_table($ret, 'batire_abbreviation', $table_definition);
+  }
+  return $ret;
+}
+
+/**
+ * @file
+ * Implementation of hook_update().
+ */
+function batire_hierarchy_update_4() {
+  $ret = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('batire_links');
+  db_create_table($ret, 'batire_links', $table_definition);
+  return $ret;
+}
+
+/**
+ * @file
+ * Implementation of hook_update().
+ */
+function batire_hierarchy_update_5() {
+  $ret = array();
+  $ret[] = update_sql('ALTER TABLE {batire_hierarchy} CHANGE COLUMN `id` `id` VARCHAR(64) NOT NULL  , CHANGE COLUMN `parent_id` `parent_id` VARCHAR(64) NULL DEFAULT NULL  , CHANGE COLUMN `bid` `bid` VARCHAR(64) NOT NULL  , CHANGE COLUMN `parent_bid` `parent_bid` VARCHAR(64) NULL DEFAULT NULL');
+  $ret[] = update_sql('ALTER TABLE {batire_links} CHANGE COLUMN `bid_from` `bid_from` VARCHAR(64) NOT NULL  , CHANGE COLUMN `id_from` `id_from` VARCHAR(64) NOT NULL  , CHANGE COLUMN `bid_to` `bid_to` VARCHAR(64) NOT NULL  , CHANGE COLUMN `id_to` `id_to` VARCHAR(64) NOT NULL');
+  return $ret;
+}
+
+/**
+ * @file
+ * Implementation of hook_update().
+ */
+function batire_hierarchy_update_6() {
+  module_load_include('module', 'batire_hierarchy');
+
+  $ret = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('batire_hierarchy');
+  db_add_field($ret, 'batire_hierarchy', 'version', $table_definition['fields']['version']);
+  return $ret;
+}
+
+function batire_hierarchy_update_7() {
+  module_load_include('module', 'batire_hierarchy');
+
+  $ret = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('batire_hierarchy');
+  db_add_field($ret, 'batire_hierarchy', 'igroup', $table_definition['fields']['igroup']);
+  return $ret;
+}
+
+function batire_hierarchy_update_8() {
+  module_load_include('module', 'batire_hierarchy');
+
+  $ret = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('cache_batire_hierarchy');
+  db_create_table($ret, 'cache_batire_hierarchy', $table_definition);
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_hierarchy_update_9() {
+  $ret = array();
+
+  $query = "CREATE INDEX bl_bid_from ON {batire_links} (bid_from)";
+  $result = db_query($query);
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  $query = "CREATE INDEX bl_bid_to ON {batire_links} (bid_to)";
+  $result = db_query($query);
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  return $ret;
+}

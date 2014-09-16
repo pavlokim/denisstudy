@@ -1,0 +1,303 @@
+<?php
+
+/**
+ * @file
+ * Enables antidot searching.
+ */
+module_load_include('inc', 'batire_antidot_search', 'includes/batire_antidot_search.admin');
+
+define('BATIRE_ANTIDOT_SEARCH_FACETS_LIMIT', 500);
+define('BATIRE_ANTIDOT_SEARCH_LOG', 'ANTISEARCH');
+
+/**
+ * Translate json into array
+ * @return array
+ */
+function batire_antidot_search_result_filter_build($facets) {
+  $data_tree = $facets;
+  $search_antidot = array();
+  if (!empty($data_tree)) {
+    foreach ($data_tree as $group) {
+      $search_antidot[$group->id] = array();
+      if (!empty($group->labels[0]->label)) {
+        $group_title = $group->labels[0]->label;
+        $search_antidot[$group->id]['title'] = batire_antidot_json_key_title($group_title);
+        if ($group_title != 'clusterRef') {
+          if (isset($group->node[0])) {
+            foreach ($group->node as $element) {
+              $key = $element->key;
+              if (is_numeric($key)) {
+                if (!empty($element->labels[0]->label)) {
+                  if ($group_title == 'typeSource') {
+                    $search_antidot[$group->id]['tree'][$key]['title'] = taxonomy_get_term($key)->name;
+                  }
+                  elseif ($group_title == 'Source') {
+                    $search_antidot[$group->id]['tree'][$key]['title'] = taxonomy_get_term($key)->name;
+                  }
+                  else {
+                    $search_antidot[$group->id]['tree'][$key]['title'] = batire_antidot_json_key_title($element->labels[0]->label);
+                  }
+                  $search_antidot[$group->id]['tree'][$key]['count'] = $element->items;
+                  if (isset($element->node[0])) {
+                    $ant_children = array();
+                    foreach ($element->node as $children) {
+                      $ch_key = explode('/', $children->key);
+                      $ch_key = $ch_key[1];
+                      if (!empty($ch_key)) {
+                        $tax = taxonomy_get_term($ch_key);
+                        $ant_children[$children->key]['title']  = (isset($tax->name)) ? $tax->name : '';
+                        $ant_children[$children->key]['weight'] = (isset($tax->weight)) ? $tax->weight : '';
+                        $ant_children[$children->key]['count']  = $children->items;
+                      }
+                    }
+                    batire_site_summary_sort_by_val($ant_children, 'weight');
+                    if (count($ant_children)) {
+                      $search_antidot[$group->id]['tree'][$key]['children'] = $ant_children;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      elseif ($group->type == 'DATE' && $group->id == 'date') {
+        if (count($group->node)) {
+          $search_antidot['date'] = $group->node;
+//          if (isset($group->pager)) {
+//            watchdog('ANTIDOT', 'Antidot dates array is more than defined. Increase it.');
+//          }
+        }
+      }
+    }
+  }
+  return $search_antidot;
+}
+
+/**
+ * Run the search in antidot
+ * @param $request List of params
+ */
+function batire_antidot_search_run($request, $facet_limit = BATIRE_ANTIDOT_SEARCH_FACETS_LIMIT) {
+  global $user;
+  if (!$replace_user = batire_gc_ip_replace_user()) {
+    $replace_user = $user;
+  }
+
+  $url = variable_get('batire_antidot_search_service_url', '');
+  $client_id = variable_get('batire_antidot_search_client_id', '');
+  $status = variable_get('batire_antidot_search_status', 'rc');
+
+  if (count($request) && !empty($url) && !empty($client_id)) {
+    $headers = array('Content-Type' => 'application/x-www-form-urlencoded');
+    //$request['afs:filter'] = '((not(horsPerimetre="1")))and((typeSource="191"))';
+    $data = array(
+      'afs:service=' . $client_id,
+      'afs:output=json',
+      'afs:status=' . $status,
+      //Fundamental first
+      //'afs:sort=documentFondamental, DESC',
+      //Facets pager limits
+      'afs:facetDefault=replies=' . $facet_limit,
+      'afs:facet=date,order=DESC'
+    );
+
+    foreach ($request as $key => $val) {
+      if ($key == 'afs:query') {
+        $val = htmlspecialchars_decode($val);
+      }
+
+      $data[] = $key . '=' . rawurlencode($val);
+    }
+
+    //Restrict free users to TN
+    if (_batire_user_is_free() || !$replace_user->uid) {
+      $data[] = 'afs:filter=not(typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF . '")';
+    }
+    /*elseif (_batire_user_is_trialtn()) {
+      $data[] = 'afs:filter=typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF . '"';
+    }*/
+
+    $data = implode('&', $data);
+    if (variable_get('batire_site_log_antidot', 0)) {
+      watchdog(BATIRE_ANTIDOT_SEARCH_LOG, url($url , array('query' => $data)));
+    }
+
+    $response = drupal_http_request($url, $headers, 'POST', $data);
+    if (!isset($response->error) && empty($response->error) && !empty($response->data)) {
+      return batire_antidot_search_process_response($response->data);
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Get results from json string
+ * @param $json Json string
+ */
+/*function batire_antidot_search_process_response($json) {
+  $result = new stdClass();
+  $json_array = json_decode($json);
+  if (!empty($json_array->replySet[0]->meta->totalItems)) {
+    if (isset($json_array->replySet[0]->meta->producer) && strtolower($json_array->replySet[0]->meta->producer) == 'spellcheck') {
+      $result->total_cnt = 0;
+      if (!empty($json_array->replySet[0]->content->reply[0]->abstract[0]->text)) {
+        $result->spell_checker = $json_array->replySet[0]->content->reply[0]->abstract[0]->text;
+      }
+    }
+    else {
+      $result->total_cnt = $json_array->replySet[0]->meta->totalItems;
+    }
+  }
+  else {
+    $result->total_cnt = 0;
+  }
+  $result->facets = '';
+  if (!empty($json_array->replySet[0]->facets->facet)) {
+    $result->facets = $json_array->replySet[0]->facets->facet;
+  }
+  $result->content = '';
+  if (!empty($json_array->replySet[0]->content->reply)) {
+    $result->content = $json_array->replySet[0]->content->reply;
+    foreach ($result->content as &$item) {
+      batire_antidot_convert_content($item);
+    }
+
+    //Reorder texte fondamental to top
+    $fund_arr = $rest_arr = array();
+    foreach ($result->content as $key => $value) {
+      if (isset($value->node->field_document_fundamental) && $value->node->field_document_fundamental) {
+        $fund_arr[] = $value;
+        unset($result->content[$key]);
+      }
+    }
+
+    if (count($fund_arr)) {
+      $rest_arr = $result->content;
+      $result->content = array_merge($fund_arr, $rest_arr);
+    }
+  }
+  $result->pager = 0;
+  if (!empty($json_array->replySet[0]->pager)) {
+    $result->pager = $json_array->replySet[0]->pager;
+  }
+  return $result;
+}*/
+
+/**
+ * Get results from json string
+ * @param $json Json string
+ * New version of function for Kheox V2
+ */
+function batire_antidot_search_process_response($json) {
+  $result = new stdClass();
+  $json_array = json_decode($json);
+
+  if (!empty($json_array->replySet[0]->meta->totalItems)) {
+    if (isset($json_array->replySet[0]->meta->producer) && strtolower($json_array->replySet[0]->meta->producer) == 'spellcheck') {
+      $result->total_cnt = 0;
+      if (!empty($json_array->replySet[0]->content->reply[0]->abstract[0]->text)) {
+        $result->spell_checker = $json_array->replySet[0]->content->reply[0]->abstract[0]->text;
+      }
+    }
+    else {
+      if ($json_array->replySet[0]->meta->uri == 'IMAGES') {
+        $result->total_cnt = $json_array->replySet[0]->meta->totalItems;
+      }
+      elseif(isset($json_array->replySet[0]->meta->nbClusters)) {
+        $result->total_cnt = $json_array->replySet[0]->meta->nbClusters;
+      }
+      else {
+        $result->total_cnt = $json_array->replySet[0]->meta->totalItems;
+      }
+    }
+  }
+  else {
+    $result->total_cnt = 0;
+  }
+  $result->facets = '';
+
+  if (!empty($json_array->replySet[0]->facets->facet)) {
+    $result->facets = $json_array->replySet[0]->facets->facet;
+  }
+  $result->content = '';
+  if (!empty($json_array->replySet[0]->content->cluster)) {
+    $result->content = $json_array->replySet[0]->content->cluster;
+    foreach ($result->content as &$item) {
+      batire_antidot_convert_content($item->reply[0]);
+    }
+    //Reorder texte fondamental to top
+    $fund_arr = $rest_arr = array();
+    foreach ($result->content as $key => $value) {
+      if (isset($value->reply[0]->node->field_document_fundamental) && $value->reply[0]->node->field_document_fundamental) {
+        $fund_arr[] = $value;
+        unset($result->content[$key]);
+      }
+    }
+
+    if (count($fund_arr)) {
+      $rest_arr = $result->content;
+      $result->content = array_merge($fund_arr, $rest_arr);
+    }
+  }
+  elseif ($json_array->replySet[0]->meta->uri == 'IMAGES') {//I think this rule need to be change
+    $result->content = $json_array->replySet[0]->content->reply;
+    $result->feed = 'IMAGES';
+    foreach ($result->content as &$item) {
+      batire_antidot_convert_content($item, $result->feed);
+    }
+    //Reorder texte fondamental to top
+    $fund_arr = $rest_arr = array();
+    foreach ($result->content as $key => $value) {
+      if (isset($value->node->field_document_fundamental) && $value->node->field_document_fundamental) {
+        $fund_arr[] = $value;
+        unset($result->content[$key]);
+      }
+    }
+
+    if (count($fund_arr)) {
+      $rest_arr = $result->content;
+      $result->content = array_merge($fund_arr, $rest_arr);
+    }
+  }
+  elseif (!empty($json_array->replySet[0]->content->reply)) {
+    $result->content = $json_array->replySet[0]->content->reply;
+    foreach ($result->content as &$item) {
+      batire_antidot_convert_content($item);
+    }
+
+    //Reorder texte fondamental to top
+    $fund_arr = $rest_arr = array();
+    foreach ($result->content as $key => $value) {
+      if (isset($value->node->field_document_fundamental) && $value->node->field_document_fundamental) {
+        $fund_arr[] = $value;
+        unset($result->content[$key]);
+      }
+    }
+
+    if (count($fund_arr)) {
+      $rest_arr = $result->content;
+      $result->content = array_merge($fund_arr, $rest_arr);
+    }
+  }
+  
+  $result->pager = 0;
+  if (!empty($json_array->replySet[0]->pager)) {
+    $result->pager = $json_array->replySet[0]->pager;
+  }
+  return $result;
+}
+
+/**
+ * Get cpid by nid
+ * @param $cpid
+ * @return mixed
+ */
+function batire_antidot_search_get_cpid_by_nid($nid) {
+  $keys = array('nid' => (int) $nid);
+  $page_data = mongodb_select_one(MONGODB_PAGE_COLLECTION, $keys);
+  if (isset($page_data['id']) && $page_data['id']) {
+    return $page_data['id'];
+  }
+  return 0;
+}

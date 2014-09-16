@@ -1,0 +1,73 @@
+<?php
+
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_requirements().
+ */
+function batire_user_docs_pdf_requirements($phase) {
+  $requirements = array();
+  // Ensure translations don't break at install time.
+  $t = get_t();
+
+  if ($phase == 'install' || $phase == 'runtime') {
+    $pdf_directory = file_create_path() . '/batire_pdf';
+    if (!file_check_directory($pdf_directory, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+      if (!is_dir($pdf_directory)) {
+        $requirements['pdf_directory'] = array(
+          'title' => $t('Batire PDF Directory'),
+          'value' => $t('%p is not a directory or is not readable by the webserver.', array('%p' => $pdf_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+      elseif (!is_writable($pdf_directory)) {
+        $requirements['pdf_directory'] = array(
+          'title' => $t('Batire PDF Directory'),
+          'value' => $t('%p is not writeable by the webserver.', array('%p' => $pdf_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+    }
+
+    if (!is_writable(file_directory_temp())) {
+      $requirements['pdf_directory'] = array(
+        'title' => $t('Statistics Application Temp Directory'),
+        'value' => $t('%p is not writeable by the webserver.', array('%p' => file_directory_temp())),
+        'severity' => REQUIREMENT_ERROR,
+      );
+      $pdf_directory_tmp = file_directory_temp() . '/batire_pdf';
+      if (!is_writable($pdf_directory_tmp)) {
+        $requirements['pdf_directory_tmp'] = array(
+          'title' => $t('Statistics Application Temp Directory'),
+          'value' => $t('%p is not writeable by the webserver.', array('%p' => $pdf_directory_tmp)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+    }
+  }
+  return $requirements;
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_user_docs_pdf_install() {
+  $path_to_php = exec('which php');
+  variable_set('batire_pdf_process_priority', 5);
+  variable_set('batire_pdf_php', $path_to_php ? $path_to_php : '/usr/bin/php');
+  variable_set('batire_user_docs_pdf_pdftk_path', '/usr/bin/pdftk');
+  variable_set('batire_user_docs_pdf_pdf2swf_path', '/usr/local/bin/pdf2swf');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_user_docs_pdf_uninstall() {
+  variable_del('batire_pdf_process_priority');
+  variable_del('batire_pdf_php');
+  variable_del('batire_user_docs_pdf_pdftk_path');
+  variable_del('batire_user_docs_pdf_pdf2swf_path');
+}

@@ -1,0 +1,273 @@
+<?php
+
+/**
+ * @file
+ * Documents related stuff to mongodb.
+ */
+define('MONGODB_PAGE_COLLECTION', 'page');
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function mongodb_page_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  global $user;
+  switch ($op) {
+    case 'load':
+      $node->page_data = mongodb_page_get_node_page($node);
+      break;
+    case 'insert':
+    case 'update':
+      if (in_array($node->type, batire_hierarchy_get_content_types()) && property_exists($node, 'parsed_data')) {
+        //store files
+        if (isset($node->parsed_data['attached']) && is_array($node->parsed_data['attached'])) {
+          $source_dir = $node->parsed_data['dir'];
+          foreach ($node->parsed_data['attached'] as $delta => $file_item) {
+            $filename = $file_item;
+            $node->parsed_data['attached'][$delta] = batire_xml_parse_add_new_file($filename, $source_dir, $node->parsed_data['super_id']);
+          }
+        }
+        $keys = array('nid' => (int) $node->nid, 'bid' => $node->parsed_data['bid']);
+        $data = array_diff_key($node->parsed_data, array('errors' => 1)); //remove unused fields
+        $data = array_merge($data, $keys, array('type' => $node->type));
+        if ($old_data = mongodb_page_get_node_page($node)) {
+          if (array_key_exists("persistent", $old_data)) {
+            if (array_key_exists("persistent", $data)) {
+              $data['persistent'] = array_merge($old_data['persistent'], $data['persistent']);
+            } else {
+              $data['persistent'] = $old_data['persistent'];
+            }
+          }
+        }
+
+        mongodb_page_save($data);
+      }
+      break;
+
+    case 'delete':
+      if (in_array($node->type, batire_hierarchy_get_content_types())) {
+        $keys = array('nid' => (int) $node->nid);
+        mongodb_delete(MONGODB_PAGE_COLLECTION, $keys);
+      }
+      break;
+
+    case 'view':
+      //batire_abbr
+      if (in_array($node->type, batire_hierarchy_get_content_types()) && property_exists($node, 'page_data')) {
+        $GLOBALS['mongodb_page_node'] = $node;
+//        //compatibility with old way, can be safetly removed after next import
+//        if (!is_array($node->page_data['content'])) {
+//          $node->page_data['content'] = array('content' => $node->page_data['content']);
+//          $node->page_data['content_images'] = array('content' => $node->page_data['content_images']);
+//          $node->page_data['content_tables'] = array('content' => $node->page_data['content_tables']);
+//        }
+        if (!empty($node->page_data['content'])) {
+          foreach ($node->page_data['content'] as & $content) {
+            _mongodb_page_prepare_content($content);
+          }
+        }
+        else {
+          _mongodb_page_prepare_content($node->page_data['content']);
+        }
+//        if (in_array($node->type, array(BATIRE_SITE_CT_CODE, BATIRE_SITE_CT_TO))) {
+//          if (!empty($node->page_data['to_complete'])) {
+//            if ($node->field_import_date[0]['value'] > (variable_get('batire_xml_last_to_complete', 0) + 2) || empty($node->page_data['content']['children'])) {
+//              $tree = batire_hierarchy_get_children($node->page_data['super_bid'], TRUE);
+//              $children_content = array();
+//              foreach ($tree as $item) {
+//                $children_content[] = implode('<br />', _mongodb_page_get_bodies_recursive($item));
+//              }
+//              $node->page_data['content']['children'] = implode('<br />', $children_content);
+//              $data = mongodb_page_get_node_page($node);
+//              $data['content']['children'] = $node->page_data['content']['children'];
+//              $keys = array('nid' => (int) $node->nid, 'bid' => $node->page_data['bid']);
+//              mongodb_update(MONGODB_PAGE_COLLECTION, $keys, $data);
+//            }
+//          }
+//        }
+      }
+      break;
+  }
+}
+
+/**
+ * Return stored page for given node
+ *
+ * @param mixed $node Page Node or nid
+ *
+ */
+function mongodb_page_get_node_page($node) {
+  if (is_numeric($node)) {
+    $nid = $node;
+  } else {
+    $nid = $node->nid;
+  }
+  if (!$nid) {
+    throw new Exception(t('Incorrect function usage: mongodb_page_get_node_page'));
+  }
+  $collection = mongodb_page_get_collection();
+  return $collection->findOne(array('nid' => (int) $nid));
+}
+
+/**
+ * Return stored page for given node
+ *
+ * @param mixed $node Page Node or nid
+ *
+ */
+function mongodb_page_get_page_by_bid($bid) {
+  $collection = mongodb_page_get_collection();
+  return $collection->findOne(array('bid' => $bid));
+}
+
+/**
+ * Is bid - real doc
+ *
+ * @param $bid
+ * @return bool
+ */
+function mongodb_page_is_doc($bid) {
+  $collection = mongodb_page_get_collection();
+  $doc = $collection->findOne(array('bid' => $bid), array('nid', 'is_chapter', 'is_empty_body'));
+  unset($collection);
+
+  return (!empty($doc['nid'])) ? $doc : FALSE;
+}
+
+function mongodb_page_save($data) {
+  $keys = array('nid' => (int) $data['nid']);
+  return mongodb_update(MONGODB_PAGE_COLLECTION, $keys, $data);
+}
+/**
+ * Get page collection
+ * @return MongoCollection
+ */
+function mongodb_page_get_collection() {
+  $collection = drupal_static(__FUNCTION__);
+  if (!$collection) {
+    $collection = mongodb_collection(MONGODB_PAGE_COLLECTION);
+  }
+  return $collection;
+}
+
+function _mongodb_page_replace_images_callback($matches) {
+  global $mongodb_page_node;
+
+  $src = $matches[1];
+  $title = $matches[2];
+  $legend = $matches[3];
+
+  foreach ($mongodb_page_node->page_data['attached'] as $file) {
+    if (strpos($file['filename'], $src) === 0) {
+      return theme('document_image', $file['filepath'], $title, $legend);
+    }
+  }
+
+  return '<div class="error">IMAGE MISSED ' . $src . '</div>';
+}
+
+function _mongodb_page_replace_abbr_callback($matches) {
+  global $mongodb_page_node;
+  $super_bid = $mongodb_page_node->page_data['super_bid'];
+  $title = $matches[1];
+  $id = $matches[2];
+  $row = db_fetch_array(db_query("SELECT definition FROM {batire_abbreviation } WHERE id = '%s' and super_bid = '%s'", $id, $super_bid));
+  if ($row) {
+    return theme('document_abbr', $title, $row['definition'], $id);
+  }
+  return theme('document_abbr', $title, NULL, $id);
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function mongodb_page_theme() {
+  return array(
+    'document_image' => array(
+      'template' => 'document-image',
+      'arguments' => array('src' => NULL, 'title' => NULL, 'legend' => NULL),
+      'preprocess functions' => array(
+        '_mongodb_page_document_image_preprocess'
+      )
+    ),
+    'document_abbr' => array(
+      'template' => 'document-abbr',
+      'arguments' => array('title' => NULL, 'definition' => NULL, 'id' => NULL),
+      'preprocess functions' => array(
+        '_mongodb_page_document_abbr_preprocess'
+      )
+    )
+  );
+}
+
+return '1';
+
+/**
+ * Prepare content for displaying
+ * @param string $content
+ */
+function _mongodb_page_prepare_content(&$content) {
+
+  $content = preg_replace_callback('|
+    <batire_abbr>
+      <title>(.*?)</title>
+      <id>(.*?)</id>
+    </batire_abbr>|smx', '_mongodb_page_replace_abbr_callback', $content);
+}
+
+
+function mongodb_page_batire_hierarchy($op) {
+  $args = func_get_args();
+  switch ($op) {
+    case 'prearchive':
+      list(, $old_bid, $new_bid, $process_children) = $args;
+      $data = mongodb_page_get_page_by_bid($old_bid);
+      if ($data) {
+        $data['bid'] = $new_bid;
+        mongodb_page_save($data);
+      }
+      //@TODO: Add super bid handling here!
+      break;
+    case 'before attach children':
+      list(,  $parent_bid, $child_bid, $position, $parent_id) = $args;
+      //dettaching, saving for trail
+      if (!$parent_bid) {
+        $data = mongodb_page_get_page_by_bid($child_bid);
+        if ($data) {
+          if (!array_key_exists("persistent", $data)) {
+            $data['persistent'] = array();
+          }
+          $data['persistent']['parent_id'] = $parent_id;
+          $data['persistent']['parent_bid'] = $parent_bid;
+          mongodb_page_save($data);
+        }
+      }
+      break;
+    case 'after attach children':
+      list(,  $parent_bid, $child_bid, $position, $parent_id) = $args;
+      $data = mongodb_page_get_page_by_bid($child_bid);
+      if ($data) {
+        $data['parent_bid'] = $parent_bid;
+        $data['position'] = $position;
+        $data['parent_id'] = $parent_id;
+        mongodb_page_save($data);
+      }
+  }
+}
+
+function _mongodb_page_get_bodies_recursive($item, $add_title = TRUE) {
+  $mongodb_page_node = $GLOBALS['mongodb_page_node'];
+
+  $result = array();
+  if ($item->nid) {
+    $node = node_load($item->nid);
+    mongodb_page_nodeapi($node, 'view');
+    $result[] = ($add_title ? '<h2>' . l($node->title, 'node/' . $node->nid) . '</h2>' : '' ) . $node->page_data['content']['content'];
+  }
+  if ($item->children) {
+    foreach ($item->children as $child) {
+      $result = array_merge($result, _mongodb_page_get_bodies_recursive($child));
+    }
+  }
+  $GLOBALS['mongodb_page_node'] = $mongodb_page_node;
+  return $result;
+}

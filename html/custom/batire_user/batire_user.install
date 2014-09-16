@@ -1,0 +1,245 @@
+<?php
+
+/**
+ * @file
+ * Installation for the module
+ */
+function batire_user_schema() {
+  $schema['batire_user_registration_requests'] = array(
+    'description' => 'Table for storing user data after subscription.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'Primary Key: Unique record ID.',
+        'type' => 'serial',
+        'not null' => TRUE,
+        'unsigned' => TRUE
+      ),
+      'mail' => array(
+        'description' => 'A user mail.',
+        'type' => 'varchar',
+        'not null' => FALSE,
+        'length' => 100
+      ),
+      'type' => array(
+        'description' => '0 - Paid registration, 1 - Dad, 2 - Free, 3 - Subaccount',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'data' => array(
+        'description' => 'A user data.',
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'normal',
+        'serialize' => TRUE
+      ),
+      'created' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0
+      ),
+      'uid' => array(
+        'description' => 'A User ID.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0
+      )
+    ),
+    'indexes' => array('uid' => array('uid'), 'mail' => array('mail')),
+    'primary key' => array('id')
+  );
+
+  $schema['cache_batire_user'] = array(
+    'description' => 'Generic cache table for caching Batire user related data.',
+    'fields' => array(
+      'cid' => array(
+        'description' => 'Primary Key: Unique cache ID.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => ''),
+      'data' => array(
+        'description' => 'A collection of data to cache.',
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big'),
+      'expire' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry should expire, or 0 for never.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0),
+      'created' => array(
+        'description' => 'A Unix timestamp indicating when the cache entry was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0),
+      'headers' => array(
+        'description' => 'Any custom HTTP headers to be added to cached data.',
+        'type' => 'text',
+        'not null' => FALSE),
+      'serialized' => array(
+        'description' => 'A flag to indicate whether content is serialized (1) or not (0).',
+        'type' => 'int',
+        'size' => 'small',
+        'not null' => TRUE,
+        'default' => 0)
+    ),
+    'indexes' => array('expire' => array('expire')),
+    'primary key' => array('cid'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implementation of hook_schema_alter().
+ */
+function batire_user_schema_alter(&$schema) {
+  // Add fields to user schema.
+
+  $schema['users']['fields']['abo_num'] = array(
+    'description' => 'The abonement number of this user.',
+    'type' => 'varchar',
+    'length' => 20,
+    'not null' => TRUE,
+    'default' => ''
+  );
+
+  $schema['users']['fields']['svc_login'] = array(
+    'description' => 'User login in SVC.',
+    'type' => 'varchar',
+    'length' => 255,
+    'not null' => TRUE,
+    'default' => ''
+  );
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_user_install() {
+  drupal_install_schema('batire_user');
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_user_update_6001() {
+  $ret = array();
+
+  $schema = drupal_get_schema('users', TRUE);
+
+  db_add_field($ret, 'users', 'abo_num', $schema['fields']['abo_num']);
+  db_add_field($ret, 'users', 'svc_login', $schema['fields']['svc_login']);
+
+  $schema = drupal_get_schema_unprocessed('batire_user', 'batire_user_registration_requests');
+  db_create_table($ret, 'batire_user_registration_requests', $schema);
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_user_update_6002() {
+  $result = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('cache_batire_user');
+
+  db_create_table($result, 'cache_batire_user', $table_definition);
+
+  return $result;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_user_update_6003() {
+  $ret = array();
+
+  $body = "!salutation !name !surname,
+
+Vous bénéficiez dorénavant d’un accès au site !site_name_uc et, à l’exception des documents normatifs.
+
+Durant cette période, nous demeurons à votre disposition pour toute question sur le site ou son fonctionnement au 01 40 13 50 88.
+
+Nous vous rappelons vos codes d’accès :
+Identifiant : !login
+Mot de passe : !password
+Conservez-les précieusement, ils vous seront demandés à chaque connexion sur le site.";
+
+  $result1 = db_query("INSERT INTO {mail_edit_registry} (id, module, mailkey, description) VALUES ('%s', '%s', '%s', '%s')", 'batire_user_batire_user_account_confirm_activate_free', 'batire_user', 'batire_user_account_confirm_activate_free', 'Confirmation d\'activation du compte offre d\'essai');
+  $result2 = db_query("INSERT INTO {mail_edit} (description, subject, id, language, body) VALUES ('%s', '%s', '%s', '%s', '%s')", 'Confirmation d\'activation du compte offre d\'essai', 'Votre compte !site_name_uc est activé', 'batire_user_batire_user_account_confirm_activate_free', 'fr', $body);
+
+  $ret[] = array('success' => ($result1 && $result2) !== FALSE, 'query' => "Add new mail template");
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_user_update_6004() {
+  // Here we remove 'batire_user_statistic' mail template. Unfortunately
+  // mail_edit module does not have own delete mechaism, so direct db queries
+  // are good enough in this case
+  $query_template = db_query("DELETE FROM {mail_edit_registry} WHERE id = '%s'", 'batire_user_batire_user_statistic');
+  $query_trans = db_query("DELETE FROM {mail_edit} WHERE id = '%s'", 'batire_user_batire_user_statistic');
+  $ret[] = array('success' => ($query_template && $query_trans) !== FALSE, 'query' => 'Removed batire_user_statistic mail template.');
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ * Update ALERTS - set last run for:
+ * 1) Every few month to 01.01.2014
+ * 2) Every day and week to 07:00:00 of current date
+ */
+function batire_user_update_6005() {
+  $ret = array();
+  $alerts = db_query('SELECT nid FROM {content_type_batire_user_search_profile} WHERE field_profile_type_value = 1');
+  while ($a_nid = db_result($alerts)) {
+    $alerts_nids[] = $a_nid;
+  }
+
+  $current_day = date('Y-m-d', time());
+  $last_run = strtotime($current_day.' 07:00:00');
+
+  foreach ($alerts_nids as $nid) {
+    $alert = node_load($nid);
+    $periodicity = $alert->field_alert_period[0]['value'];
+    if($periodicity == 2) {
+      $alert->field_last_run[0]['value'] = 1388534400;// 01/01/2014
+    }
+    else {
+      $alert->field_last_run[0]['value'] = $last_run;
+    }
+    node_save($alert);
+  }
+  return $ret;
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_user_uninstall() {
+  $ret = array();
+
+  db_drop_field($ret, 'users', 'abo_num');
+  db_drop_field($ret, 'users', 'svc_id');
+
+  drupal_uninstall_schema('batire_user');
+
+  variable_del('batire_user_date_to_expiration');
+  variable_del('batire_user_commercials_email');
+  variable_del('batire_user_email_cc');
+
+  variable_del('batire_user_notifications_delay_1');
+  variable_del('batire_user_notifications_delay_2');
+  variable_del('batire_user_notifications_delay_3');
+  variable_del('batire_user_notifications_delay_4');
+
+  return $ret;
+}

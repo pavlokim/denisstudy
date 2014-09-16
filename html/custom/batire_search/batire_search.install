@@ -1,0 +1,45 @@
+<?php
+
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_search_install() {
+
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_search_uninstall() {
+  variable_del('batire_search_id_alphabet');
+  variable_del('batire_search_id_length');
+  variable_del('batire_search_count_searches_to_display');
+  variable_del('batire_search_excluded_words');
+  variable_del('batire_search_search_links_menu');
+}
+
+/**
+ * Update of all SO and TN for republishing
+ */
+function batire_search_update_6001() {
+  $sql = "SELECT n.nid FROM {node} n WHERE n.type IN ('batire_texte_officiel', 'batire_codes', 'batire_texte_normatifs')";
+  $query = db_query($sql);
+
+  $nids = array();
+  while ($row = db_fetch_object($query)) {
+    $nids[] = $row->nid;
+  }
+  $op = 'edit';
+  $chunked_nids = array_chunk($nids, 100);
+  foreach ($chunked_nids as $nids) {
+    job_queue_add('_batire_antidot_export_update_nodes', 'Update cites in SO and TN documents', array($nids));
+  }
+  foreach ($chunked_nids as $nids) {
+    job_queue_add('_batire_antidot_export_job_run', 'Antidot '. $op .' documents', array($nids, $op));
+  }
+}

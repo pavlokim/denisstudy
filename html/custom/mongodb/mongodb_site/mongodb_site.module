@@ -1,0 +1,1855 @@
+<?php
+
+/**
+ * @file
+ * User related stuff to mongodb.
+ */
+
+define('MONGODB_SITE_COUNTIES_COLLECTION', 'countries');
+define('MONGODB_SITE_SUMMARY_COLLECTION', 'summary');
+define('MONGODB_SITE_SUMMARY_FILTER_COLLECTION', 'summary_filter');
+
+/**
+ * Function return country list with criteria : EU | ALL and can flip values
+ * @param bool $flip
+ * @param bool $only_eu
+ * @return mixed
+ */
+function mongodb_site_get_country_list($flip = FALSE, $only_eu = FALSE) {
+  $countries = array();
+
+  $key = $only_eu ? 'eu' : 'all';
+
+  if (!isset($countries[$key])) {
+    $tmp = array();
+
+    $keys = $only_eu ? array('is_eu' => TRUE) : array();
+
+    $countrys = mongodb_select(MONGODB_SITE_COUNTIES_COLLECTION, $keys);
+    foreach ($countrys as $country) {
+      $c_code = $country['code'];
+      $c_name = $country['country'];
+      if ($flip) {
+        $tmp[$c_code] = (object)array('country' => $c_code, 'code' => $c_name);
+      }
+      else {
+        $tmp[$c_name] = (object)array('country' => $c_name, 'code' => $c_code);
+      }
+    }
+
+    $countries[$key] = $tmp;
+  }
+  return $countries[$key];
+}
+
+/**
+ * Function for create/recreate countries mongodb collection from XML, listed above
+ */
+function mongodb_site_import_countries() {
+  $eu_countres = array(
+    'DE',
+    'AT',
+    'BE',
+    'BG',
+    'CY',
+    'DK',
+    'ES',
+    'EE',
+    'FI',
+    'FR',
+    'EL',
+    'HU',
+    'IE',
+    'IT',
+    'LV',
+    'LT',
+    'LU',
+    'MT',
+    'NL',
+    'PL',
+    'PT',
+    'CZ',
+    'RO',
+    'UK',
+    'SK',
+    'SI',
+    'SE'
+  );
+
+  $src = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ISO_3166-1_List_fr xml:lang="fr">
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>AFGHANISTAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AF</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>AFRIQUE DU SUD</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>ZA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÅLAND, ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AX</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>ALBANIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AL</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ALGÉRIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>DZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ALLEMAGNE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>DE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ANDORRE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AD</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ANGOLA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ANGUILLA</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>AI</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ANTARCTIQUE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AQ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>ANTIGUA-ET-BARBUDA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ANTILLES NÉERLANDAISES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ARABIE SAOUDITE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ARGENTINE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AR</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ARMÉNIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ARUBA</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>AW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>AUSTRALIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AU</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>AUTRICHE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>AZERBAÏDJAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BAHAMAS</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BS</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BAHREÏN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BH</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BANGLADESH</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BD</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BARBADE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>BB</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BÉLARUS</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>BELGIQUE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BELIZE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BÉNIN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BJ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BERMUDES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BM</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BHOUTAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BOLIVIE, l\'ÉTAT PLURINATIONAL DE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>BO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BOSNIE-HERZÉGOVINE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>BOTSWANA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BOUVET, ÎLE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BV</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BRÉSIL</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BRUNÉI DARUSSALAM</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BN</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BULGARIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BURKINA FASO</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>BF</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>BURUNDI</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BI</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>CAÏMANES, ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CAMBODGE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KH</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CAMEROUN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CANADA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CA</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CAP-VERT</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CV</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CENTRAFRICAINE, RÉPUBLIQUE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>CF</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CHILI</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CL</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>CHINE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CHRISTMAS, ÎLE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CX</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CHYPRE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>COCOS (KEELING), ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CC</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>COLOMBIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>COMORES</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>KM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CONGO</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>CONGO, LA RÉPUBLIQUE DÉMOCRATIQUE DU</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CD</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>COOK, ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CK</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CORÉE, RÉPUBLIQUE DE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CORÉE, RÉPUBLIQUE POPULAIRE DÉMOCRATIQUE DE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KP</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>COSTA RICA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CÔTE D\'IVOIRE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>CI</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>CROATIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>HR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>CUBA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CU</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>DANEMARK</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>DK</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>DJIBOUTI</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>DJ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>DOMINICAINE, RÉPUBLIQUE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>DO</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>DOMINIQUE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>DM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÉGYPTE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>EG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>EL SALVADOR</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SV</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>ÉMIRATS ARABES UNIS</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÉQUATEUR</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>EC</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÉRYTHRÉE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>ER</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ESPAGNE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>ES</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ESTONIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>EE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÉTATS-UNIS</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>US</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÉTHIOPIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>ET</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>FALKLAND, ÎLES (MALVINAS)</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>FK</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>FÉROÉ, ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>FO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>FIDJI</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>FJ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>FINLANDE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>FI</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>FRANCE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>FR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GABON</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>GA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GAMBIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>GÉORGIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GÉORGIE DU SUD ET LES ÎLES SANDWICH DU SUD</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GS</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GHANA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GH</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GIBRALTAR</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GI</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GRÈCE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GRENADE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>GD</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GROENLAND</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GL</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>GUADELOUPE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GP</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GUAM</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GU</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GUATEMALA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GUERNESEY</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GG</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GUINÉE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GUINÉE-BISSAU</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>GW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GUINÉE ÉQUATORIALE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GQ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>GUYANA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>GUYANE FRANÇAISE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GF</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>HAÏTI</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>HT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>HEARD, ÎLE ET MCDONALD, ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>HM</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>HONDURAS</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>HN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>HONG-KONG</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>HK</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>HONGRIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>HU</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>ÎLE DE MAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÎLES MINEURES ÉLOIGNÉES DES ÉTATS-UNIS</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>UM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÎLES VIERGES BRITANNIQUES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>VG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ÎLES VIERGES DES ÉTATS-UNIS</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>VI</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>INDE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>INDONÉSIE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>ID</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>IRAN, RÉPUBLIQUE ISLAMIQUE D\'</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>IRAQ</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IQ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>IRLANDE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ISLANDE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IS</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ISRAËL</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IL</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ITALIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>JAMAÏQUE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>JM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>JAPON</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>JP</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>JERSEY</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>JE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>JORDANIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>JO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>KAZAKHSTAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>KENYA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KE</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>KIRGHIZISTAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>KIRIBATI</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>KI</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>KOWEÏT</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>LAO, RÉPUBLIQUE DÉMOCRATIQUE POPULAIRE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>LESOTHO</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LS</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>LETTONIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LV</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>LIBAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LB</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>LIBÉRIA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>LIBYENNE, JAMAHIRIYA ARABE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>LY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>LIECHTENSTEIN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LI</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>LITUANIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>LUXEMBOURG</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LU</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MACAO</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MACÉDOINE, L\'EX-RÉPUBLIQUE YOUGOSLAVE DE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MK</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MADAGASCAR</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MALAISIE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>MY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MALAWI</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>MALDIVES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MV</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MALI</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>ML</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MALTE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MARIANNES DU NORD, ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MP</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MAROC</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MARSHALL, ÎLES</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>MH</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MARTINIQUE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MQ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>MAURICE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MU</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MAURITANIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MAYOTTE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>YT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MEXIQUE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MX</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MICRONÉSIE, ÉTATS FÉDÉRÉS DE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>FM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MOLDOVA, RÉPUBLIQUE DE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>MD</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MONACO</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MC</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>MONGOLIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MONTÉNÉGRO</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>ME</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MONTSERRAT</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MS</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MOZAMBIQUE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MZ</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>MYANMAR</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NAMIBIE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>NA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NAURU</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>NÉPAL</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NP</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NICARAGUA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NI</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NIGER</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NIGÉRIA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NG</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NIUÉ</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NU</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NORFOLK, ÎLE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>NF</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NORVÈGE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>NOUVELLE-CALÉDONIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NC</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>NOUVELLE-ZÉLANDE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>NZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>OCÉAN INDIEN, TERRITOIRE BRITANNIQUE DE L\'</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>IO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>OMAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>OM</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>OUGANDA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>UG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>OUZBÉKISTAN</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>UZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PAKISTAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PK</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>PALAOS</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PALESTINIEN OCCUPÉ, TERRITOIRE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PS</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PANAMA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PAPOUASIE-NOUVELLE-GUINÉE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PG</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PARAGUAY</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PAYS-BAS</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>NL</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PÉROU</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>PHILIPPINES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PH</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PITCAIRN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>POLOGNE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PL</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>POLYNÉSIE FRANÇAISE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PF</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PORTO RICO</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>PR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>PORTUGAL</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>PT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>QATAR</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>QA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>RÉUNION</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>RE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ROUMANIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>RO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ROYAUME-UNI</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>GB</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>RUSSIE, FÉDÉRATION DE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>RU</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>RWANDA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>RW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAHARA OCCIDENTAL</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>EH</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+   <ISO_3166-1_Country_name>SAINT-BARTHÉLEMY</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>BL</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>SAINTE-HÉLÈNE, ASCENSION ET TRISTAN DA CUNHA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SH</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAINTE-LUCIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LC</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAINT-KITTS-ET-NEVIS</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>KN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAINT-MARIN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SM</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAINT-MARTIN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>MF</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAINT-PIERRE-ET-MIQUELON</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>PM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAINT-SIÈGE (ÉTAT DE LA CITÉ DU VATICAN)</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>VA</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>SAINT-VINCENT-ET-LES GRENADINES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>VC</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SALOMON, ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SB</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAMOA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>WS</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAMOA AMÉRICAINES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>AS</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SAO TOMÉ-ET-PRINCIPE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>ST</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SÉNÉGAL</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>SN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SERBIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>RS</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>SEYCHELLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SC</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SIERRA LEONE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SL</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SINGAPOUR</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SLOVAQUIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SK</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SLOVÉNIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SI</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SOMALIE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>SO</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SOUDAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SD</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>SRI LANKA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>LK</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SUÈDE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SUISSE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CH</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SURINAME</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SR</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SVALBARD ET ÎLE JAN MAYEN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SJ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SWAZILAND</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>SZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>SYRIENNE, RÉPUBLIQUE ARABE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>SY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>TADJIKISTAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TJ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TAÏWAN, PROVINCE DE CHINE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TANZANIE, RÉPUBLIQUE-UNIE DE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TCHAD</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TD</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TCHÈQUE, RÉPUBLIQUE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>CZ</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TERRES AUSTRALES FRANÇAISES</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>TF</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>THAÏLANDE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TH</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>TIMOR-LESTE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TL</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TOGO</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TG</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TOKELAU</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TK</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TONGA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TO</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TRINITÉ-ET-TOBAGO</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TT</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TUNISIE</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>TN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TURKMÉNISTAN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TM</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>TURKS ET CAÏQUES, ÎLES</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TC</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TURQUIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TR</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>TUVALU</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>TV</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>UKRAINE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>UA</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>URUGUAY</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>UY</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>VANUATU</ISO_3166-1_Country_name>
+
+      <ISO_3166-1_Alpha-2_code>VU</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>VENEZUELA, RÉPUBLIQUE BOLIVARIENNE DU</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>VE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+
+      <ISO_3166-1_Country_name>VIET NAM</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>VN</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>WALLIS ET FUTUNA</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>WF</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>YÉMEN</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>YE</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ZAMBIE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>ZM</ISO_3166-1_Alpha-2_code>
+
+   </ISO_3166-1_Entry>
+   <ISO_3166-1_Entry>
+      <ISO_3166-1_Country_name>ZIMBABWE</ISO_3166-1_Country_name>
+      <ISO_3166-1_Alpha-2_code>ZW</ISO_3166-1_Alpha-2_code>
+   </ISO_3166-1_Entry>
+</ISO_3166-1_List_fr>';
+
+  //Drop collections
+  mongodb_delete(MONGODB_SITE_COUNTIES_COLLECTION);
+  mongodb_ensure_index(MONGODB_SITE_COUNTIES_COLLECTION, 'country');
+
+  $keys = array('country' => '');
+
+  $xmlDoc = new DOMDocument();
+  $xmlDoc->loadXML($src);
+
+  $cntries = $xmlDoc->getElementsByTagName('ISO_3166-1_Entry');
+  foreach ($cntries as $cntry) {
+    $code = $cntry->getElementsByTagName('ISO_3166-1_Alpha-2_code')->item(0);
+    $code = $code->nodeValue;
+
+    $country = $cntry->getElementsByTagName('ISO_3166-1_Country_name')->item(0);
+    $country = drupal_ucfirst(drupal_strtolower($country->nodeValue));
+
+    $is_eu = in_array($code, $eu_countres);
+
+    $data = array(
+      'country' => $country,
+      'code'    => $code,
+      'is_eu'   => $is_eu,
+    );
+
+    mongodb_update(MONGODB_SITE_COUNTIES_COLLECTION, $keys, $data);
+  }
+}
+
+function mongodb_site_recreate_summary($type = 'all') {
+  switch ($type) {
+    case 'all':
+      mongodb_site_recreate_summary('batire_texte_officiel');
+      mongodb_site_recreate_summary('batire_feuillet_mobile');
+      mongodb_site_recreate_summary('batire_livres');
+      mongodb_site_recreate_summary('batire_texte_normatifs');
+      mongodb_site_recreate_summary('batire_codes');
+      mongodb_site_recreate_summary('batire_complement_technique');
+      mongodb_site_recreate_summary('batire_actualite');
+      mongodb_site_recreate_summary('batire_document_reference');
+      break;
+    case 'batire_texte_officiel':
+      //Remove old data
+      $keys = array('type' => $type);
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+      cache_clear_all($type, 'cache_tdm', TRUE);
+
+      //1 lvl
+      $data = array(
+        'type' => $type,
+        'title' => 'Textes officiels',
+        'cnt'  => 0,
+        'depublished' => 0,
+        'sub_level' => array()
+      );
+
+      //2 lvl - taxonomy Type de TO
+      $tids = taxonomy_get_tree(BATIRE_SITE_VID_TO);
+      foreach ($tids as $tid) {
+        $cnt_query = db_query('
+                  SELECT COUNT(nid) FROM {term_node}
+                    WHERE tid = %d', $tid->tid);
+        $nids_query = db_query('
+                  SELECT n.nid, n.status
+                    FROM  {term_node} tn
+                    LEFT JOIN {node} n ON n.nid = tn.nid
+                    WHERE tid = %d', $tid->tid);
+        $cnt = db_result($cnt_query);
+
+        $data['sub_level'][$tid->tid] = array(
+          'title' => $tid->name,
+          'cnt'  => $cnt,
+          'depublished' => 0,
+          'filter' => mongodb_site_add_filter('typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL . '/' . $tid->tid . '"', $type),
+          'sub_level' => array()
+        );
+
+        //3 lvl - years
+        if ($cnt) {
+          $rows = array();
+          while ($row = db_fetch_array($nids_query)) {
+            $rows[] = $row;
+          }
+          $sids_part = array_chunk($rows, BATIRE_SITE_SUMMARY_MAX_JOB);
+          foreach ($sids_part as $part) {
+            job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, $tid->tid, $part));
+          }
+        }
+      }
+
+      mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+      break;
+    case 'batire_feuillet_mobile':
+      //Remove old data
+      $keys = array('type' => $type);
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+      cache_clear_all($type, 'cache_tdm', TRUE);
+
+      //1 lvl
+      $data = array(
+        'type' => $type,
+        'title' => 'Classeurs à mises à jour',
+        'cnt'  => 0,
+        'depublished' => 0,
+        'sub_level' => array()
+      );
+
+      //2 lvl - taxonomy Nom du FM
+      $tids = taxonomy_get_tree(BATIRE_SITE_VID_FM);
+      foreach ($tids as $tid) {
+        $bid       = 'PB-' . $tid->description;
+        $hierarchy = batire_hierarchy_get_children($bid, TRUE);
+        $cnt       = mongodb_site_summary_count_nodes($hierarchy, $bid);
+
+        $data['sub_level'][$tid->tid] = array(
+          'title' => $tid->name,
+          'cnt'  => $cnt,
+          'depublished' => 0,
+          'bid' => $bid,
+        );
+        if($tid->tid == 137) {
+          $data['sub_level'][$tid->tid]['sub_level'] = mongodb_site_summary_build_fm($hierarchy, $type, TRUE);
+        }
+        else {
+          $data['sub_level'][$tid->tid]['sub_level'] = mongodb_site_summary_build_fm($hierarchy, $type);
+        }
+        $data['sub_level'][$tid->tid]['sub_level'][$bid] = mongodb_site_summary_get_fm_orphans($bid, $type);
+        $data['sub_level'][$tid->tid]['cnt'] += $data['sub_level'][$tid->tid]['sub_level'][$bid]['cnt'];
+
+        //3, 4 lvl - subtitle, subsubtitle
+//        if ($cnt) {
+//          $rows = array();
+//          while ($row = db_fetch_array($nids_query)) {
+//            $rows[] = $row;
+//          }
+//          $sids_part = array_chunk($rows, BATIRE_SITE_SUMMARY_MAX_JOB);
+//          foreach ($sids_part as $part) {
+//            job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, $tid->tid, $part));
+//          }
+//        }
+      }
+      //generate cache for anonymous and full base users now, because FM section is building in LIVE
+      $anonymous = user_load(0);
+      batire_site_get_tdm_section($type, $data, NULL, $anonymous, NULL, 0);
+      //update collection
+      mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+      break;
+    case 'batire_livres':
+      //Remove old data
+      $keys = array('type' => $type);
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+      cache_clear_all($type, 'cache_tdm', TRUE);
+
+      //1 lvl
+      $data = array(
+        'type' => $type,
+        'title' => 'Livres',
+        'cnt'  => 0,
+        'depublished' => 0,
+        'sub_level' => array()
+      );
+
+      //2 lvl - taxonomy Livre
+      $tids = taxonomy_get_tree(BATIRE_SITE_VID_LIVRES);
+      foreach ($tids as $tid) {
+        $bid       = 'PB-' . $tid->description;
+        $hierarchy = batire_hierarchy_get_children($bid, TRUE);
+        $cnt       = mongodb_site_summary_count_nodes($hierarchy, $bid);
+
+        $data['sub_level'][$tid->tid] = array(
+          'title' => $tid->name,
+          'cnt'  => $cnt,
+          'depublished' => 0,
+          'bid' => $bid,
+          'sub_level' => mongodb_site_summary_build_fm($hierarchy, $type)
+        );
+
+        //3, 4, 5 lvl - Section, Partie, Chapitre ou fiche
+//        if ($cnt) {
+//          $rows = array();
+//          while ($row = db_fetch_array($nids_query)) {
+//            $rows[] = $row;
+//          }
+//          $sids_part = array_chunk($rows, BATIRE_SITE_SUMMARY_MAX_JOB);
+//          foreach ($sids_part as $part) {
+//            job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, $tid->tid, $part));
+//          }
+//        }
+      }
+      /*
+       * cache for this section is building in job_cron filter function
+       */
+      job_queue_add("batire_site_summary_duplicate_filter_job_run", 'Remove duplicates form livres', array($type));
+
+      mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+      break;
+    case 'batire_texte_normatifs':
+      //Remove old data
+      $keys = array('type' => $type);
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+      cache_clear_all($type, 'cache_tdm', TRUE);
+
+      //1 lvl
+      $data = array(
+        'type' => $type,
+        'title' => 'Textes normatifs',
+        'cnt'  => 0,
+        'depublished' => 0,
+        'sub_level' => array()
+      );
+
+      //2 lvl - taxonomy Type de TN
+      $tids = taxonomy_get_tree(BATIRE_SITE_VID_NORMATIF);
+      foreach ($tids as $tid) {
+        $cnt_query = db_query('
+                  SELECT COUNT(nid) FROM {term_node}
+                    WHERE tid = %d', $tid->tid);
+        $nids_query = db_query('
+                  SELECT n.nid, n.status
+                    FROM  {term_node} tn
+                    LEFT JOIN {node} n ON n.nid = tn.nid
+                    WHERE tid = %d', $tid->tid);
+        $cnt = db_result($cnt_query);
+
+        $data['sub_level'][$tid->tid] = array(
+          'title' => $tid->name,
+          'cnt'  => $cnt,
+          'depublished' => 0,
+          'sub_level' => array()
+        );
+
+        //3 lvl - years
+        if ($cnt) {
+          $rows = array();
+          while ($row = db_fetch_array($nids_query)) {
+            $rows[] = $row;
+          }
+          $sids_part = array_chunk($rows, BATIRE_SITE_SUMMARY_MAX_JOB);
+          $cnt = count($sids_part) - 1;
+          for ($i = 0; $i < $cnt; $i++) {
+            job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, $tid->tid, $sids_part[$i]));
+          }
+          job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, $tid->tid, $sids_part[$cnt], TRUE));
+        }
+      }
+      mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+      break;
+    case 'batire_codes':
+      //Remove old data
+      $keys = array('type' => $type);
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+      //clear cache
+      cache_clear_all($type, 'cache_tdm', TRUE);
+      //1 lvl
+      $data = array(
+        'type' => $type,
+        'title' => 'Codes',
+        'cnt'  => 0,
+        'depublished' => 0,
+        'sub_level' => array()
+      );
+
+      //2 lvl - taxonomy Type du code
+      $tids = taxonomy_get_tree(BATIRE_SITE_VID_CODES);
+      foreach ($tids as $key => $tid) {
+        $cnt_query = db_query('
+                  SELECT COUNT(nid) FROM {term_node}
+                    WHERE tid = %d', $tid->tid);
+        $nids_query = db_query('
+                  SELECT n.nid, n.status
+                    FROM  {term_node} tn
+                    LEFT JOIN {node} n ON n.nid = tn.nid
+                    WHERE tid = %d', $tid->tid);
+        $level2_query = db_query('SELECT h.bid FROM {node} n
+                                  JOIN {batire_hierarchy} h ON n.nid = h.nid
+                                  WHERE h.title = "%s" AND h.type = "%s"', $tid->name, BATIRE_SITE_CT_CODE);
+        $level2_bid = db_result($level2_query);
+        $cnt = db_result($cnt_query);
+
+        $data['sub_level'][$tid->tid] = array(
+          'title' => $tid->name,
+          'cnt'  => $cnt,
+          'bid' => $level2_bid,
+          'type' => 'batire_codes',
+          'tid' => $tid->tid,
+          'depublished' => 0,
+          'sub_level' => array()
+        );
+
+        //other lvl
+        if ($cnt) {
+          $rows = array();
+          while ($row = db_fetch_array($nids_query)) {
+            $rows[] = $row;
+          }
+          $sids_part = array_chunk($rows, BATIRE_SITE_SUMMARY_MAX_JOB);
+          $cnt = count($sids_part) - 1;
+          for ($i = 0; $i < $cnt; $i++) {
+            job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, $tid->tid, $sids_part[$i]));
+          }
+          job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, $tid->tid, $sids_part[$cnt], TRUE));
+        }
+      }
+      mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+      break;
+    case 'batire_complement_technique':
+      //Remove old data
+      $keys = array('type' => $type);
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+      cache_clear_all($type, 'cache_tdm', TRUE);
+
+      //1 lvl
+      $data = array(
+        'type' => $type,
+        'title' => 'Complement Technique',
+        'cnt'  => 0,
+        'depublished' => 0,
+        'sub_level' => array()
+      );
+
+      //2, 3 lvl
+      $cnt_query = db_query('
+                SELECT COUNT(nid) FROM {node}
+                  WHERE type = "%s"', $type);
+      $nids_query = db_query('
+                SELECT nid, status
+                  FROM {node}
+                  WHERE type = "%s"', $type);
+
+      $cnt = db_result($cnt_query);
+
+      if ($cnt) {
+        $rows = array();
+        while ($row = db_fetch_array($nids_query)) {
+          $rows[] = $row;
+        }
+        $sids_part = array_chunk($rows, BATIRE_SITE_SUMMARY_MAX_JOB);
+        $cnt = count($sids_part) - 1;
+        for ($i = 0; $i < $cnt; $i++) {
+          job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, NULL, $sids_part[$i]));
+        }
+        job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, NULL, $sids_part[$cnt], TRUE));
+      }
+
+      mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+      break;
+    case 'batire_actualite':
+      //Remove old data
+      $keys = array('type' => $type);
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+      cache_clear_all($type, 'cache_tdm', TRUE);
+
+      //1 lvl
+      $data = array(
+        'type' => $type,
+        'title' => 'Actualite',
+        'cnt'  => 0,
+        'depublished' => 0,
+        'sub_level' => array()
+      );
+
+      //2, 3 lvl
+      $cnt_query = db_query('
+                SELECT COUNT(nid) FROM {node}
+                  WHERE type = "%s"', $type);
+      $nids_query = db_query('
+                SELECT nid, vid, status
+                  FROM {node}
+                  WHERE type = "%s"', $type);
+
+      $cnt = db_result($cnt_query);
+
+      if ($cnt) {
+        $rows = array();
+        while ($row = db_fetch_array($nids_query)) {
+          $rows[] = $row;
+        }
+        $sids_part = array_chunk($rows, BATIRE_SITE_SUMMARY_MAX_JOB);
+        $cnt = count($sids_part) - 1;
+        for ($i = 0; $i < $cnt; $i++) {
+          job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, NULL, $sids_part[$i]));
+        }
+        job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, NULL, $sids_part[$cnt], TRUE));
+      }
+
+      mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+      break;
+    case 'batire_document_reference':
+
+      //Remove old data
+      $keys = array('type' => $type);
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+      cache_clear_all($type, 'cache_tdm', TRUE);
+
+      $cnt_query = db_query('SELECT COUNT(nid) FROM {node} WHERE type = "%s"', $type);
+      $cnt = db_result($cnt_query);
+      //1 lvl
+      $data = array(
+        'type' => $type,
+        'title' => 'Documents de reference',
+        'cnt'  => $cnt,
+        'depublished' => 0,
+        'sub_level' => array()
+      );
+
+      //2 lvl - 1st level of taxonomy Type des Documents de référence
+      $tree = taxonomy_get_tree(BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE);
+      foreach ($tree as $tid) {
+        $bid       = 'DR-' . $tid->description;
+        $hierarchy = batire_hierarchy_get_children($bid, TRUE);
+        if (empty($tid->parents[0])) {
+          $data['sub_level'][$tid->tid] = array(
+            'title' => $tid->name,
+            'cnt'  => 0,
+            'depublished' => 0,
+            'bid' => $bid,
+            'sub_level' => array(),
+          );
+        }
+        elseif (!empty($tid->parents[0])) {
+          //3 lvl - 2nd level of Type des Documents de référence (Rubrique)
+          foreach($tid->parents as $parent_tid) {
+            $data['sub_level'][$parent_tid]['sub_level'][$tid->tid] = array(
+              'title' => $tid->name,
+              'cnt'  => 0,
+              'depublished' => 0,
+              'bid' => $bid,
+              'sub_level' => array(),
+            );
+          }
+        }
+      }
+      //Cron Job for nids
+      $nids_query = db_query('SELECT nid, vid, status FROM {node} WHERE type = "%s"', $type);
+
+      if ($cnt) {
+        $rows = array();
+        while ($row = db_fetch_array($nids_query)) {
+          $rows[] = $row;
+        }
+        $sids_part = array_chunk($rows, BATIRE_SITE_SUMMARY_MAX_JOB);
+        foreach ($sids_part as $part) {
+          job_queue_add("batire_site_summary_build_job_run", 'Process summary nodes', array($type, NULL, $part));
+        }
+      }
+
+
+      mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+      break;
+  }
+}
+
+function mongodb_site_add_filter($filter, $type = '') {
+  $last_fid = variable_get('batire_site_summary_last_fid', 0);
+  $last_fid++;
+
+  $data = array(
+    'fid'    => (int) $last_fid,
+    'filter' => $filter
+  );
+  mongodb_update(MONGODB_SITE_SUMMARY_FILTER_COLLECTION, array('fid' => (int) 0), $data);
+
+  variable_set('batire_site_summary_last_fid', $last_fid);
+
+  return $last_fid;
+}
+
+function mongodb_site_update_filter_by_bid($bids, $fid = 0, $type = '') {
+  $filter_arr = array();
+  foreach ($bids as $bid) {
+    $filter_arr[] = '(id="' . $bid . '")';
+  }
+  $filter = implode('or', $filter_arr);
+
+  if ($fid) {
+    $data = array(
+      'fid'    => (int) $fid,
+      'filter' => $filter,
+      'type'   => $type,
+    );
+    mongodb_update(MONGODB_SITE_SUMMARY_FILTER_COLLECTION, array('fid' => (int) $fid), $data);
+  }
+  else {
+    $fid = mongodb_site_add_filter($filter, $type);
+  }
+
+  return $fid;
+}
+
+function mongodb_site_get_filter_by_fid($fid, $full = FALSE) {
+  $data = mongodb_select_one(MONGODB_SITE_SUMMARY_FILTER_COLLECTION, array('fid' => (int) $fid));
+  if (isset($data['fid']) && $data['fid']) {
+    if ($full) {
+      return $data;
+    }
+
+    return $data['filter'];
+  }
+  return '';
+}
+
+function mongodb_site_summary_count_nodes($struct, $bid = NULL) {
+  $total_cnt = 0;
+
+  if (count($struct)) {
+    foreach ($struct as $struct_item) {
+      if (count($struct_item->children)) {
+        $total_cnt += mongodb_site_summary_count_nodes($struct_item->children, $struct_item->bid);
+      }
+      else {
+        if (mongodb_page_is_doc($struct_item->bid) !== FALSE) {
+          $total_cnt++;
+        }
+      }
+    }
+  }
+  else {
+    if (mongodb_page_is_doc($bid) !== FALSE) {
+      $total_cnt++;
+    }
+  }
+
+  $doc = mongodb_page_is_doc($bid);
+  if (isset($doc['is_chapter']) && isset($doc['is_empty_body']) && $doc['is_chapter'] && !$doc['is_empty_body'] && !empty($doc['nid'])) {
+    $total_cnt++;
+  }
+
+  return $total_cnt;
+}
+
+function mongodb_site_summary_build_fm($struct, $type, $article_numeric = FALSE) {
+  include_once(drupal_get_path('module', 'batire_xml_parse') . '/batire_xml_parse.xml.inc');
+
+  $data = array();
+
+  foreach($struct as $struct_item) {
+    // filter out old versions
+    $arr = explode('-', $struct_item->bid);
+    $latest = (count($arr) > 2 && strlen($arr[2]) > 3) ? FALSE : TRUE;
+    if (!$latest) {
+      continue;
+    }
+    $terms = _batire_site_node_get_terms($struct_item->nid);
+    $data[$struct_item->bid] = array(
+      'title' => $struct_item->title,
+      'cnt'  => mongodb_site_summary_count_nodes($struct_item->children, $struct_item->bid),
+      'filter' => '',
+      'bid' => $struct_item->bid,
+      'sub_level' => array(),
+      'terms' => $terms,
+      'type' => $type,
+    );
+
+    $doc = mongodb_page_is_doc($struct_item->bid);
+
+    $chap = array();
+    if ($doc !== FALSE) {
+      if (isset($doc['is_chapter']) && isset($doc['is_empty_body']) && $doc['is_chapter'] && !$doc['is_empty_body'] && !empty($doc['nid'])) {
+        $chap[$struct_item->bid] = array(
+          'title' => 'Introduction',
+          'cnt'  => 1,
+          'filter' => '',
+          'bid' => $struct_item->bid,
+          'terms' => $terms,
+          'type' => $type,
+        );
+      }
+      // docs within chapter IX.200 have specific format (see #46984)
+      $document = mongodb_page_get_page_by_bid($struct_item->bid);
+      if (isset($document['doc_numero']) && $document['doc_numero'] == 'IX.200') {
+        $dom = new DOMDocument();
+        $dom->loadXML($document['body']['content']);
+        $xpath = batire_xml_get_xpath($dom, array($struct_item->bid));
+        $fichefgref = batire_xml_node_value_get($xpath, "/FICHEGUIDE/CARTOUCHEFG/FICHEFGREF");
+        $fichefgtitre = batire_xml_node_value_get($xpath, "/FICHEGUIDE/CARTOUCHEFG/FICHEFGTITRE");
+        if (!empty($fichefgtitre)) {
+          $data[$struct_item->bid]['title'] = $fichefgref . ' ' . $fichefgtitre;
+        }
+      }
+
+      if($article_numeric) {
+        if(isset($document['num_art_start']) && $document['num_art_start']) {
+          if(isset($document['num_art_finish']) && $document['num_art_finish']) {
+            $data[$struct_item->bid]['title'] .= ' (Articles ' . $document['num_art_start'] . ' à ' . $document['num_art_finish'] . ')';
+          }
+          else {
+            $data[$struct_item->bid]['title'] .= ' (Article ' . $document['num_art_start'] . ')';
+          }
+        }
+      }
+    }
+
+    $childs = mongodb_site_summary_build_fm($struct_item->children, $type, $article_numeric);
+    $data[$struct_item->bid]['sub_level'] = array_merge($chap, $childs);
+
+    //batire_site_summary_sort_by_val($data, 'title', FALSE, TRUE);
+  }
+
+  return $data;
+}
+
+/**
+ * Return list of 'orphans' by super_bid (children w/o parent)
+ * @param string $super_bid
+ * @return array
+ */
+function mongodb_site_summary_get_fm_orphans($super_bid, $type) {
+  include_once(drupal_get_path('module', 'batire_xml_parse') . '/batire_xml_parse.xml.inc');
+
+  $result = array(
+    'bid'       => $super_bid,
+    'cnt'       => 0,
+    'filter'    => '',
+    'sub_level' => array(),
+    'title'     => 'Documents ne faisant plus l’objet de mise à jour',
+    'bids'      => array()
+  );
+
+  $sth = db_query('SELECT * FROM {batire_hierarchy} WHERE ISNULL(parent_bid) AND bid LIKE "%s%" AND NOT(bid REGEXP "%s") AND nid IS NOT NULL ORDER BY title, id', $super_bid, '-[0-9]{8,}$');
+  while ($row = db_fetch_object($sth)) {
+    // docs within chapter IX.200 have specific format (see #46984)
+    $document = mongodb_page_get_page_by_bid($row->bid);
+    if ($document['doc_numero'] == 'IX.200') {
+      $dom = new DOMDocument();
+      $dom->loadXML($document['body']['content']);
+      $xpath = batire_xml_get_xpath($dom, array($row->bid));
+      $fichefgref = batire_xml_node_value_get($xpath, "/FICHEGUIDE/CARTOUCHEFG/FICHEFGREF");
+      $fichefgtitre = batire_xml_node_value_get($xpath, "/FICHEGUIDE/CARTOUCHEFG/FICHEFGTITRE");
+      if (!empty($fichefgtitre)) {
+        $title = $fichefgref . ' ' . $fichefgtitre;
+      }
+    }
+    $result['cnt']++;
+    $result['bids'][] = $row->bid;
+    $terms = _batire_site_node_get_terms($row->nid);
+    $result['sub_level'][$row->bid] = array(
+      'bid' => $row->bid,
+      'cnt' => 1,
+      'filter' => '',
+      'sub_level' => array(),
+      'title' => isset($title) ? $title : $row->title,
+      'bids' => array($row->bid),
+      'terms' => $terms,
+      'type' => $type,
+    );
+  }
+
+  return $result;
+}

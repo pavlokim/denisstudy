@@ -1,0 +1,7 @@
+; $Id: batire_user_delete.info
+name = Batire user delete
+description = "Batire user deleting functionallity."
+package = Batire
+core = 6.x
+
+dependencies[] = batire_user

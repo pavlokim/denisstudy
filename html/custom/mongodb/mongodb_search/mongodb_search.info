@@ -1,0 +1,6 @@
+name = 'MongoDB search'
+description = 'A search data implementation using MongoDB'
+package = 'MongoDB'
+core = '6.x'
+dependencies[] = 'mongodb'
+dependencies[] = 'drupal_static'

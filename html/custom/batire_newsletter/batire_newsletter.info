@@ -1,0 +1,5 @@
+; $Id: batire_newsletter.info
+name = Batire Newsletter
+description = "Batire newsletter functionality."
+package = Batire
+core = 6.x

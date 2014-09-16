@@ -1,0 +1,10 @@
+; $Id$
+name = Batire Antidot Export
+description = Provides export stuff to Antidot
+package = Batire
+core = 6.x
+version = "6.x-1"
+
+dependencies[] = batire_search
+dependencies[] = batire_antidot
+dependencies[] = job_queue

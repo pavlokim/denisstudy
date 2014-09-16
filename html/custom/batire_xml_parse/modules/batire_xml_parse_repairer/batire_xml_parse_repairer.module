@@ -1,0 +1,122 @@
+<?php
+
+function batire_xml_parse_repairer_batire_xml_parseapi($op, &$data, $dom = NULL, $type= NULL) {
+
+  if ($op == 'repair') {
+    $filename = $dom;
+    try {
+      batire_xml_parse_repairer_file($filename);
+    } catch (Batire_Xml_Parse_Exception $e) {
+      $data['errors'][] = $e->getMessage().' On line: '.$e->getLine() . ' in file: '.$e->getFile();
+    }
+  }
+}
+
+function batire_xml_parse_repairer_file($filename) {
+
+//  //tidy first
+//  $tidy = new tidy();
+//  $tidy->parseFile($filename, array(
+//    'xml' => TRUE,
+//    'input-xml' => TRUE,
+//    'wrap' => 0,
+//    'output-xml' => TRUE,
+//    'input-encoding' => 'UTF8',
+//    'add-xml-decl' => FALSE,
+//    'output-encoding' => 'UTF8',
+//    'add-xml-space' => FALSE,
+//    'preserve-entities' => TRUE,
+//    'indent' => FALSE,
+//    'drop-empty-paras' => FALSE
+//));
+//  $tidy->cleanRepair();
+//
+//  if(!empty($tidy->errorBuffer)) {
+//
+//     throw new Batire_Xml_Parse_Exception(t($tidy->errorBuffer));
+//  }
+//  $str_xml = (string) $tidy;
+//  if (!file_put_contents($filename, $str_xml)) {
+//    throw new Batire_Xml_Parse_Exception(t("Can't write file $filename."));
+//  }
+  
+  // Next iteration to repair
+  while (batire_xml_parse_repairer_file_iteration($filename));
+}
+
+function batire_xml_parse_repairer_file_iteration($filename) {
+
+  // Known namespaces
+  $batire_xml_parse_repairer_namespaces = array(
+    'default' => '"http://unknown.namespace.com/"',
+    'ns0' => '"http://groupemoniteur.fr/"',
+    'ns1' => '"http://xms.4dconcept.fr/"',
+    'qc' => '"http://4dconcept.com/QuadroContent/"'
+  );
+
+  // ****************
+  
+  $file_data = file_get_contents($filename);
+  $enc_type = mb_detect_encoding($file_data, 'UTF-8', TRUE);
+  if (!$enc_type) {
+    $file_data = iconv('windows-1252', 'utf8', $file_data);
+    file_put_contents($filename, $file_data);
+  }
+  
+    $dom = new DOMDocument();
+    libxml_clear_errors();
+    libxml_use_internal_errors(TRUE);
+
+
+    if ($dom->load($filename)) {
+      foreach (libxml_get_errors() as $error) {
+
+        // Namespace absence check
+        $name_space = _batire_xml_parse_repairer_namespace_check($error->message);
+        if ($name_space) {
+          // Add 'xmlns:qc="http://4dconcept.com/QuadroContent"' to root tag
+          $namespace_URI = isset($batire_xml_parse_repairer_namespaces[$name_space]) ?
+            $batire_xml_parse_repairer_namespaces[$name_space] :
+            $batire_xml_parse_repairer_namespaces['default'];
+
+          _batire_xml_parse_repairer_add_root_tag_attribut($filename, 'xmlns:' . $name_space . '=' . $namespace_URI);
+          $log_file = basename($filename, '.xml');
+          batire_xml_parse_log("\n--Namespace " . $name_space . " added " . $filename, $log_file);
+
+          //echo "\n Namespace ".$name_space." added to $filename\n";
+
+          libxml_clear_errors();
+          return TRUE; // TRUE - next iteration
+        } else {
+          throw new Batire_Xml_Parse_Exception(t("XML parse error on file !filename. Message: !message", array('!filename' => $filename, '!message' => $error->message)));
+        }
+      }
+      return FALSE; // FALSE - new iteration is not needed
+    }
+  
+  throw new Batire_Xml_Parse_Exception(t("DOMDocument::load() can't load file $filename as XML."));
+}
+
+function _batire_xml_parse_repairer_add_root_tag_attribut($filename, $attribut_string) {
+  $contents = file_get_contents($filename);
+  $pattern = '/(\<[^\s?\>]+)([\s\>])/';
+  $replacement = '$1 ' . $attribut_string . ' $2';
+  $contents = preg_replace($pattern, $replacement, $contents, 1);
+  if (!file_put_contents($filename, $contents)) {
+    throw new Batire_Xml_Parse_Exception(t("Can't write file $filename."));
+  }
+  
+}
+
+function _batire_xml_parse_repairer_namespace_check($message) {
+  // Namespace prefix qc on doc-root is not defined
+  $arr_msg = array_map('trim',explode(' ', $message));
+  $arr_tmpl = array(0=>'Namespace', 1=>'prefix', 3=>'on', 5=>'is', 6=>'not', 7=>'defined');
+
+  foreach($arr_tmpl as $key => $value) {
+    if ( $arr_msg[$key] != $value ) {
+      return FALSE;
+    }
+    return $arr_msg[2];
+  }
+}

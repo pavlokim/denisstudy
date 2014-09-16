@@ -1,0 +1,12 @@
+
+name = MongoDB
+description = Integration between Drupal and MongoDB.
+package = MongoDB
+core = 6.x
+
+; Information added by drupal.org packaging script on 2012-01-14
+version = "6.x-1.x-dev"
+core = "6.x"
+project = "mongodb"
+datestamp = "1326501122"
+

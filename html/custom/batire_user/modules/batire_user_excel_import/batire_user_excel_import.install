@@ -1,0 +1,15 @@
+<?php
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_user_excel_import_install() {
+  $body = "!prenom-utilisateur
+!nom-utilisateur
+!login-utilisateur
+!password-utilisateur
+!login-link-utilisateur";
+
+  $result1 = db_query("INSERT INTO {mail_edit_registry} (id, module, mailkey, description) VALUES ('%s', '%s', '%s', '%s')", 'batire_user_excel_import_batire_user_excel_import_new_user', 'batire_user_excel_import', 'batire_user_excel_import_new_user', 'New user imported from excel file');
+  $result2 = db_query("INSERT INTO {mail_edit} (description, subject, id, language, body) VALUES ('%s', '%s', '%s', '%s', '%s')", 'Vos codes d’accès pour accéder à notre site', 'Votre compte !site_name_uc est activé', 'batire_user_excel_import_batire_user_excel_import_new_user', 'fr', $body);
+}

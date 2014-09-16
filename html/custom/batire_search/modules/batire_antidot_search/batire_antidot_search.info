@@ -1,0 +1,8 @@
+; $Id: batire_antidot_search.info
+name = Batire Antidot search
+description = "Batire antidot search functionallity."
+package = Batire
+core = 6.x
+
+dependencies[] = batire_search
+dependencies[] = batire_antidot

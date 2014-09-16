@@ -1,0 +1,37 @@
+<?php
+
+/**
+ * @file
+ * MongoDB user stuff install file.
+ */
+
+/**
+ * Implement hook_install().
+ */
+function mongodb_docs_install() {
+  module_load_include('module', 'mongodb');
+  module_load_include('module', 'mongodb_docs');
+
+  $mongo = mongodb();
+
+  if ($mongo) {
+    //Docs collections
+    $mongo->createCollection(MONGODB_DOCS_COLLECTION);
+
+    $collection = $mongo->selectCollection(MONGODB_DOCS_COLLECTION);
+
+    $collection->ensureIndex(array('uid' => 1), array('background' => TRUE));
+
+    //Docs access time collections
+    $mongo->createCollection(MONGODB_DOCS_ACCESS_COLLECTION);
+
+    $collection2 = $mongo->selectCollection(MONGODB_DOCS_ACCESS_COLLECTION);
+
+    $collection2->ensureIndex(array('uid' => 1), array('background' => TRUE));
+  }
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function mongodb_docs_uninstall() {}

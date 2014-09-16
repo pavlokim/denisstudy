@@ -1,0 +1,5 @@
+name = 'MongoDB site'
+description = 'Site data implementation using MongoDB'
+package = 'MongoDB'
+core = '6.x'
+dependencies[] = 'mongodb'

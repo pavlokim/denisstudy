@@ -1,0 +1,602 @@
+<?php
+
+/**
+ * Implementation of hook_batire_xml_parseapi()
+ *
+ * @param $op
+ *   Operation
+ * @param array &$data
+ *   Result of parse process, if already processed
+ * @param DOMDocument &$dom
+ *   DOM object parsed from XML
+ * @return
+ *   Result of parse process, if already processed
+ */
+function batire_xml_parse_ddr_batire_xml_parseapi($op, &$data, $dom = NULL) {
+  switch ($op) {
+    case 'suggest types':
+      $xpath = batire_xml_get_xpath($dom);
+      $fiche_product = strtoupper(batire_xml_node_value_get($xpath, "//source/@classe"));
+      $product = strtoupper(batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/xms:product | /qc:doc-root/qc:doc-meta/ns0:product | /qc:doc-root/qc:doc-meta/ns1:product  | /qc:doc-root/qc:doc-meta/ns1:product"));
+      if ($product == 'ARTICLEBATIRDOCUMENT_REF') {
+        return BATIRE_HIERARCHY_DT_DOCUMENT_DE_DEFERENCE;
+      }
+      /*if ($fiche_product == 'FICHE' && ($product == 'FICHEDOCUMENT' || $product == 'FICHEIMAGE')) {
+        return BATIRE_HIERARCHY_DT_DDR_MEDIA;
+      }*/
+      break;
+    case 'process':
+      if ($data['type'] == BATIRE_HIERARCHY_DT_DOCUMENT_DE_DEFERENCE) {
+        _batire_xml_parse_ddr_aricle_parse($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process $data[type]:");
+          drush_print_r($data);
+        }
+      }
+      /*elseif ($data['type'] == BATIRE_HIERARCHY_DT_DDR_MEDIA) {
+        _batire_xml_parse_fiche_ddr_media_parse($data, $dom);
+
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process $data[type]:");
+          drush_print_r($data);
+        }
+      }*/
+      break;
+    case 'postprocess':
+      if ($data['type'] == BATIRE_HIERARCHY_DT_DOCUMENT_DE_DEFERENCE) {
+        _batire_xml_parse_ddr_article_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      }
+      /*else if ($data['type'] == BATIRE_HIERARCHY_DT_DDR_MEDIA) {
+        _batire_xml_parse_fiche_ddr_media_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      }*/
+      break;
+    case 'postgeneration':
+      //$args = func_get_args();
+      //$nid = $args[2];
+      //$generation_data = $args[3];
+      //$page_data = mongodb_page_get_node_page($nid);
+
+      break;
+  }
+}
+
+function _batire_xml_parse_ddr_aricle_parse(&$data, $dom) {
+  $data['doc_type'] = BATIRE_HIERARCHY_DT_DOCUMENT_DE_DEFERENCE;
+  $data['type'] = BATIRE_HIERARCHY_DT_DOCUMENT_DE_DEFERENCE;
+  _batire_xml_parse_ddr_common_data($data, $dom);
+  _batire_xml_parse_ddr_get_links($data, $dom);
+
+}
+
+function _batire_xml_parse_ddr_article_store(&$data, $dom) {
+
+  $doc_type = batire_hierarchy_get_doc_type($data['doc_type']);
+  $data['doc_type'] = BATIRE_HIERARCHY_DT_ARICLE;
+
+  //Check if document already exists
+  $hierarchy = batire_hierarchy_get_by_bid($data['bid']);
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+  } else {
+    //create new document
+    $node = new stdClass();
+    $node->type = $doc_type['content_type'];
+    $node->uid = 1; //@TODO: use some user from settings
+  }
+  $node->title = $data['titre'];
+  $node->field_bid[0]['value'] = $data['bid'];
+
+  /// *************************************
+
+  //$node->field_date_maj[0]['value'] = time();
+  $data['date_maj'] = time();
+
+  if (isset($data['surtitre']))
+    $node->field_surtitle[0]['value'] = $data['surtitre'];
+  if (isset($data['soustitre']))
+    $node->field_subtitle[0]['value'] = $data['soustitre'];
+  if (isset($data['nb_mots']))
+    $node->field_nb_mots[0]['value'] = $data['nb_mots'];
+  if ($data['date_document']) {
+    $timestamp = batire_xml_parse_convert_date($data['date_document']);
+    if ($timestamp) {
+      $node->field_date_vide[0]['value'] = 0;
+      $data['date_vide'] = 0;
+    }
+    else {
+      $node->field_date_vide[0]['value'] = 1;
+      $data['date_vide'] = 1;
+    }
+    $node->field_date_document[0]['value'] = $timestamp;
+    $data['date_document'] = $timestamp;
+  } else {
+    $node->field_date_vide[0]['value'] = 1;
+    $data['date_vide'] = 1;
+    $node->field_date_document[0]['value'] = $data['date_document'];
+  }
+
+
+  if (isset($data['auteur']) && count($data['auteur']) > 0) {
+    foreach ($data['auteur'] as $author) {
+      if (empty($author['nom'])) {
+        continue;
+      }
+      $node->field_authors = _batire_xml_parse_ddr_add_author_node($node->field_authors, $author);
+    }
+  }
+
+  if ($data['chapo']) {
+    $node->field_teaser[0]['value'] = $data['chapo'];
+  }
+  if ($data['note']) {
+    $node->field_xml_note[0]['value'] = $data['note'];
+  }
+  /*
+   * Process taxonomy
+   */
+  //Type de document
+  $taxonomy[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE;
+  //Sous-type
+  $sous_type_tid = batire_get_tid_by_description($data['taxonomy']['sous_type'], BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE);
+  if ($sous_type_tid) {
+    $sous_type_term = taxonomy_get_term($sous_type_tid);
+    $data['sous_type'] = array(
+      'title' => $sous_type_term->name,
+      'tid' => $sous_type_term->tid,
+      'vid' => $sous_type_term->vid,
+      'description' => $sous_type_term->description,
+    );
+    $taxonomy[] = $sous_type_tid;
+  }
+  //Rubrique
+  if (isset($data['taxonomy']['rubrique']) && !empty($data['taxonomy']['rubrique'])) {
+    $rubrique_tid = batire_get_tid_by_description($data['taxonomy']['rubrique'], BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE);
+    if ($rubrique_tid) {
+      $rubrique_term = taxonomy_get_term($rubrique_tid);
+      $data['rubrique'] = array(
+        'title' => $rubrique_term->name,
+        'tid' => $rubrique_term->tid,
+        'vid' => $rubrique_term->vid,
+        'description' => $rubrique_term->description,
+      );
+      $taxonomy[] = $rubrique_tid;
+    }
+  }
+
+  $node->taxonomy = $taxonomy;
+
+
+  $node->language = 'fr';
+  $node->parsed_data = $data;
+
+  node_save($node);
+
+
+  $data['node'] = $node;
+  $data['op'] = $node->is_new ? 'add' : 'edit';
+
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+}
+
+function _batire_xml_parse_fiche_ddr_media_parse(&$data, $dom) {
+  $data['doc_type'] = BATIRE_HIERARCHY_DT_DDR_MEDIA;
+  $data['type'] = BATIRE_HIERARCHY_DT_DDR_MEDIA;
+  _batire_xml_parse_common_data($data, $dom);
+  _batire_xml_parse_get_links($data, $dom);
+  _batire_xml_parse_get_media($data, $dom);
+
+
+}
+
+function _batire_xml_parse_fiche_ddr_media_store(&$data, $dom) {
+  $doc_type = batire_hierarchy_get_doc_type($data['doc_type']);
+  $data['doc_type'] = BATIRE_HIERARCHY_DT_MEDIA;
+
+  //Check if document already exists
+  $hierarchy = batire_hierarchy_get_by_bid($data['bid']);
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+  } else {
+    //create new document
+    $node = new stdClass();
+    $node->type = $doc_type['content_type'];
+    $node->uid = 1; //@TODO: use some user from settings
+  }
+  $node->title = $data['titre'];
+  $node->field_bid[0]['value'] = $data['bid'];
+
+  //****************************************
+  $node->field_date_maj[0]['value'] = time();
+
+  if ($data['date_document']) {
+    $timestamp = batire_xml_parse_convert_date($data['date_document']);
+    if ($timestamp)
+      $node->field_date_vide[0]['value'] = 0;
+    else
+      $node->field_date_vide[0]['value'] = 1;
+    $node->field_date_document_full[0]['value'] = $timestamp;
+
+    $data['date_document'] = batire_xml_parse_crop_date($data['date_document'], 'year_month');
+    $timestamp = batire_xml_parse_convert_date($data['date_document']);
+    $node->field_date_document[0]['value'] = $timestamp;
+  } else {
+    $node->field_date_vide[0]['value'] = 1;
+    $node->field_date_document_full[0]['value'] = $data['date_document'];
+    $node->field_date_document[0]['value'] = $data['date_document'];
+  }
+
+  if ($data['copyright']) {
+    $node->field_copyright[0]['value'] = $data['copyright'];
+  }
+
+  $filename = $data['filename'];
+  if ($data['media']) {
+    if ($data['media']['vignette']) {
+      $data['attached'][] = $data['media']['vignette_path'].$filename;
+      /*
+        $node->field_fiche_thumb[0] = array(
+        'fid' => $file['fid'],
+        'title' => $file['filename'],
+        'filename' => $file['filename'],
+        'filepath' => $file['filepath'],
+        'filesize' => $file['filesize'],
+        'list' => 1, // always list
+        'filemime' => $file['filemime'],
+        'description' => NULL);
+       */
+    }
+    if ($data['media']['legende']) {
+      $node->field_fiche_legend[0]['value'] = $data['media']['legende'];
+    }
+    if ($data['media']['fiche']) {
+      $data['attached'][] = $data['media']['fiche_path'];
+      /*
+        $node->field_fiche[0] = array(
+        'fid' => $file['fid'],
+        'title' => $file['filename'],
+        'filename' => $file['filename'],
+        'filepath' => $file['filepath'],
+        'filesize' => $file['filesize'],
+        'list' => 1, // always list
+        'filemime' => $file['filemime'],
+        'description' => NULL);
+       */
+    }
+  }
+  if (isset($data['auteur']) && count($data['auteur']) > 0) {
+    //$node->field_authors = batire_add_cck_field_auteur($node->field_author, $data['auteur'][0]);
+    foreach ($data['auteur'] as $author) {
+      if (empty($author['nom'])) {
+        continue;
+      }
+      $node->field_authors = _batire_xml_parse_add_author_node($node->field_authors, $author);
+
+    }
+  }
+
+
+  if ($data['links']) {
+    //Lien Fils
+    if ($data['links']['lien_fils']) {
+      $node->field_lien_fils = array();
+      foreach ($data['links']['lien_fils'] as $lien_fil) {
+        $node->field_lien_fils[] = $lien_fil;
+      }
+    }
+    //Lien Reference
+    if ($data['links']['lien_reference']) {
+      $node->field_lien_reference = array();
+      foreach ($data['links']['lien_reference'] as $lien_reference) {
+        $node->field_lien_reference[] = $lien_reference;
+      }
+    }
+  }
+  // Process taxonomy
+
+  $taxonomy = array();
+  $taxonomy[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE;
+  /*
+  $terms = array();
+  // Code de contenu
+  $terms[CP_CODE_DE_CONTENU_VID] = CP_CODE_PRESSE_TID;
+
+  // DOCUMENT PRATIQUE taxonomy
+  if ($data['taxonomy']['genre'] == 'DOCUMENT PRATIQUE') {
+    $node->field_practique[0]['value'] = 1;
+    // Type du document
+    $terms[CP_TYPE_DU_DOCUMENT_VID] = CP_SITE_TID_PRATIQUE;
+    //Type des documents practiques
+    if ($data['taxonomy']['presse_genre']) {
+      $terms[CP_TYPE_DES_PRACTIQUES_VID] = cp_xml_parse_get_tid_by_description($data['taxonomy']['presse_genre'], CP_TYPE_DES_PRACTIQUES_VID);
+      if (empty($terms[CP_TYPE_DES_PRACTIQUES_VID])) {
+        cp_error_log("\nCannot find term for Type des documents practiques by value " . $data['taxonomy']['presse_genre'], $filename);
+        $data['errors'][] = "Cannot find term for Type des documents practiques by value " . $data['taxonomy']['presse_genre'];
+      }
+    }
+  } else {
+    // Save type of binary file to Type de fiche media vocabulary
+    $terms[CP_TYPE_DE_FICHE_MEDIA_VID] = cp_xml_parse_get_tid_by_name($data['taxonomy']['genre'], CP_TYPE_DE_FICHE_MEDIA_VID);
+    if (empty($terms[CP_TYPE_DE_FICHE_MEDIA_VID]))
+      $terms[CP_TYPE_DE_FICHE_MEDIA_VID] = cp_xml_parse_get_tid_by_description($data['taxonomy']['genre'], CP_TYPE_DE_FICHE_MEDIA_VID);
+    if (empty($terms[CP_TYPE_DE_FICHE_MEDIA_VID])) {
+      cp_error_log("\nCannot find term for Type de fiche media by value " . $data['taxonomy']['genre'], $filename);
+      $data['errors'][] = "Unknown term for Type de fiche media - " . $data['taxonomy']['genre'];
+    }
+  }
+
+  // Check parsed data for errors
+  $data['errors'] = array_merge($data['errors'], cp_xml_parse_check_node_errors(array('Fiche' => $data['media']['fiche']), $data['filename']));
+  $node->taxonomy = $terms;
+  */
+
+  //***************************************
+
+  $node->taxonomy = $taxonomy;
+
+  $data_map = array(
+    'reference' => 'field_doc_number'
+  );
+  foreach ($data_map as $from => $to) {
+    $arr_to = explode(' ', $to);
+    $to = $arr_to[0];
+
+    if (is_numeric($from)) {
+      $from = $to;
+      $to = 'field_' . $to;
+    }
+    if (!empty($data[$from])) {
+      if (isset($arr_to[1]) && $arr_to[1] = 'date') {
+        $node->{$to} = array(array('value' => batire_xml_parse_convert_date($data[$from])));
+      } else {
+        $node->{$to} = array(array('value' => $data[$from]));
+      }
+    } elseif (isset($node->{$to})) {
+      unset($node->{$to});
+    }
+  }
+
+  $node->language = 'fr';
+  $node->parsed_data = $data;
+
+  node_save($node);
+
+
+  $data['node'] = $node;
+  $data['op'] = $node->is_new ? 'add' : 'edit';
+
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+}
+
+function _batire_xml_parse_ddr_common_data(&$data, $dom) {
+  $xpath = batire_xml_get_xpath($dom);
+
+  $parsed = batire_xml_multiple_node_value_get($xpath, array(
+    'id' => '//identification/@id',
+    'date_document' => '//source/publication/@date',
+    'xms_title' => '//xms/@title',
+    'titre' => '//contenu_texte/titre',
+    'copyright' => '//source/copyright',
+    'surtitre' => '//contenu_texte/surtitre',
+    'soustitre' => '//contenu_texte/soustitre',
+    'nb_mots' => '//source/nb_mots',
+    'chapo' => '//contenu_texte/chapo',
+    'note' => '//contenu_texte/note',
+    'release_num' =>'/qc:doc-root/qc:doc-meta/ns0:numero_parution',
+    'support' => '/qc:doc-root/qc:doc-content/article/relation_produit/produit',
+  ));
+  $parsed['taxonomy'] = batire_xml_multiple_node_value_get($xpath, array(
+    'indexation' => '//indexation/terme/@libelle',
+    'sous_type' => '//source/genre_web',
+    'genre' => '//source/genre',
+    'origine' => '//source/origine',
+    'produit' => '//relation_produit/produit',
+    'presse_produit' => '//destinations/destination/produit',
+    'rubrique' => '//indexation/rubrique',
+    'mots_clefs' => '//indexation/indexation_libre'
+  ));
+
+
+  $domNodeList = $xpath->query('//auteurs/auteur');
+
+  if (is_object($domNodeList) && $domNodeList->length != 0) {
+    foreach ($domNodeList as $domNode) {
+      $auteur = array();
+      $auteur['nom'] = batire_xml_node_value_get($xpath, 'nom', $domNode);
+      if (empty($auteur['nom'])) {
+        continue;
+      }
+      $auteur['mail'] = batire_xml_node_value_get($xpath, 'mail', $domNode);
+      $auteur['informations'] = batire_xml_node_value_get($xpath, 'informations', $domNode);
+      $parsed['auteur'][] = $auteur;
+    }
+  }
+  $data['bid'] = batire_hierarchy_get_document_bid($parsed['id'], $data['doc_type']);
+  $data['super_id'] = $parsed['id'];
+  $parsed['body']['contenu1'] = batire_xml_node_xml_get($xpath, '//contenu_texte/contenu1');
+  /*
+   * Buid references block
+   */
+  //Télécharger
+  $telecharger = array();
+  $domNodeList = $xpath->query('//liens_objets_metiers/objet_metier');
+  if (is_object($domNodeList) && $domNodeList->length != 0) {
+    foreach ($domNodeList as $domNode) {
+      $telecharger[] = array(
+        'titre' => batire_xml_node_value_get($xpath, 'titre', $domNode),
+        'commentaire' => batire_xml_node_value_get($xpath, 'texte', $domNode),
+      );
+    }
+  }
+  //URLs
+  $domNodeList = $xpath->query("//contenu_texte/encadres/encadre[@type='LIENS REF']");
+  if (is_object($domNodeList) && $domNodeList->length != 0) {
+    foreach ($domNodeList as $domNode) {
+      $data['urls'][] = array(
+        'titre' =>  batire_xml_node_value_get($xpath, 'titre', $domNode),
+        'soustitre' => batire_xml_node_value_get($xpath, 'soustitre', $domNode),
+        'chapo' => batire_xml_node_value_get($xpath, 'chapo', $domNode),
+        'auteurs' => batire_xml_node_value_get($xpath, 'auteurs', $domNode),
+        'href' => batire_xml_node_value_get($xpath, '//a', $domNode),
+        'type' => 'outside_url',
+
+      );
+    }
+  }
+
+  $data = array_merge($data, $parsed);
+}
+
+function _batire_xml_parse_ddr_get_links(&$data, $dom) {
+  $xpath = batire_xml_get_xpath($dom);
+
+  $domNodeList = $xpath->query('//liens_objets_metiers/objet_metier');
+  if (is_object($domNodeList) && $domNodeList->length != 0) {
+    foreach ($domNodeList as $domNode) {
+      // Look for REFERENCE or FILS links
+      if ($domNode->getAttribute('nature') == 'REFERENCE') {
+        $id  = $domNode->getAttribute('id');
+        $ref = $domNode->getAttribute('ref');
+        $pos = $domNode->getAttribute('position');
+        $classe = $domNode->getAttribute('classe');
+        $bid = batire_hierarchy_get_document_bid($ref, BATIRE_HIERARCHY_DT_ARICLE);
+        $titre = batire_xml_node_value_get($xpath, 'titre', $domNode);
+
+        $data['liens']['lien_reference'][] = array('bid' => $bid, 'title' => $titre, 'position' => $pos, 'refid' => $id, 'type' => $classe);
+      } elseif ($domNode->getAttribute('nature') == 'FILS') {
+        $ref = $domNode->getAttribute('ref');
+        $pos = $domNode->getAttribute('position');
+        $bid = batire_hierarchy_get_document_bid($ref, BATIRE_HIERARCHY_DT_ARICLE);
+        $titre = batire_xml_node_value_get($xpath, 'titre', $domNode);
+
+        $data['liens']['lien_fils'][] = array('bid' => $bid, 'title' => $titre, 'position' => $pos);
+      }
+    }
+  }
+}
+
+/*
+ * Get terms id of first level of "Type des Documents de référence" vocabulary
+ * Sous Types
+ */
+function batire_xml_parse_ddr_get_sous_types_tids() {
+  $tree = taxonomy_get_tree(BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE);
+  $sous_types = array();
+  foreach ($tree as $term) {
+    if (empty($term->parents[0])) {
+      $sous_types[] = $term->tid;
+    }
+  }
+  if (!empty($sous_types)) {
+    return $sous_types;
+  }
+  else {
+    return FALSE;
+  }
+}
+/*
+ * Get terms of first level of "Type des Documents de référence" vocabulary
+ * Sous Types
+ */
+
+function batire_xml_parse_ddr_get_sous_types_terms() {
+  $tree = taxonomy_get_tree(BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE);
+  $sous_types = array();
+  foreach ($tree as $term) {
+    if (empty($term->parents[0])) {
+      $sous_types[] = $term;
+    }
+  }
+  if (!empty($sous_types)) {
+    return $sous_types;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/*
+ * Get terms id of second level of "Type des Documents de référence" vocabulary
+ * Rubriques Types
+ */
+function batire_xml_parse_ddr_get_rubriques_tids() {
+  $tree = taxonomy_get_tree(BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE);
+  $rubriques = array();
+  foreach ($tree as $term) {
+    if (!empty($term->parents[0])) {
+      $rubriques[] = $term->tid;
+    }
+  }
+  if (!empty($rubriques)) {
+    return $rubriques;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/*
+ * Get terms of second level of "Type des Documents de référence" vocabulary
+ * Rubriques Types
+ */
+function batire_xml_parse_ddr_get_rubriques_terms() {
+  $tree = taxonomy_get_tree(BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE);
+  $rubriques = array();
+  foreach ($tree as $term) {
+    if (!empty($term->parents[0])) {
+      $rubriques[] = $term;
+    }
+  }
+  if (!empty($rubriques)) {
+    return $rubriques;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/*
+ * Create or update Author node
+ *
+ * @param &$data
+ *  Parsed data
+ */
+function _batire_xml_parse_ddr_add_author_node($cck_field, $author) {
+
+  if (empty($author['nom'])) {
+    return $cck_field;
+  }
+
+  $author_nid = batire_find_author($author['nom']);
+
+  if ($author_nid) {
+    return batire_add_cck_field_value($cck_field, 'nid', $author_nid);
+  }
+
+  $node = new stdClass();
+
+  $node->type = 'batire_auteur';
+  $node->uid = 1;
+  $node->status = 1;
+  $language = language_default();
+  $node->language = $language->language;
+
+  $node->title = $author['nom'];
+
+  if ($author['informations']) $node->field_author_info[0]['value'] = $author['informations'];
+  if ($author['mail']) $node->field_email[0]['value'] = $author['mail'];
+  // Process taxonomy
+  $terms = array();
+  // Code de contenu
+  $node->taxonomy = $terms;
+  node_save($node);
+
+  return batire_add_cck_field_value($cck_field, 'nid', $node->nid);
+}

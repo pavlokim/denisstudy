@@ -1,0 +1,44 @@
+<?php
+
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_antidot_export_install() {
+
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_antidot_export_uninstall() {
+  variable_del('batire_antidot_export_ftp_server');
+  variable_del('batire_antidot_export_ftp_folder');
+  variable_del('batire_antidot_export_ftp_port');
+  variable_del('batire_antidot_export_ftp_user');
+  variable_del('batire_antidot_export_ftp_password');
+  variable_del('batire_antidot_export_ftp_passive');
+  variable_del('batire_antidot_export_queue_size');
+  variable_del('batire_antidot_export_initial');
+}
+
+/**
+ * Implementation of hook_update_N().
+ * Remove FM "Documents ne faisant plus l’objet de mise à jour" from Antidot
+ */
+function batire_antidot_export_update_6001() {
+  $sth = db_query('SELECT * FROM {batire_hierarchy} WHERE type = "%s" AND ISNULL(parent_bid) AND NOT(bid REGEXP "%s") AND nid IS NOT NULL ORDER BY title, id',BATIRE_SITE_CT_FM , '-[0-9]{8,}$');
+  $nids = array();
+  while ($row = db_fetch_object($sth)) {
+    $nids[] =  $row->nid;
+  }
+
+  $parts = array_chunk($nids, 100);
+  foreach ($parts as $part) {
+    job_queue_add("_batire_antidot_export_job_run",  'Antidot delete FM Documents ne faisant plus l’objet de mise à jour""', array($part, 'delete'));
+  }
+}

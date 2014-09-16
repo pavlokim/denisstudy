@@ -1,0 +1,22 @@
+<?php
+
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_antidot_search_install() {
+
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_antidot_search_uninstall() {
+  variable_del('batire_antidot_search_client_id');
+  variable_del('batire_antidot_search_service_url');
+  variable_del('batire_antidot_search_status');
+}

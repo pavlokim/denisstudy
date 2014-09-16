@@ -1,0 +1,347 @@
+<?php
+/**
+ * @file
+ * A library of common mechanisms for modules using MongoDB.
+ */
+
+/**
+ * Implement hook_help().
+ */
+function mongodb_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#mongodb':
+      return '<p>' . t('<a href="!project">MongoDB</a> implements a generic <a href="!mongo">MongoDB</a> interface.',
+        array(
+          '!project' => 'http://drupal.org/project/mongodb',
+          '!mongo' => 'http://www.mongodb.org/',
+        ));
+      break;
+  }
+}
+
+/**
+ * Returns a MongoDB object.
+ *
+ * @param string $alias
+ *   An optional alias for the connection.
+ */
+function mongodb($alias = 'default') {
+  static $mongo_objects;
+  $connections = variable_get('mongodb_connections', array());
+  $connections += array('default' => array('host' => 'localhost', 'db' => 'drupal'));
+  if (!isset($connections[$alias])) {
+    $alias = 'default';
+  }
+  $connection = $connections[$alias];
+  $host     = $connection['host'];
+  $db       = $connection['db'];
+  $username = isset($connection['username']) ? $connection['username'] : '';
+  $password = isset($connection['password']) ? $connection['password'] : '';
+
+  try {
+
+    if (!isset($mongo_objects[$host][$db])) {
+      if (!empty($username) && !empty($password)) {
+        $mongo = new Mongo($host, array("db" => $db, "username" => $username, "password" => $password));
+      }
+      else {
+        $mongo = new Mongo($host);
+      }
+
+      $mongo_objects[$host][$db] = $mongo->selectDB($db);
+      $mongo_objects[$host][$db]->connection = $mongo;
+    }
+  }
+  catch (Exception $e) {
+    return NULL;
+  }
+
+  return $mongo_objects[$host][$db];
+}
+
+/**
+ * Returns a MongoCollection object.
+ *
+ * @param mixed $collection_name
+ *   Can be either a plain collection name or 0-based array containing a
+ *   collection name and a prefix.
+ */
+function mongodb_collection() {
+  // Avoid something. collection names if NULLs are passed in.
+  $args = array_filter(func_get_args());
+  if (is_array($args[0])) {
+    list($collection_name, $prefixed) = $args[0];
+    $prefixed .= $collection_name;
+  }
+  else {
+    $collection_name = implode('.',$args);
+    $prefixed = mongodb_collection_name($collection_name);
+  }
+  $collections = variable_get('mongodb_collections', array());
+  $alias = isset($collections[$collection_name]) ? $collections[$collection_name] : 'default';
+  // Prefix the collection name for simpletest. It will be in the same DB as the
+  // non-prefixed version so it's enough to prefix after choosing the mongodb
+  // object.
+  $mongodb_object = mongodb($alias);
+  if (!$mongodb_object) {
+    return NULL;
+  }
+  $collection = $mongodb_object->selectCollection(mongodb_collection_name($collection_name));
+  $collection->connection = $mongodb_object->connection;
+  return variable_get('mongodb_debug', FALSE) ? new mongoDebugCollection($collection) : $collection;
+}
+
+class mongoDebugCollection {
+  function __construct($collection) {
+    $this->collection = $collection;
+  }
+
+  function find($query = array(), $fields = array()) {
+    debug('find');
+    debug($query);
+    debug($fields);
+    return mongoDebugCursor($this->collection->find($query, $fields));
+  }
+
+  function __call($name, $arguments) {
+    debug($name);
+    debug($arguments);
+    return call_user_func_array(array($this->collection, $name), $arguments);
+  }
+}
+
+class mongoDebugCursor {
+  function __construct($collection) {
+    $this->collection = $collection;
+  }
+
+  function __call($name, $arguments) {
+    debug($name);
+    debug($arguments);
+    return call_user_func_array(array($this->collection, $name), $arguments);
+  }
+}
+
+/**
+ * Returns the name to use for the collection.
+ *
+ * @param string $name
+ *   The base name for the collection
+ *
+ * @return string
+ *   Unlike the base name, the returned name works with prefixes and simpletest.
+ */
+function mongodb_collection_name($name) {
+  global $db_prefix;
+  static $simpletest_prefix;
+  // We call this function earlier than the database is initalized so we would
+  // read the parent collection without this.
+  if (!isset($simpletest_prefix)) {
+    if (isset($_SERVER['HTTP_USER_AGENT']) && preg_match("/^(simpletest\d+);/", $_SERVER['HTTP_USER_AGENT'], $matches)) {
+      $simpletest_prefix = $matches[1];
+    }
+    else {
+      $simpletest_prefix = '';
+    }
+  }
+  // However, once the test information is initialized, simpletest_prefix
+  // is no longer needed.
+  if (!empty($GLOBALS['drupal_test_info']['test_run_id'])) {
+    $simpletest_prefix = $GLOBALS['drupal_test_info']['test_run_id'];
+  }
+  return $simpletest_prefix . $name;
+}
+
+/**
+ * Testing helper: cleanup after test group.
+ */
+function mongodb_test_group_finished() {
+  $aliases = variable_get('mongodb_connections', array());
+  $aliases['default'] = TRUE;
+  foreach (array_keys($aliases) as $alias) {
+    $db = mongodb($alias);
+    foreach ($db->listCollections() as $collection) {
+      if (preg_match('/\.simpletest\d+/', $collection)) {
+        $db->dropCollection($collection);
+      }
+    }
+  }
+}
+
+/**
+ * Allow for the database connection we are using to be changed.
+ *
+ * @param $alias
+ *   String the alias that we want to change the connection for.
+ * @param $connection_name
+ *   String the name of the connection we will use.
+ */
+function mongodb_set_active_connection($alias, $connection_name = 'default') {
+  // No need to check if the connection is valid as mongodb() does this.
+  $GLOBALS['conf']['mongodb_collections'][$alias] = $connection_name;
+}
+
+/**
+ * Return the next id in a sequence.
+ *
+ * @param string $name
+ *   The name of the sequence
+ * @param int $existing_id
+ *   The minimal value to be generated
+ *
+ * @return int
+ */
+function mongodb_next_id($name, $existing_id = 0) {
+  $mongo = mongodb();
+  $cmd = array(
+    'findandmodify' => mongodb_collection_name('sequence'),
+    'query' => array('_id' => $name),
+    'update' => array('$inc' => array('value' => 1)),
+    'new' => TRUE,
+  );
+  // It's very likely that this is not necessary as command returns an array
+  // not an exception. The increment will, however, will fix the problem of
+  // the sequence not existing. Still, better safe than sorry.
+  try {
+    $sequence = $mongo->command($cmd);
+    $value = isset($sequence['value']['value']) ? $sequence['value']['value'] : 0;
+  }
+  catch (Exception $e) {
+  }
+  if (0 < $existing_id - $value + 1) {
+    $cmd = array(
+      'findandmodify' => mongodb_collection_name('sequence'),
+      'query' => array('_id' => $name),
+      'update' => array('$inc' => array('value' => $existing_id - $value + 1)),
+      'upsert' => TRUE,
+      'new' => TRUE,
+    );
+    $sequence = $mongo->command($cmd);
+    $value = isset($sequence['value']['value']) ? $sequence['value']['value'] : 0;
+  }
+  return $value;
+}
+
+/**
+ * MongoDB delete wrapper
+ */
+function mongodb_delete($collection_name, $keys = array()) {
+  $collection = mongodb_collection($collection_name);
+
+  if (!$collection) {
+    return FALSE;
+  }
+
+  $result = $collection->remove($keys);
+
+  // Empty memory
+  unset($collection);
+
+  return $result;
+}
+
+/**
+ * MongoDB insert/update wrapper
+ */
+function mongodb_update($collection_name, $keys, $object) {
+
+  $collection = mongodb_collection($collection_name);
+
+  if (!$collection || !$keys || !$object) {
+    return FALSE;
+  }
+
+  $result = $collection->update($keys, $object, array('upsert' => TRUE));
+
+  // Empty memory
+  unset($collection);
+
+  return $result;
+}
+
+/**
+ * MongoDB query wrapper
+ */
+function mongodb_select($collection_name, $query = array(), $fields = array(), $sort = array(), $limit = 0, $skip = 0) {
+
+  // Select collection
+  $collection = mongodb_collection($collection_name);
+
+  if (!$collection) {
+    return FALSE;
+  }
+
+  // Set query
+  $mongo_result = $collection->find($query, $fields);
+
+  // Set sorting criteria
+  $mongo_result->sort($sort);
+
+  // Set skip if defined
+  if ($skip > 0) {
+    $mongo_result->skip($skip);
+  }
+
+  // Set limit if defined
+  if ($limit > 0) {
+    $mongo_result->limit($limit);
+  }
+
+  $result = array();
+
+  while($item = $mongo_result->getNext()) {
+    $result[] = $item;
+  }
+
+  // Empty memory
+  unset($collection, $mongo_result);
+
+  return $result;
+}
+
+/**
+ * Wrapper for selecting 1 item from MongodDB
+ */
+function mongodb_select_one($collection_name, $query = array(), $fields = array(), $sort = array()) {
+  $result = mongodb_select($collection_name, $query, $fields, $sort, 1);
+
+  return is_array($result) && count($result) ? array_shift($result) : array();
+}
+
+/**
+ * MongoDB count query wrapper
+ */
+function mongodb_query_count($collection_name, $query = array()) {
+
+  // Select collection
+  $collection = mongodb_collection($collection_name);
+
+  if (!$collection) {
+    return FALSE;
+  }
+
+  // Get count
+  $count = $collection->count($query);
+
+  // Empty memory
+  unset ($collection);
+
+  return $count;
+}
+
+/**
+ * MongoDB ensure index
+ *
+ * @param type $collection_index
+ * @param type $index_fld
+ */
+function mongodb_ensure_index($collection_index, $index_fld) {
+  $mongo = mongodb();
+
+  if ($mongo) {
+    $collection = $mongo->selectCollection($collection_index);
+    if ($collection) {
+      $collection->ensureIndex(array($index_fld => 1), array('background' => TRUE));
+    }
+  }
+}

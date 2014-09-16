@@ -1,0 +1,41 @@
+<?php
+/**
+ * @file
+ * Install for the module().
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function doc_reference_install() {
+  drupal_load('module', 'content');
+  content_notify('install', 'doc_reference');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function doc_reference_uninstall() {
+  drupal_load('module', 'content');
+  content_notify('uninstall', 'doc_reference');
+}
+
+/**
+ * Implementation of hook_enable().
+ *
+ * Notify content module when this module is enabled.
+ */
+function doc_reference_enable() {
+  drupal_load('module', 'content');
+  content_notify('enable', 'doc_reference');
+}
+
+/**
+ * Implementation of hook_disable().
+ *
+ * Notify content module when this module is disabled.
+ */
+function doc_reference_disable() {
+  drupal_load('module', 'content');
+  content_notify('disable', 'doc_reference');
+}

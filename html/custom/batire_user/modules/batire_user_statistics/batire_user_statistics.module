@@ -1,0 +1,1380 @@
+<?php
+
+/**
+ * @file
+ * Provides an opportunity to get statistics application.
+ */
+define('BATIRE_USER_STATISTICS_FILES_DIRECTORY', file_create_path() . '/statistics_application');
+
+module_load_include('inc', 'batire_user_statistics', 'includes/batire_user_statistics');
+define('BATIRE_STATISTIC_FILE_TYPE', variable_get('batire_statistic_file_type', 'xls'));
+define('MONGODB_USER_STATISTICS_COLLECTION', 'user_statistics');
+define('MONGODB_USER_HISTORY_COLLECTION', 'user_history');
+define('MONGODB_USER_SESSIONS_COUNTS', 'user_sessions_counts');
+define('MONGODB_USER_VIEWED_DOCUMENTS_COUNTS', 'user_viewed_documents_counts');
+
+/**
+ * Get available roles
+ * @return Arral List of roles
+ */
+function batire_user_statistics_application_get_avail_roles() {
+  return array(
+    1, // anonymous
+    BATIRE_USER_MONOPOST,
+    BATIRE_USER_MULTIADMIN,
+    BATIRE_USER_SUBACCOUNT,
+    BATIRE_USER_PAIDACCOUNT,
+    BATIRE_USER_FREEACCOUNT,
+    BATIRE_USER_MONTHACCOUNT,
+    BATIRE_USER_TRIALTNACCOUNT,
+    BATIRE_GC_GC_COMMERCIAL_ROLE_ID,
+    BATIRE_GC_GC_USER_ROLE_ID,
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_user_statistics_menu() {
+  $items = array();
+
+  $items['admin/batire-site/users/statistics/statistics-application'] = array(
+    'title' => 'Statistics application',
+    'page callback' => 'batire_user_statistics_application_list',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'description' => 'Statistics application frontend',
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/settings'] = array(
+    'title' => 'Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_statistics_application_settings'),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 10,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/list'] = array(
+    'title' => 'List',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/rebuild'] = array(
+    'title' => 'Rebuild',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_statistics_application_rebuild_form'),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 2,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/build-by-range'] = array(
+    'title' => 'Build by range',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_statistics_application_build_range_form'),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 2,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/build-sessions-logs'] = array(
+    'title' => 'Sessions',
+    'page callback' => 'batire_user_statistics_application_build_session_logs_list',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 2,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/build-documents-logs/%/%'] = array(
+    'title' => 'Build by range',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array(6,7),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 2,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/build-viewed_docs-logs'] = array(
+    'title' => 'Viewed documents',
+    'page callback' => 'batire_user_statistics_application_build_viewed_docs_list',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 2,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/build-viewed_docs-logs/%/%'] = array(
+    'title' => 'Build by range',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array(6,7),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 2,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/get/%'] = array(
+    'title' => 'Statistics application document',
+    'page callback' => 'batire_user_statistics_statistics_application_get_document',
+    'page arguments' => array(6),
+    'access arguments' => array('administer batire configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/get-history/%'] = array(
+    'title' => 'History application document',
+    'page callback' => 'batire_user_statistics_statistics_application_get_history_document',
+    'page arguments' => array(6),
+    'access arguments' => array('administer batire configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/guests-list'] = array(
+    'title' => 'Extraction des invitations',
+    'page callback' => 'batire_user_statistics_application_guest_list',
+    'access arguments' => array('administer batire configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 3,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/get-guests-list'] = array(
+    'title' => 'Télécharger des invitations',
+    'page callback' => 'batire_user_statistics_application_get_guest_list',
+    'access arguments' => array('administer batire configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/batire-site/users/statistics/statistics-application/requests-list'] = array(
+    'title' => 'Extraction des prospects',
+    'page callback' => 'batire_user_statistics_application_requests_list',
+    'access arguments' => array('administer batire configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'batire_user_statistics.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_statistics') . '/includes',
+    'weight' => 4,
+  );
+  $items['batire_user_statistics_request_filters/js'] = array(
+    'page callback' => 'batire_user_statistics_request_filters_js',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+  );
+  return $items;
+}
+
+/**
+ * Get statistics file
+ * if output format is CSV then file will be without history data => see function batire_user_statistics_statistics_application_get_history_document
+ */
+function batire_user_statistics_statistics_application_get_document($date) {
+  if (strlen((int) $date) != 6) {
+    return t('File not found');
+  }
+  $filepath = batire_user_statistics_application_create($date, FALSE, FALSE, BATIRE_STATISTIC_FILE_TYPE);
+  if (BATIRE_STATISTIC_FILE_TYPE == 'csv') {
+    file_transfer($filepath, batire_user_statistics_get_file_headers('statistics_application_' . $date, BATIRE_STATISTIC_FILE_TYPE));
+  }
+  elseif ($filepath) {
+    file_transfer($filepath, batire_site_get_file_headers('statistics_application_' . $date));
+  }
+  else {
+    return t('Data not found');
+  }
+}
+
+/**
+ * Get history file
+ */
+function batire_user_statistics_statistics_application_get_history_document($date) {
+  if (strlen((int) $date) != 6) {
+    return t('File not found');
+  }
+  $filepath = batire_user_statistics_application_create($date, FALSE, FALSE, BATIRE_STATISTIC_FILE_TYPE, TRUE);
+  if (BATIRE_STATISTIC_FILE_TYPE == 'csv') {
+    file_transfer($filepath, batire_user_statistics_get_file_headers('statistics_application_' . $date.'-history', BATIRE_STATISTIC_FILE_TYPE));
+  }
+  elseif ($filepath) {
+    file_transfer($filepath, batire_site_get_file_headers('statistics_application_' . $date));
+  }
+  else {
+    return t('Data not found');
+  }
+}
+
+/**
+ * Get availabele month
+ * @return Array List of available month
+ */
+function batire_user_statistics_application_get_avail_months() {
+  $avail_months = &drupal_static(__FUNCTION__, array());
+  if (isset($avail_months) && !empty($avail_months)) {
+    return $avail_months;
+  }
+  $roles = batire_user_statistics_application_get_avail_roles();
+  $sql = 'SELECT created FROM {users} u
+	 JOIN users_roles ur ON ur.uid = u.uid
+	 WHERE u.uid NOT IN (0,1)
+	 AND ur.rid IN (' . db_placeholders($roles, 'int') . ')
+	 GROUP BY u.uid
+	 ORDER BY u.created ASC LIMIT 1';
+  $created = (int) db_result(db_query($sql, $roles));
+
+  if (!$created) {
+    return FALSE;
+  }
+  $months = date('n', time()) - date('n', $created) + 12 * (date('Y', time()) - date('Y', $created));
+  $avail_months = array();
+  for ($i = 1; $i <= $months; $i++) {
+    $ttime = mktime(0, 0, 0, date("m") - $i, 1, date("Y"));
+    $avail_months[date('Ym', $ttime)] = date('F, Y', $ttime);
+  }
+  return $avail_months;
+}
+
+/**
+ * Create statistics file
+ * @param int $date
+ * @param bool $rebuild
+ * @return string - filename or FALSE
+ */
+function batire_user_statistics_application_create($date, $rebuild = FALSE, $silent = FALSE, $output_format = NULL, $only_history = FALSE) {
+  try {
+    $date = (int) $date;
+    $avail_months = batire_user_statistics_application_get_avail_months();
+    $avail_months[201401] = 'sd';
+    if (!array_key_exists($date, $avail_months) || !batire_user_statistics_file_check_directory()) {
+      throw new Exception();
+    }
+    if ($output_format == 'csv' && $only_history) {
+      $filepath = BATIRE_USER_STATISTICS_FILES_DIRECTORY . '/' . $date . '-history.' . $output_format;
+    }
+    elseif ($output_format == 'csv' && !$only_history) {
+      $filepath = BATIRE_USER_STATISTICS_FILES_DIRECTORY . '/' . $date . '.' . $output_format;
+    }
+    else {
+      $filepath = batire_site_get_file_path('list', array('date' => $date));
+    }
+
+    if ($rebuild && file_exists($filepath)) {
+      file_delete($filepath);
+    }
+    if (file_exists($filepath)) {
+      return $filepath;
+    }
+    $month = (int) substr($date, 4);
+    $year = (int) substr($date, 0, 4);
+
+    $from = mktime(0, 0, 0, $month, 1, $year);
+    $to = mktime(0, 0, 0, $month + 1, 1, $year);
+
+    if ($only_history) {//history in CSV
+      $history_data = batire_user_statistics_application_get_history_data($from, $to);
+      if (!empty($history_data)) {
+        $history_map = _batire_user_statistics_application_history_get_map();
+        batire_user_statistics_application_generate_csv_file($history_data, $history_map, $filepath, TRUE);
+      }
+      else {
+        if (!$silent) {
+          drupal_set_message(t('No data'));
+        }
+        throw new Exception();
+      }
+      if (!$silent) {
+        drupal_set_message(t('Statistics file have been created'));
+      }
+      return $filepath;
+    }
+    elseif (!$only_history && $output_format == 'csv') {//statistics in SCV
+      $statistics_data = batire_user_statistics_application_get_statistics_data($from, $to);
+      if (!empty($statistics_data)) {
+        $statistics_map = _batire_user_statistics_application_get_map();
+        batire_user_statistics_application_generate_csv_file($statistics_data, $statistics_map, $filepath, TRUE);
+      }
+      else {
+        if (!$silent) {
+          drupal_set_message(t('No data'));
+        }
+        throw new Exception();
+      }
+      return $filepath;
+    }
+    //statistics and history in Excel
+    else {
+      $statistics_data = batire_user_statistics_application_get_statistics_data($from, $to);
+      $history_data = batire_user_statistics_application_get_history_data($from, $to);
+      if (!empty($statistics_data)) {
+        batire_user_statistics_application_generate_excel_file(array('statistics' => $statistics_data, 'history' => $history_data), $filepath, TRUE);
+      }
+      else {
+        if (!$silent) {
+          drupal_set_message(t('No data'));
+        }
+        throw new Exception();
+      }
+      return $filepath;
+    }
+  }
+  catch (Exception $e) {
+    return FALSE;
+  }
+}
+
+/**
+ * Create statistics file
+ * @param int $date
+ * @param bool $rebuild
+ * @return string - filename or FALSE
+ */
+function batire_user_statistics_application_create_period($start_date, $end_date, $users = array(), $admin_export = FALSE) {
+  try {
+    $filepath = batire_site_get_file_path('list-period', array('start_date' => date('dmy', $start_date), 'end_date' => date('dmy', $end_date)));
+    $statistics_data = batire_user_statistics_application_get_statistics_data($start_date, $end_date, $users);
+    $history_data = batire_user_statistics_application_get_history_data($start_date, $end_date, $users);
+    if (!empty($statistics_data) && batire_user_statistics_application_generate_excel_file(array('statistics' => $statistics_data, 'history' => $history_data), $filepath, $admin_export)) {
+      return $filepath;
+    }
+    else {
+      throw new Exception();
+    }
+  }
+  catch (Exception $e) {
+    return FALSE;
+  }
+}
+
+/**
+ * Check that the directory exists
+ * @param $directory
+ * @return boolean
+ */
+function batire_user_statistics_file_check_directory() {
+  $directory = BATIRE_USER_STATISTICS_FILES_DIRECTORY;
+  if (!file_check_directory($directory, FILE_CREATE_DIRECTORY)) {
+    return FALSE;
+  }
+  drupal_get_messages();
+  return TRUE;
+}
+
+/**
+ * Get statistics data
+ */
+// @todo
+function batire_user_statistics_application_get_statistics_data($from, $to, $users = array()) {
+  $result = array();
+  $roles = batire_user_statistics_application_get_avail_roles();
+
+  if(!empty($users)) {
+    foreach ($users as $key => $value) {
+      $users[$key] = (int) $value;
+    }
+    $users[] = 0;//add anonymous user
+  }
+
+  // Extract MySQL part
+  db_query("SET @busa_from = %d;", $from);
+  db_query("SET @busa_to = %d;", $to);
+  $sql = '
+    SELECT
+      -- get user uid
+      u.uid AS uid,
+
+      -- get user roles
+      (SELECT GROUP_CONCAT(usr.rid, "") FROM users_roles usr WHERE usr.uid = u.uid) AS rids,
+
+      -- get user abo
+      u.abo_num as abo_num,
+
+      -- get user login
+      u.svc_login AS login,
+
+      -- get user first name
+      ctup.field_user_name_value AS name,
+
+      -- get user last name
+      ctup.field_user_surname_value AS surname,
+
+      -- get user company name
+      ctup.field_user_company_value AS company_name,
+
+      -- get user origene
+      ctup.field_user_origene_value AS origene,
+
+      -- get date of last user login
+      (CASE u.login WHEN 0 THEN "" ELSE FROM_UNIXTIME(u.login) END) AS last_login,
+
+      -- get user status
+      IFNULL(ctup.field_user_statut_value,0) as user_statut,
+
+      -- get user products
+      (SELECT GROUP_CONCAT(DISTINCT pn.title ORDER BY pn.nid ASC SEPARATOR \', \') FROM {node} un
+        LEFT JOIN {content_field_user_products} cfup ON cfup.vid = un.vid
+        LEFT JOIN {node} pn ON pn.nid = cfup.field_user_products_nid
+        WHERE un.type = \'batire_user_profile\' AND un.uid = u.uid) AS products,
+
+      -- get count of registered searches
+      (SELECT COUNT(*)
+        FROM {node} node
+        LEFT JOIN {content_type_batire_user_search_profile} ctbusp ON ctbusp.vid = node.vid
+        WHERE
+          node.type = "batire_user_search_profile"
+          AND ctbusp.field_profile_type_value = 0
+          AND node.uid = u.uid
+          AND node.created >= @busa_from
+          AND node.created <= @busa_to
+      ) AS saved_searches,
+
+      -- get count of registered alerts
+      (SELECT COUNT(*)
+        FROM {node} node
+        LEFT JOIN {content_type_batire_user_search_profile} ctbusp ON ctbusp.vid = node.vid
+        WHERE
+          node.type = "batire_user_search_profile"
+          AND ctbusp.field_profile_type_value IN (1,2)
+          AND node.uid = u.uid
+          AND node.created >= @busa_from
+          AND node.created <= @busa_to
+      ) AS registered_alerts,
+
+      -- get count of created annotations
+      (SELECT COUNT(*)
+        FROM {node} node
+        LEFT JOIN {content_type_batire_user_annotation} ctbua ON ctbua.vid = node.vid
+	    LEFT JOIN {node} n1 ON n1.nid = ctbua.field_annotation_doc_nid
+        LEFT JOIN {content_field_annotation_shared} cfas ON cfas.vid = node.vid
+        WHERE
+          node.type = "batire_user_annotation"
+          AND n1.status = 1
+          AND node.uid = u.uid
+          AND node.created >= @busa_from
+          AND node.created <= @busa_to
+      ) AS annotations_created,
+
+      -- is user has default search?
+      IF(ctup.field_default_search_nid,1,0) AS default_search,
+
+      -- get count of registered documents
+      (SELECT COUNT(DISTINCT cffd.field_folder_documents_nid)
+        FROM {content_field_folder_documents} cffd
+        LEFT JOIN {node} n1 ON cffd.vid = n1.vid
+        LEFT JOIN {node} n2 ON n2.nid = cffd.field_folder_documents_nid
+        WHERE
+          n2.status = 1
+          AND n1.uid = u.uid
+          AND cffd.field_folder_documents_added >= @busa_from
+          AND cffd.field_folder_documents_added <= @busa_to
+      ) AS doc_registered,
+
+      -- get number of registered shared documents
+      (SELECT COUNT(DISTINCT cffd.field_folder_documents_nid)
+        FROM {content_field_folder_documents} cffd
+        LEFT JOIN {node} node ON node.vid = cffd.vid
+        LEFT JOIN {content_field_folder_shared} cffs ON cffs.vid = cffd.vid
+        WHERE
+          node.uid = u.uid
+          AND cffs.field_folder_shared_value = 1
+          AND node.created >= @busa_from
+          AND node.created <= @busa_to
+      ) as doc_shared,
+
+      -- get count of created folders
+      (SELECT COUNT(*)
+        FROM {node} node
+        WHERE
+          node.uid = u.uid
+          AND node.type = "batire_user_folder"
+          AND node.created >= @busa_from
+          AND node.created <= @busa_to
+      ) AS folders_created,
+
+      -- get count of shared folders
+      (SELECT COUNT(*)
+        FROM {node} node
+        LEFT JOIN {content_field_folder_shared} cffs ON cffs.vid = node.vid
+        WHERE
+          node.uid = u.uid
+          AND cffs.field_folder_shared_value = 1
+          AND node.type = "batire_user_folder"
+          AND node.created >= @busa_from
+          AND node.created <= @busa_to
+      ) AS folders_shared
+
+    FROM {users} u
+    LEFT JOIN {users_roles} ur ON u.uid = ur.uid
+    LEFT JOIN {node} node ON node.uid = u.uid
+    LEFT JOIN {content_type_batire_user_profile} ctup ON node.vid = ctup.vid
+    WHERE
+      node.type = "batire_user_profile" AND
+      node.created <= @busa_to AND
+      ur.rid IN (' . db_placeholders($roles, 'int') . ') AND ' .
+      ((count($users) != 1 && $users[0] != 0) ? 'u.uid IN (' . db_placeholders($users, 'int') . ') ' : 'u.uid NOT IN (1) ') .
+    'GROUP BY u.uid';
+  $db_result = db_query($sql, array_merge($roles, $users));
+
+  // Extract Mongo part
+  $mongo_query = array(
+    'access' => array('$gte' => (int) date('Ymd', $from), '$lte' => (int) date('Ymd', $to)),
+  );
+
+  /*
+   * If making export for some users (GC, etc.), than users array has not only anonymous
+   * normal pairs:
+   * uid = 0, replaced_uid = user_id
+   * uid = user_id, replaced_uid = user_id
+   */
+  if (!empty($users)) {
+    $mongo_query['uid'] = array('$in' => $users);
+    array_pop($users);//unset anonymous user_id
+    $mongo_query['replaced_uid'] = array('$in' => $users);
+  }
+  else {
+    $mongo_query['uid'] = array('$not' => array('$in' => array(1)));
+  }
+  $mongo_result = mongodb_select(MONGODB_USER_STATISTICS_COLLECTION, $mongo_query);
+  $mongo_fields = array_keys(_batire_user_statistics_application_get_mongo_fields());
+  $mongo_summary = array();
+  foreach ($mongo_result as $mongo_record) {
+    $uid = $mongo_record['uid'];
+    foreach ($mongo_fields as $field) {
+      $mongo_summary[$uid][$field] += isset($mongo_record['data'][$field]) ? $mongo_record['data'][$field] : 0;
+    }
+    $mongo_summary[$uid]['ips'] = array_unique(array_merge(isset($mongo_summary[$uid]['ips']) ? $mongo_summary[$uid]['ips'] : array(), $mongo_record['data']['ips']));
+  }
+
+  $field_user_statut = content_fields('field_user_statut', 'batire_user_profile');
+  $field_user_statut_values = content_allowed_values($field_user_statut);
+
+  $mongo_fields = array_keys(_batire_user_statistics_application_get_mongo_fields());
+  while ($row = db_fetch_object($db_result)) {
+    $row->pasw = '';
+    $row->activite = '';
+    $row->function = '';
+    $row->service = '';
+    $row->role = '';
+    $row->grand_compte = '';
+    $row->abon_type = _batire_user_get_registration_role(explode(',', $row->rids));
+    $row->industry = isset($field_user_statut_values[$row->user_statut]) ? $field_user_statut_values[$row->user_statut] : '';
+    foreach ($mongo_fields as $mongo_field) {
+      $row->{$mongo_field} = (isset($mongo_summary[$row->uid][$mongo_field]) && !empty($mongo_summary[$row->uid][$mongo_field])) ? $mongo_summary[$row->uid][$mongo_field] : '0';
+    }
+    if (isset($mongo_summary[$row->uid]['ips']) && !empty($mongo_summary[$row->uid]['ips'])) {
+      $row->ips = implode(',', $mongo_summary[$row->uid]['ips']);
+    }
+    $result[] = $row;
+  }
+  return $result;
+}
+
+function batire_user_statistics_application_get_history_data($from, $to, $users = array()) {
+  $result = array();
+
+  if(!empty($users)) {
+    foreach ($users as $key => $value) {
+      $users[$key] = (int) $value;
+    }
+    $users[] = 0;//add anonymous user
+  }
+
+  // Extract Mongo part
+  $mongo_query = array(
+    'access' => array('$gte' => (int) $from, '$lte' => (int) $to),
+  );
+  /*
+   * If making export for some users (GC, etc.), than users array has not only anonymous
+   * normal pairs:
+   * uid = 0, replaced_uid = user_id
+   * uid = user_id, replaced_uid = user_id
+   */
+  if (!empty($users)) {
+    $mongo_query['uid'] = array('$in' => $users);
+    array_pop($users);//unset anonymous user_id
+    $mongo_query['replaced_uid'] = array('$in' => $users);
+  }
+  else {
+    $mongo_query['uid'] = array('$not' => array('$in' => array(1)));
+  }
+  $mongo_sort = array(
+    'uid' => 1,
+    'access' => 1,
+  );
+  $mongo_result = mongodb_select(MONGODB_USER_HISTORY_COLLECTION, $mongo_query, array());
+  foreach ($mongo_result as $mongo_record) {
+    if ($mongo_record['uid'] > 0) {
+      $user = user_load($mongo_record['uid']);
+      if ($user) {
+        $user_profile = batire_user_profile_load($user->uid);
+      }
+      $abo_num = empty($user->abo_num) ? $user_profile->field_user_abon_num[0]['value'] : $user->abo_num;
+    }
+    else {//if anonymous
+      if ($mongo_record['replaced_uid'] > 0) {
+        $replaced_user = user_load($mongo_record['replaced_uid']);
+        $replaced_user_profile = batire_user_profile_load($mongo_record['replaced_uid']);
+      }
+      $user = new stdClass();
+      $abo_num = empty($replaced_user->abo_num) ? $replaced_user_profile->field_user_abon_num[0]['value'] : $replaced_user->abo_num;
+      $user->svc_login = 'Anonymous';
+      $user_profile = new stdClass();
+      $user_profile->field_user_name[0]['value'] = 'Anonymous';
+      $user_profile->field_user_surname[0]['value'] = '';
+    }
+
+    $page_data = mongodb_page_get_page_by_bid($mongo_record['bid']);
+    $reference = NULL;
+    if ($page_data['type'] == BATIRE_SITE_CT_FM) {
+      $reference = str_replace(array("\xE2\x80\x89", "\xE2\x80\x93"), array(' ', '-'), $page_data['reference']);//replace unicode special characters
+    }
+    $mongo_record['title'] = str_replace(array("\xE2\x80\x89", "\xE2\x80\x93"), array(' ', '-'), $mongo_record['title']);
+    $row = new stdClass();
+    $row->nom = $user ? $user_profile->field_user_name[0]['value'] . ' ' . $user_profile->field_user_surname[0]['value'] : '<missing user>';
+    $row->abo_num = !empty($abo_num) ? $abo_num : '<has not N° d\'abonné>';
+    $row->login = $user->svc_login ? $user->svc_login : '<deleted user>';
+    $row->sources = $mongo_record['doc_type'];
+    $row->titre_support = $mongo_record['source'];
+    $row->date_publication = $mongo_record['date_publication'];
+    $row->date_consult = date('Y-m-d', $mongo_record['access']);
+    $row->reference = $reference ? $reference : '';
+    $row->titre_document = $mongo_record['title'];
+    $row->origene = isset($user_profile->field_user_origene[0]['value']) ? $user_profile->field_user_origene[0]['value'] : '';
+    $result[] = $row;
+  }
+  return $result;
+}
+
+/**
+ * Log user document action. I.e. print or download document
+ *
+ * @param  int $action - action type. 0 - for print; 1 - for download; 2 - view; 3 - login; 4 - print search result list
+ * @return bool
+ */
+function batire_user_statistics_action($action = NULL, $node = NULL) {
+  global $user;
+  $replaced_user = batire_gc_ip_replace_user();
+
+  if (!is_null($action) && !is_int($action)) {
+    return FALSE;
+  }
+
+  $record = array();
+  $record['uid'] = (int)$user->uid;
+  $record['replaced_uid'] = $replaced_user ? (int)$replaced_user->uid : (int)$user->uid;
+  $record['access'] = (int)date('Ymd', time());
+  $record['data'] = _batire_user_statistics_initial_values();
+  _batire_user_statistics_process_action($record, $action, $node);
+
+  $keys = array('uid' => $record['uid'], 'replaced_uid' => $record['replaced_uid'], 'access' => $record['access']);
+  $existing = mongodb_select_one(MONGODB_USER_STATISTICS_COLLECTION, $keys);
+  if (isset($existing) && $existing) {
+    _batire_user_statistics_process_action($existing, $action, $node);
+    $record = $existing;
+  }
+  return mongodb_update(MONGODB_USER_STATISTICS_COLLECTION, $keys, $record);
+}
+
+function _batire_user_statistics_process_action(&$record, $action, $node = NULL) {
+  global $user;
+  $ip = ip_address();
+  switch ($action) {
+    case 0:
+      // print
+      $record['data']['prints']++;
+      break;
+    case 1:
+      // download
+      $record['data']['downloads']++;
+      break;
+    case 2:
+      // view
+      $record['data']['views']++;
+      if (isset($node)) {
+        _batire_user_statistics_count_doc_view($node, $record['data']);
+        // write user history
+        $sources = _batire_user_statistics_get_node_sources($node);
+        $date_publication = _batire_user_statistics_get_document_date($node);
+        $history_record['uid'] = (int)$user->uid;
+        $history_record['replaced_uid'] = $record['replaced_uid'];
+        $history_record['access'] = time();
+        $history_record['nid'] = $node->nid;
+        $history_record['bid'] = $node->page_data['bid'];
+        $history_record['title'] = $node->title;
+        $history_record['doc_type'] = $sources['doc_type'];
+        $history_record['source'] = $sources['source'];
+        $history_record['date_publication'] = $date_publication;
+        mongodb_update(MONGODB_USER_HISTORY_COLLECTION, array('uid' => $history_record['uid'], 'replaced_uid' => $history_record['replaced_uid'], 'access' => $history_record['access']), $history_record);
+      }
+      break;
+    case 3:
+      // login
+      $record['data']['logins']++;
+      if (!in_array($ip, $record['data']['ips'])) {
+        $record['data']['ips'][] = $ip;
+      }
+      break;
+    case 4:
+      $record['data']['search_prints']++;
+      break;
+  }
+}
+
+/**
+ * Count doc view by type
+ *
+ * @param type $node Node object
+ * @param type $data Count of views data
+ */
+function _batire_user_statistics_count_doc_view($node, &$data) {
+  switch ($node->type) {
+    case 'batire_texte_officiel':
+      $data['to_views']++;
+      break;
+    case 'batire_codes':
+      $data['codes_views']++;
+      $vid = BATIRE_SITE_VID_CODES;
+      $key = 'codes_%s_views';
+      break;
+    case 'batire_texte_normatifs':
+      $data['tn_views']++;
+      break;
+    case 'batire_livres':
+      $data['livres_views']++;
+      $vid = BATIRE_SITE_VID_LIVRES;
+      $key = 'livres_%s_views';
+      break;
+    case 'batire_feuillet_mobile':
+      $data['fm_views']++;
+      $vid = BATIRE_SITE_VID_FM;
+      $key = 'fm_%s_views';
+      break;
+    case 'batire_complement_technique':
+      $data['ct_views']++;
+      break;
+    case 'batire_actualite':
+      $data['actu_views']++;
+      break;
+  }
+  if (isset($vid)) {
+    foreach ($node->taxonomy as $term) {
+      if ($term->vid == $vid) {
+        $tid = $term->tid;
+        break;
+      }
+    }
+  }
+  if (isset($tid)) {
+    $key = sprintf($key, $tid);
+    $data[$key]++;
+  }
+}
+
+/**
+ * Return zero views array
+ */
+function _batire_user_statistics_initial_values() {
+  $fields = _batire_user_statistics_application_get_mongo_fields();
+  foreach ($fields as $key => $value) {
+    $fields[$key] = 0;
+  }
+  $fields['ips'] = array();
+  return $fields;
+}
+
+/**
+ * Run cron
+ */
+function batire_user_statistics_run_cron() {
+  // generate report only for previos month
+  $date = date('Ym', mktime(0, 0, 0, date("m") - 1, 1, date("Y")));
+  batire_user_statistics_application_create($date, TRUE, TRUE);
+}
+
+/**
+ * Run cron
+ */
+function batire_user_statistics_get_sessions_count_run_cron() {
+  $logging_on = variable_get('batire_site_logging', TRUE);
+  if ($logging_on) {
+    //calc count of all sessions
+    $session_count_sql = 'SELECT count(*) as count FROM {sessions}';
+    $result = db_query($session_count_sql);
+    $count = db_fetch_array($result);
+    //find the max session size in Kb
+    $all_session_sql = 'SELECT uid, session FROM {sessions} WHERE uid <> 1';
+    $result_all = db_query($all_session_sql);
+    $max_session_size = 0;
+    while ($session = db_fetch_array($result_all)) {
+      $session_size_kb = strlen($session['session']) / 1024;
+      if ($session_size_kb > $max_session_size) {
+        $max_session_size = $session_size_kb;
+        $uid = $session['uid'];
+      }
+    }
+    $now = time();
+    $keys = array('access' => $now);
+    $data =  array('access' => $now, 'sessions_count' => $count['count'], 'uid_max_session' => $uid, 'max_session_size' => $max_session_size);
+    $keys = array('access' => time());
+    mongodb_update(MONGODB_USER_SESSIONS_COUNTS, $keys, $data);
+  }
+}
+
+/**
+ * Run cron
+ */
+function batire_user_statistics_get_count_viewed_docs_run_cron() {
+  $logging_on = variable_get('batire_site_logging', TRUE);
+  if ($logging_on) {
+    $now = time();
+    $from = $now - 3600;
+    $to = $now;
+    $mongo_query = array(
+      'access' => array('$gte' => (int) $from, '$lte' => (int) $to),
+    );
+    $mongo_result = mongodb_select(MONGODB_USER_HISTORY_COLLECTION, $mongo_query);
+    $data = array();
+    foreach ($mongo_result as $record) {
+      $data[$record['uid']][] = $record['bid'];
+    }
+    if (!empty($data)) {
+      //calc count of viewed documents of each users
+      $result = array();
+      $result['access'] = $now;
+      foreach ($data as $uid => $documents_bids) {
+        $result['data'][]= array('uid' => $uid, 'viewed_documents_count' => count($documents_bids));
+      }
+      $keys = array('access' => $now);
+      mongodb_update(MONGODB_USER_VIEWED_DOCUMENTS_COUNTS, $keys, $result);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_cronapi().
+ */
+function batire_user_statistics_cronapi($op, $job = NULL) {
+  switch ($op) {
+    case 'list':
+      return array(
+        'batire_user_statistics_run_cron' => t('Generate report'),
+        'batire_user_statistics_get_sessions_count_run_cron' => t('Calculate count of sessions every 5 minutes'),
+        'batire_user_statistics_get_count_viewed_docs_run_cron' => t('Calculate count of viewed documents every hour'),
+      );
+      break;
+
+    case 'rule':
+      if ($job == 'batire_user_statistics_run_cron') {
+        return '0 0 1 * *';
+      }
+      if ($job == 'batire_user_statistics_get_sessions_count_run_cron') {
+        return '*/5 * * * *';
+      }
+      if ($job == 'batire_user_statistics_get_count_viewed_docs_run_cron') {
+        return '0 * * * *';
+      }
+      break;
+
+    case 'execute':
+      if ($job == 'batire_user_statistics_run_cron') {
+        batire_user_statistics_run_cron();
+      }
+      if ($job == 'batire_user_statistics_get_sessions_count_run_cron') {
+        batire_user_statistics_get_sessions_count_run_cron();
+      }
+      if ($job == 'batire_user_statistics_get_count_viewed_docs_run_cron') {
+        batire_user_statistics_get_count_viewed_docs_run_cron();
+      }
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_user().
+ */
+function batire_user_statistics_user($op, &$edit, &$account, $category = NULL) {
+  switch ($op) {
+    case 'login' :
+      /**
+       * We need to store statistics about user login
+       * Update statistics - login action
+       */
+      batire_user_statistics_action(3);
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function batire_user_statistics_nodeapi($node, $op, $a3 = NULL, $a4 = NULL) {
+  switch ($op) {
+    case 'view':
+      if (_batire_site_is_document($node->type)) {
+        /**
+         * We need to store statistics about user doc views
+         * Update statistics - view action
+         */
+        batire_user_statistics_action(2, $node);
+      }
+      break;
+  }
+}
+/**
+ * Generate Excel file.
+ * @param Array $data File data
+ * @param String $filepath Path to file
+ * @return String Path to file
+ */
+function batire_user_statistics_application_generate_excel_file($data, $filepath, $admin_export = FALSE) {
+  $statistics_map = _batire_user_statistics_application_get_map(!$admin_export);
+  $history_map = _batire_user_statistics_application_history_get_map();
+  $sheets = array();
+  $sheets[] = array(
+    'header' => $statistics_map['header'],
+    'map' => $statistics_map['map'],
+    'data' => $data['statistics'],
+    'title' => t('Users statistics')
+  );
+  if ($admin_export) {
+    $sheets[] = array(
+      'header' => $history_map['header'],
+      'map' => $history_map['map'],
+      'data' => $data['history'],
+      'title' => t('Users history')
+    );
+  }
+  return batire_site_generate_multisheet_excel_file($filepath, $sheets);
+}
+
+/**
+ * Generate CSV file.
+ * @param Array $data File data
+ * @param String $filepath Path to file
+ * @return String Path to file
+ */
+function batire_user_statistics_application_generate_csv_file($data, $map, $filepath, $admin_export = FALSE) {
+  return batire_site_generate_csv_file($filepath, $map['map'], $data, $map['header']);
+}
+
+/**
+ * Get guest list file
+ */
+function batire_user_statistics_application_get_guest_list() {
+  try {
+    if (!batire_user_statistics_file_check_directory()) {
+      throw new Exception();
+    }
+    $filepath = batire_site_get_file_path('guest_list');
+    if (file_exists($filepath)) {
+      file_delete($filepath);
+    }
+    $data = batire_user_statistics_application_guest_list_get_data();
+    if (empty($data)) {
+      throw new Exception();
+    }
+    $function = batire_site_get_generate_file_function(
+    'batire_user_statistics_application_guest_list_generate_excel_file', 'batire_user_statistics_application_guest_list_generate_csv_file'
+    );
+    if ($function($data, $filepath)) {
+      file_transfer($filepath, batire_site_get_file_headers('extraction_invitations'));
+    }
+    else {
+      throw new Exception();
+    }
+  }
+  catch (Exception $e) {
+    drupal_set_message(t('Data not found'));
+    drupal_goto('admin/batire-site/users/statistics/statistics-application/guests-list');
+  }
+}
+
+/**
+ * Get request list data
+ * @return array
+ */
+function batire_user_statistics_application_request_list_get_data($filter_data) {
+  $sql = "
+    SELECT
+      -- get user reg type
+      burr.type AS reg_type,
+
+      -- get user reg data
+      burr.data AS reg_data,
+
+      -- get user created date
+      burr.created AS user_created_date
+
+     FROM {batire_user_registration_requests} burr
+
+    WHERE burr.type = %d
+    AND burr.created BETWEEN %d
+  AND %d
+    GROUP BY burr.id";
+
+  $db_result = db_query($sql, $filter_data['user_filter'], $filter_data['date_from_filter'], $filter_data['date_to_filter']);
+
+  $result = array();
+  $field_user_statut = content_fields('field_user_statut', 'batire_user_profile');
+  $field_user_statut_values = content_allowed_values($field_user_statut);
+  while ($row = db_fetch_object($db_result)) {
+
+    if ($row->reg_type == BATIRE_USER_REG_TYPE_PAID) {
+      $row->prospect_type = t('Devis');
+    }
+    else {
+      $row->prospect_type = t('Démo');
+    }
+
+    $reg_data = unserialize($row->reg_data);
+
+    $row->salut = $reg_data->field_user_salut[0]['value'];
+    $row->name = $reg_data->field_user_name[0]['value'];
+    $row->surname = $reg_data->field_user_surname[0]['value'];
+    $row->mail = $reg_data->mail;
+    $row->tel_1 = $reg_data->field_user_tel_1[0]['value'];
+//    $row->tel_2 = $reg_data->field_user_tel_2[0]['value'];
+//    $row->fax = $reg_data->field_user_fax[0]['value'];
+    $row->promo = $reg_data->field_user_promo[0]['value'];
+    $row->position = $reg_data->field_user_position[0]['value'];
+    $row->specialty = $reg_data->field_user_specialty[0]['value'];
+//    $row->statut = isset($field_user_statut_values[$reg_data->field_user_statut[0]['value']]) ? $field_user_statut_values[$reg_data->field_user_statut[0]['value']] : '';
+
+    $row->company_name = $reg_data->field_user_company[0]['value'];
+    $row->address_1 = $reg_data->field_user_address_1[0]['value'];
+    $row->address_2 = $reg_data->field_user_address_2[0]['value'];
+    $row->zip = $reg_data->field_user_zip[0]['value'];
+    $row->city = $reg_data->field_user_city[0]['value'];
+    $row->country = $reg_data->field_user_country[0]['value'];
+//    $row->tva = $reg_data->field_user_tva[0]['value'];
+//    $row->abon_num = $reg_data->field_user_abon_num[0]['value'];
+//    $abon_list = array();
+//    foreach ($reg_data->field_user_abon_list as $abon) {
+//      if (!empty($abon['value'])) {
+//        $abon_list[] = $abon['value'];
+//      }
+//    }
+//    $row->abon_list = implode('/, ', $abon_list);
+    $row->posts_count = $reg_data->field_user_posts_count[0]['value'];
+
+    $row->when_to_call = $reg_data->when_to_call;
+    $row->created_date = format_date($row->user_created_date, 'custom', 'd/m/Y H:i');
+    $result[] = $row;
+  }
+  return $result;
+}
+
+/**
+ * Get guest list data
+ * @return Array
+ */
+function batire_user_statistics_application_guest_list_get_data() {
+  $sql = '
+    SELECT
+      -- get user login
+      u.svc_login AS login,
+
+      -- get user company name
+      ctup.field_user_company_value AS company_name,
+
+      -- get user surname
+      ctup.field_user_surname_value AS surname,
+
+      -- get user mail
+      u.mail AS mail,
+
+      -- get effective date
+      (CASE ctup.field_user_dates_value WHEN 0 THEN "" ELSE ctup.field_user_dates_value END) AS effective_date,
+
+      -- get due date
+      (CASE ctup.field_user_dates_value2 WHEN 0 THEN "" ELSE ctup.field_user_dates_value2 END) AS due_date,
+
+      -- get number of invites available
+      ctup.field_user_posts_count_value AS number_position_entered,
+
+      -- get number of invites sent
+      COUNT(cfus.field_user_subacc_uid) AS number_invitation_sent_cs,
+
+      -- get number of users
+      COUNT(burr.uid) AS number_cs_created
+    FROM {users} u
+      LEFT JOIN {node} node ON node.uid = u.uid
+      LEFT JOIN {users_roles} ur ON u.uid =  ur.uid
+      LEFT JOIN {users_roles} ur2 ON u.uid =  ur2.uid
+      LEFT JOIN {content_type_batire_user_profile} ctup ON node.vid = ctup.vid
+      LEFT JOIN {content_field_user_subacc} cfus ON cfus.vid = ctup.vid
+      LEFT JOIN {batire_user_registration_requests} burr ON burr.uid = u.uid
+    WHERE node.type = "batire_user_profile" AND u.uid NOT IN (0, 1)
+    AND ur.rid = %d AND ur2.rid = %d
+    GROUP BY u.uid';
+
+  $db_result = db_query($sql, BATIRE_USER_MULTIADMIN, BATIRE_USER_PAIDACCOUNT);
+
+  $result = array();
+  while ($row = db_fetch_object($db_result)) {
+    $row->effective_date = format_date($row->effective_date, 'custom', 'd/m/Y H:i');
+    $row->due_date = format_date($row->due_date, 'custom', 'd/m/Y H:i');
+    $result[] = $row;
+  }
+  return $result;
+}
+
+/**
+ * Save guest list data to csv file
+ * @param $data Report data
+ * @param $filepath Path to report file
+ */
+function batire_user_statistics_application_guest_list_generate_csv_file($data, $filepath) {
+  $map = batire_user_statistics_application_guest_list_get_map();
+  $titles = _batire_user_statistics_application_guest_list_get_file_header();
+  return batire_site_generate_csv_file($filepath, $map, $data, $titles);
+}
+
+/**
+ * Generate guest list Excel file.
+ * @param Array $data File data
+ * @param String $filepath Path to file
+ * @return String Path to file
+ */
+function batire_user_statistics_application_guest_list_generate_excel_file($data, $filepath) {
+  $titles = _batire_user_statistics_application_guest_list_get_file_header();
+  $map = batire_user_statistics_application_guest_list_get_map();
+  return batire_site_generate_excel_file($filepath, $map, $data, $titles);
+}
+
+/**
+ * Generate request list Excel file.
+ * @param Array $data File data
+ * @param String $filepath Path to file
+ * @return String Path to file
+ */
+function batire_user_statistics_application_request_list_generate_excel_file($data, $filepath) {
+  $titles = _batire_user_statistics_application_request_list_get_file_header();
+  $map = _batire_user_statistics_application_request_list_get_map();
+  return batire_site_generate_excel_file($filepath, $map, $data, $titles);
+}
+
+/**
+ * Save request list data to csv file
+ * @param $data Report data
+ * @param $filepath Path to report file
+ */
+function batire_user_statistics_application_request_list_generate_csv_file($data, $filepath) {
+  $map = _batire_user_statistics_application_request_list_get_map();
+  $titles = _batire_user_statistics_application_request_list_get_file_header();
+  return batire_site_generate_csv_file($filepath, $map, $data, $titles);
+}
+
+/**
+ * Requests list submit function
+ */
+function batire_user_statistics_application_requests_list_form_submit($form, &$form_state) {
+  try {
+    if (!batire_user_statistics_file_check_directory()) {
+      throw new Exception();
+    }
+    $filepath = batire_site_get_file_path('request_list');
+    if (file_exists($filepath)) {
+      file_delete($filepath);
+    }
+    $to = $form_state['values']['batire_user_statistics_date_to'];
+    $month = (int) substr($to, 5, 2);
+    $year = (int) substr($to, 0, 4);
+    $day = (int) substr($to, 8, 2);
+    $to = mktime(0, 0, 0, $month, $day + 1, $year);
+
+    $from = $form_state['values']['batire_user_statistics_date_from'];
+    $month = (int) substr($from, 5, 2);
+    $year = (int) substr($from, 0, 4);
+    $day = (int) substr($from, 8, 2);
+    $from = mktime(0, 0, 0, $month, $day, $year);
+
+    $filter_data = array(
+      'user_filter' => $form_state['values']['batire_user_statistics_request_users_type_filter'],
+      'date_from_filter' => $from,
+      'date_to_filter' => $to,
+    );
+    $data = batire_user_statistics_application_request_list_get_data($filter_data);
+    if (empty($data)) {
+      throw new Exception();
+    }
+
+    $function = batire_site_get_generate_file_function(
+    'batire_user_statistics_application_request_list_generate_excel_file', 'batire_user_statistics_application_request_list_generate_csv_file'
+    );
+    if ($function($data, $filepath)) {
+      file_transfer($filepath, batire_site_get_file_headers('extraction_prospects'));
+    }
+    else {
+      throw new Exception();
+    }
+  }
+  catch (Exception $e) {
+    drupal_set_message(t('Data not found'));
+    drupal_goto('admin/batire-site/users/statistics/statistics-application/requests-list');
+  }
+}
+
+/**
+ * Get human readable node type
+ * @param $node
+ * @return Type
+ */
+function _batire_user_statistics_get_node_sources($node) {
+  $type = $node->type;
+  if (_batire_site_is_document($type)) {
+    $types = batire_site_get_document_types_list('name');
+
+    // define doc type
+    foreach ($node->taxonomy as $term) {
+      if ($term->vid == BATIRE_SITE_VID_DOC_TYPE) {
+        $doc_type = $term->name;
+        break;
+      }
+    }
+
+    // define additional info
+    switch ($type) {
+      case BATIRE_SITE_CT_CODE:
+        $vid = BATIRE_SITE_VID_CODES;
+        break;
+      case BATIRE_SITE_CT_TO:
+        $vid = BATIRE_SITE_VID_TO;
+        break;
+      case BATIRE_SITE_CT_TN:
+        $vid = BATIRE_SITE_VID_NORMATIF;
+        break;
+      case BATIRE_SITE_CT_FM:
+        $vid = BATIRE_SITE_VID_FM;
+        break;
+      case BATIRE_SITE_CT_LIVRE:
+        $vid = BATIRE_SITE_VID_LIVRES;
+        break;
+      case BATIRE_SITE_CT_COMP_TECH:
+        $vid = BATIRE_SITE_VID_TYPE_CT;
+        break;
+      case BATIRE_SITE_CT_ACTUALITE:
+        $vid = BATIRE_SITE_VID_SUPPORT;
+        break;
+    }
+
+    if (isset($vid)) {
+      foreach ($node->taxonomy as $term) {
+        if ($term->vid == $vid) {
+          $additional = $term->name;
+          break;
+        }
+      }
+    }
+
+    $return['doc_type'] = isset($doc_type) ? $doc_type : $types[$type];
+    $return['source'] = isset($additional) ? $additional : '';
+    return $return;
+  }
+  else {
+    $return['doc_type'] = '';
+    $return['source'] = '';
+    return $return;
+  }
+}
+
+/**
+ * Get document title including additional info
+ * @param $node
+ * @return string
+ */
+function _batire_user_statistics_get_document_date($node) {
+  $date = '';
+  switch ($node->type) {
+    case BATIRE_SITE_CT_CODE:
+      if (!empty($node->field_juri_date[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_juri_date[0]['value'], 'd/m/Y');
+      }
+      break;
+
+    case BATIRE_SITE_CT_TO:
+      $article_of_toc = isset($node->page_data['persistent']['super_bid']);
+      // https://prj.adyax.com/issues/79036
+      if($article_of_toc && $node->page_data['origine'] == 'LEGI') {
+        $article_of_toc = FALSE;
+      }
+      if (!empty($node->page_data['etat'])) {
+        $date = _batire_site_prepare_consolidation_date(
+          $node->field_juri_date[0]['value'],
+          $node,
+          $node->page_data['etat'],
+          $article_of_toc
+        );
+      }
+      break;
+
+    case BATIRE_SITE_CT_TN:
+      if (!empty($node->field_tn_date_pub[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_tn_date_pub[0]['value'], 'd/m/Y');
+      }
+      break;
+
+    case BATIRE_SITE_CT_FM:
+      if (!empty($node->field_date_update[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_date_update[0]['value'], 'F Y');
+      }
+      break;
+
+    case BATIRE_SITE_CT_LIVRE:
+      if (!empty($node->field_date_pub[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_date_pub[0]['value'], 'F Y');
+      }
+      break;
+
+    case BATIRE_SITE_CT_COMP_TECH:
+      if (!empty($node->field_release_date[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_release_date[0]['value'], 'F Y');
+      }
+      break;
+
+    case BATIRE_SITE_CT_ACTUALITE:
+      if (!empty($node->field_release_date[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_release_date[0]['value'], 'F Y');
+      }
+      break;
+
+    case BATIRE_SITE_CT_DOC_PRAT:
+      if (!empty($node->field_dp_date_pub[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_dp_date_pub[0]['value'], 'Y');
+      }
+      break;
+  }
+  return $date;
+}
+
+/**
+ * Update history records with additional fields.
+ */
+function _batire_user_statistics_update_history($ids) {
+  foreach ($ids as $id) {
+    $keys = array('_id' => $id['_id']);
+    $mongo_record = mongodb_select(MONGODB_USER_HISTORY_COLLECTION, $keys, array());
+    if (count($mongo_record)) {
+      $history_record = array_shift($mongo_record);
+      $node = node_load($history_record['nid']);
+      $sources = _batire_user_statistics_get_node_sources($node);
+      $date_publication = _batire_user_statistics_get_document_date($node);
+      $history_record['title'] = $node->title;
+      $history_record['doc_type'] = $sources['doc_type'];
+      $history_record['source'] = $sources['source'];
+      $history_record['date_publication'] = $date_publication;
+      mongodb_update(MONGODB_USER_HISTORY_COLLECTION, $keys, $history_record);
+    }
+  }
+}
+
+
+function batire_user_statistics_get_file_headers ($file_name, $file_type) {
+  //Now it's only for CSV format
+  $headers = array(
+        'Content-Type: application/csv'
+  );
+  $headers[] = 'Content-disposition: attachment; filename=' . $file_name . '.' . $file_type;
+  return $headers;
+}

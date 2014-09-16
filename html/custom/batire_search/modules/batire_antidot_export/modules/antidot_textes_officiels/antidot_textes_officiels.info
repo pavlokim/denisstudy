@@ -1,0 +1,7 @@
+; $Id$
+name = Batire Antidot Textes Officiels
+description = Helper for Textes Officiels nodes
+dependencies[] = batire_antidot_export
+package = Batire
+core = 6.x
+version = "6.x-1"

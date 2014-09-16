@@ -1,0 +1,26 @@
+<?php
+function antidot_textes_officiels_antidot_info() {
+  return array(
+    BATIRE_SITE_CT_TO => 'antidot_textes_officiels'
+  );
+}
+
+function antidot_textes_officiels_xml_preprocess($node, &$data) {
+  $data->nor_num     = $node->field_number_nor[0]['value'];
+  $data->numero_ref  = $node->page_data['num_art'];
+  $data->fondamental = $node->field_document_fundamental[0]['value'];
+
+  $data->date_sign   = date_format_date(date_make_date($node->page_data['date_texte'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+  $data->date_pub    = date_format_date(date_make_date($node->page_data['date_publi'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+
+  foreach ($node->taxonomy as $term) {
+    if ($term->vid == BATIRE_SITE_VID_TO) {
+      $data->type_source_off = array('name' => $term->name, 'id' => $term->tid, 'priorite' => $term->weight);
+      break;
+    }
+  }
+
+  if (isset($node->field_cites[0]['value'])) {
+    $data->cites = $node->field_cites;
+  }
+}

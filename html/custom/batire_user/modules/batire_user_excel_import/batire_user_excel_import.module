@@ -1,0 +1,764 @@
+<?php
+
+define('BATIRE_EXCEL_UI_ABO_COL_INDEX', variable_get('batire_excel_ui_abo_col_index', 'D'));
+define('BATIRE_EXCEL_UI_SVC_ID_COL_INDEX', variable_get('batire_excel_ui_svc_id_col_index', 'E'));
+define('BATIRE_EXCEL_UI_USER_TYPE_COL_INDEX', variable_get('batire_excel_ui_user_type_col_index', 'F'));
+
+define('BATIRE_EXCEL_UI_MAIL_FROM', variable_get('batire_excel_ui_mail_from', 'kheox@groupemoniteur.fr'));
+define('BATIRE_EXCEL_UI_MAIL_REPLY', variable_get('batire_excel_ui_mail_reply', 'reply@groupemoniteur.fr'));
+
+define('BATIRE_EXCEL_UI_BATCH_LIMIT', 10);
+
+define('BATIRE_EXCEL_UI_LOG_FILE', file_directory_path() . '/excel_ui.log');
+
+define('BATIRE_EXCEL_UI_STATS_FILE', file_directory_path() . '/excel_ui_stats.xls');
+
+define('BATIRE_EXCEL_UI_IMPORT_USER', 1);
+define('BATIRE_EXCEL_UI_UPDATE_USER_TYPE', 2);
+
+require_once './sites/all/libraries/phpexcel/PHPExcel.php';
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_user_excel_import_menu() {
+  $items = array();
+
+  $items['admin/batire-site/users/import'] = array(
+    'title' => t('Excel import'),
+    'access arguments' => array('administer batire configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_excel_import_form'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/batire-site/users/update-type'] = array(
+    'title' => t('Update user type'),
+    'access arguments' => array('administer batire configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_excel_update_user_type_form'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['batire_user/one_time_login/%'] = array(
+    'title' => t('One time user login'),
+    'access arguments' => array('access content'),
+    'page callback' => 'batire_user_excel_import_login',
+    'page arguments' => array(2),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Import form definition.
+ */
+function batire_user_excel_import_form(&$form_state) {
+  $form['#attributes'] = array('enctype' => 'multipart/form-data');
+  if (file_exists(BATIRE_EXCEL_UI_LOG_FILE)) {
+    $form['log_file'] = array(
+      '#value' => '<p>' . t('Last import log file is available !link.', array('!link' => l('here', BATIRE_EXCEL_UI_LOG_FILE))) . '</p>',
+      '#type' => 'markup',
+    );
+  }
+  if (file_exists(BATIRE_EXCEL_UI_STATS_FILE)) {
+    $form['stats_file'] = array(
+      '#value' => '<p>' . t('Users login log file is available !link.', array('!link' => l('here', BATIRE_EXCEL_UI_STATS_FILE))) . '</p>',
+      '#type' => 'markup',
+    );
+  }
+  $form['excel_file'] = array(
+    '#type' => 'file',
+    '#title' => t('Excel file'),
+    '#description' => t('Excel file containing users data'),
+  );
+  $form['ignore_first_line'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Ignore first row of file'),
+    '#default_value' => TRUE,
+  );
+  $form['with_email_sending'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('With email sending'),
+    '#default_value' => FALSE,
+  );
+  $form['abo_col'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Abonnement column'),
+    '#description' => t('Abonnement column index (A, B, C, etc.)'),
+    '#default_value' => BATIRE_EXCEL_UI_ABO_COL_INDEX,
+  );
+  $form['svc_id_col'] = array(
+    '#type' => 'textfield',
+    '#title' => t('SVC ID column'),
+    '#description' => t('SVC ID column index (A, B, C, etc.)'),
+    '#default_value' => BATIRE_EXCEL_UI_SVC_ID_COL_INDEX,
+  );
+  $form['import_mail_from'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Mail From address'),
+    '#default_value' => BATIRE_EXCEL_UI_MAIL_FROM,
+  );
+  $form['import_mail_reply'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Mail Reply-to address'),
+    '#default_value' => BATIRE_EXCEL_UI_MAIL_REPLY,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Import'),
+  );
+  return $form;
+}
+
+/**
+ * Import form submit handler.
+ */
+function batire_user_excel_import_form_submit($form, &$form_state) {
+  variable_set('batire_excel_ui_abo_col_index', $form_state['values']['abo_col']);
+  variable_set('batire_excel_ui_svc_id_col_index', $form_state['values']['svc_id_col']);
+  variable_set('batire_excel_ui_mail_from', $form_state['values']['import_mail_from']);
+  variable_set('batire_excel_ui_mail_reply', $form_state['values']['import_mail_reply']);
+
+  $limits = array(
+    'extensions' => 'xls xlsx',
+  );
+
+  $validators = array(
+    '_batire_user_excel_import_file_validate_extensions' => array($limits['extensions']),
+  );
+
+  if ($file = file_save_upload('excel_file', $validators, file_directory_path(), FILE_EXISTS_REPLACE)) {
+    $input_file_type = PHPExcel_IOFactory::identify($file->filepath);
+    $obj_reader = PHPExcel_IOFactory::createReader($input_file_type);
+    $obj_php_excel = $obj_reader->load($file->filepath);
+    $sheet_data = $obj_php_excel->getActiveSheet();
+    // Turn off SVC debug as it may cause memory errors
+    $svc_debug_state = variable_get('batire_svc_debug', 0);
+    variable_set('batire_svc_debug', 0);
+    batire_user_excel_import_batch($sheet_data, $form_state['values']['ignore_first_line'], $form_state['values']['with_email_sending']);
+    variable_set('batire_svc_debug', $svc_debug_state);
+  }
+}
+
+/**
+ * Batch process description and initalization.
+ */
+function batire_user_excel_import_batch($sheet_data, $ignore_first, $with_email_sending) {
+  $batch = array(
+    'operations' => array(
+      array('batire_user_excel_import_batch_process', array($sheet_data, $ignore_first, $with_email_sending)),
+    ),
+    'finished' => 'batire_user_excel_import_batch_finished',
+    'title' => t('Importing users'),
+    'init_message' => t('Starting to import.'),
+    'progress_message' => t('Processed @current out of @total.'),
+    'error_message' => t('Import process has encountered an error.'),
+  );
+  batch_set($batch);
+  $old_theme = variable_get('maintenance_theme', 'batire_admin');
+  variable_set('maintenance_theme', 'batire');
+  batch_process();
+  variable_set('maintenance_theme', $old_theme);
+}
+
+
+/**
+ * Batch processing function callback.
+ */
+function batire_user_excel_import_batch_process($sheet_data, $ignore_first, $with_email_sending, &$context) {
+  $max = $sheet_data->getHighestRow();
+
+  if (!isset($context['sandbox']['progress'])) {
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['current_number'] = 1;
+    $context['sandbox']['max'] = $max;
+
+    if ($ignore_first) {
+      $context['sandbox']['progress']++;
+      $context['sandbox']['current_number']++;
+    }
+    $log_file = fopen(BATIRE_EXCEL_UI_LOG_FILE, 'w');
+    $time = date('Y-m-d H:i:s');
+    fwrite($log_file, "\n$time: Starting new import\n");
+  }
+  else {
+    $log_file = fopen(BATIRE_EXCEL_UI_LOG_FILE, 'a');
+  }
+  $begin = $context['sandbox']['current_number'];
+  for ($i = $begin; (($i < $begin + BATIRE_EXCEL_UI_BATCH_LIMIT) && ($i <= $max)); $i++) {
+    $message = batire_user_excel_import_single_user($sheet_data, $i, $with_email_sending);
+    if (!empty($message)) {
+      $time = date('Y-m-d H:i:s');
+      fwrite($log_file, "$time: $message\n");
+      $context['results']['items'][] = $i;
+    }
+
+    $context['sandbox']['progress']++;
+    $context['sandbox']['current_number'] = $i;
+    $context['message'] = t('Now processing %number of %max', array('%number' => $i, '%max' => $max));
+  }
+  $context['sandbox']['current_number'] = $begin + BATIRE_EXCEL_UI_BATCH_LIMIT;
+
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+
+  fclose($log_file);
+}
+
+/**
+ * Batch 'finished' callback.
+ */
+function batire_user_excel_import_batch_finished($success, $results, $operations) {
+  if ($success) {
+    $message = count($results['items']) .' processed.';
+    drupal_set_message($message);
+  }
+  else {
+    $error_operation = reset($operations);
+    $message = t('An error occurred while processing %error_operation with arguments: @arguments', array('%error_operation' => $error_operation[0], '@arguments' => print_r($error_operation[1], TRUE)));
+    drupal_set_message($message);
+  }
+}
+
+/**
+ * Imports one user taking one row from excel sheet.
+ *
+ * @param type $sheet_data Excel sheet which contains user data.
+ * @param type $row_index Row index to select data from.
+ */
+function batire_user_excel_import_single_user($sheet_data, $row_index, $with_email_sending) {
+  $abo_col_index = PHPExcel_Cell::columnIndexFromString(BATIRE_EXCEL_UI_ABO_COL_INDEX);
+  $svc_id_col_index = PHPExcel_Cell::columnIndexFromString(BATIRE_EXCEL_UI_SVC_ID_COL_INDEX);
+  $abo = $sheet_data->getCellByColumnAndRow($abo_col_index - 1, $row_index)->getValue();
+  $svc_id = $sheet_data->getCellByColumnAndRow($svc_id_col_index - 1, $row_index)->getValue();
+
+  if (empty($abo) || empty($svc_id)) {
+    return;
+  }
+
+  // Skip import if abonnement number is already used by some user(s)
+  /*$uids = _cp_abonnement_is_used($abo, FALSE);
+  $usages = count($uids);
+  if ($usages > 1) {
+    return t('ERROR: Abonnement number @number is already used by @count users', array('@number' => $abo, '@count' => $usages));
+  }
+  elseif ($usages == 1) {
+    $abo_user = user_load(array_shift($uids));
+    if ($abo_user->svc_id != $svc_id) {
+      return t('ERROR: Abonnement number @number is already used by user @uid', array('@number' => $abo, '@uid' => $abo_user->uid));
+    }
+  }*/
+  // Check SVC ID for existance in SVC
+  $svc_user_data = batire_svc_get_user_data($svc_id);
+  if (!$svc_user_data['error']) {
+    // Check abonnement number
+    $abo_validate = batire_svc_validate_abon_num($abo);
+    if (!$abo_validate['error']) {
+      // All seems ok, so proceed with user registration
+      $abo_cnt = batire_svc_get_number_of_accounts_by_product($abo);
+      if (!$abo_cnt['error']) {
+        if ($abo_cnt['count'] > 1) {
+          $roles = array(BATIRE_USER_MULTIADMIN => BATIRE_USER_MULTIADMIN);
+        }
+        else {
+          $roles = array(BATIRE_USER_MONOPOST => BATIRE_USER_MONOPOST);
+        }
+      }
+      else {
+        // Error while parsing abo info
+        return t('ERROR: Cound not get posts count for abonnement @number', array('@number' => $abo));
+      }
+      $abo_info = batire_svc_get_abonnement_info($abo);
+      if (!$abo_info['error']) {
+        $abo_info = _batire_svc_unpack_abonnement_info($abo_info['abonnement_info']);
+      }
+      else {
+        // Error while parsing abo info
+        return t('ERROR: Error while parsing abonnement @number info', array('@number' => $abo));
+      }
+      $svc_user_data = _batire_svc_unpack_profile($svc_user_data['data']);
+      $abon_type = _batire_user_is_abbo_free($abo) ? BATIRE_USER_FREEACCOUNT : BATIRE_USER_PAIDACCOUNT;
+      // User with current SVC ID might exist in Drupal already, so check this
+      $drupal_user = user_load(array('name' => $svc_id));
+      if ($drupal_user) {
+        $user_account = batire_user_profile_load($drupal_user->uid, TRUE);
+
+        // Remove all subaccs
+        /*foreach ($user_account->field_abon_subaccounts as $subaccount) {
+          if ($subaccount['uid']) {
+            user_delete(array(), $subaccount['uid']);
+          }
+        }
+        $user_account->field_abon_subaccounts = array(array('nid' => ''));
+        _cp_user_docs_clean_lost_annotations($drupal_user->uid);*/
+        // Update abo number
+        $drupal_user->abo_num = $abo;
+        $user_account->field_user_abon_list = array(array('value' => $abo));
+        $user_account->field_user_abon_num = array(array('value' => $abo));
+        // Update dates
+        $user_account->field_user_dates = _batire_abonnement_create_dates(BATIRE_USER_PAIDACCOUNT,
+          REQUEST_TIME,
+          isset($abo_info) ? $abo_info : NULL
+        );
+
+        // Update user products and convert his multipost/monopost
+        if (isset($roles[BATIRE_USER_MULTIADMIN])) {
+          unset($drupal_user->roles[BATIRE_USER_MONOPOST]);
+          $drupal_user->roles[BATIRE_USER_MULTIADMIN] = BATIRE_USER_MULTIADMIN;
+          // Update profile - set posts count and update products
+          $user_account->field_user_posts_count[0]['value'] = $abo_cnt['count'];
+          $user_account->taxonomy = array(BATIRE_USER_ROLES_MULTI);
+          // If user was monopost - convert him to multipost
+          /*if (isset($drupal_user->roles[BATIRE_USER_MONOPOST]) && $drupal_user->roles[BATIRE_USER_MONOPOST]) {
+            // Update user - set new role
+            unset($drupal_user->roles[BATIRE_USER_MONOPOST]);
+            $drupal_user->roles[BATIRE_USER_MULTIADMIN] = BATIRE_USER_MULTIADMIN;
+            // Update profile - set posts count and update products
+            $user_account->field_user_posts_count[0]['value'] = $abo_cnt['count'];
+            $user_account->taxonomy = array(BATIRE_USER_ROLES_MULTI);
+          }
+          // If user was multipost - update products in case when new posts count will be bigger than existing
+          elseif (
+            (isset($drupal_user->roles[BATIRE_USER_MULTIADMIN]) && $drupal_user->roles[BATIRE_USER_MULTIADMIN]) ||
+            (isset($drupal_user->roles[BATIRE_USER_SUBACCOUNT]) && $drupal_user->roles[BATIRE_USER_SUBACCOUNT])
+          ) {
+            // Update user - set new role
+            unset($drupal_user->roles[BATIRE_USER_SUBACCOUNT]);
+            $drupal_user->roles[BATIRE_USER_MULTIADMIN] = BATIRE_USER_MULTIADMIN;
+            // Update profile - set posts count and update products
+            $user_account->field_user_posts_count[0]['value'] = $abo_cnt['count'];
+            $user_account->taxonomy = array(BATIRE_USER_ROLES_MULTI);
+          }*/
+        }
+        // If new user role is monopost
+        else {
+          unset($drupal_user->roles[BATIRE_USER_MULTIADMIN]);
+          unset($drupal_user->roles[BATIRE_USER_SUBACCOUNT]);
+          $drupal_user->roles[BATIRE_USER_MONOPOST] = BATIRE_USER_MONOPOST;
+          $user_account->taxonomy = array(BATIRE_USER_ROLES_MONO);
+        }
+        $link = batire_user_excel_import_generate_link($drupal_user);
+        user_save($drupal_user, (array)$drupal_user);
+        // Convert user to paid
+        $user_account->taxonomy[] = BATIRE_USER_TYPES_PAID;
+        node_save($user_account);
+
+        if ($with_email_sending == TRUE) {
+          // Send notification mail
+          $options = array(
+            'module'    => 'batire_user_excel_import',
+            'mailkey'   => 'batire_user_excel_import_new_user',
+            'recipient' => $drupal_user->mail,
+            'subject'   => '',
+            'data'      => array(
+              'prenom-utilisateur' => $svc_user_data['name'],
+              'nom-utilisateur' => $svc_user_data['surname'],
+              'login-utilisateur' => $svc_user_data['login'],
+              'password-utilisateur' => $svc_user_data['pass'],
+              'login-link-utilisateur' => $link,
+            ),
+            'plaintext' => FALSE,
+            'headers' => array(
+              'Reply-to' => BATIRE_EXCEL_UI_MAIL_REPLY,
+            ),
+          );
+          batire_site_send_mail($options, BATIRE_EXCEL_UI_MAIL_FROM);
+        }
+        
+        return t('INFO: Updated user with SVC ID @svc_id, UID @uid', array('@svc_id' => $svc_id, '@uid' => $drupal_user->uid));
+      }
+      else {
+        // Create new user
+        $drupal_user = array();
+        $drupal_user['name'] = $svc_id;
+        $drupal_user['mail'] = $svc_user_data['mail'];
+        $drupal_user['pass'] = $svc_user_data['pass'];
+        $drupal_user['status'] = 1;
+        $drupal_user['svc_login'] = $svc_user_data['login'];
+        $drupal_user['roles'] = $roles;
+        $drupal_user['abo_num'] = $abo;
+        $drupal_user = user_save(NULL, $drupal_user);
+
+        $link = batire_user_excel_import_generate_link($drupal_user, TRUE);
+
+        $user_account = new stdClass();
+        $user_account->is_new = TRUE;
+        $user_account->title = _batire_user_get_user_profile_title($drupal_user);
+        $user_account->type = BATIRE_USER_PROFILE;
+        $user_account->uid = $drupal_user->uid;
+        $user_account->taxonomy = array(isset($roles[BATIRE_USER_MULTIADMIN]) ? BATIRE_USER_ROLES_MULTI : BATIRE_USER_ROLES_MONO);
+        $user_account->taxonomy[] = ($abon_type == BATIRE_USER_PAIDACCOUNT ? BATIRE_USER_TYPES_PAID : BATIRE_USER_TYPES_FREE);
+        $user_account->field_user_dates = _batire_abonnement_create_dates($abon_type,
+          REQUEST_TIME,
+          isset($abo_info) ? $abo_info : NULL
+        );
+        $user_account->field_user_salut[0]['value'] = $svc_user_data['salutation'];
+        $user_account->field_user_abon_list[0]['value'] = $abo;
+        $user_account->field_user_abon_num[0]['value'] = $abo;
+        $user_account->field_user_name[0]['value'] = $svc_user_data['name'];
+        $user_account->field_user_surname[0]['value'] = $svc_user_data['surname'];
+        $user_account->field_user_posts_count[0]['value'] = $abo_cnt['count'];
+        $user_account->field_user_company[0]['value'] = $svc_user_data['company_name'];
+        $user_account->field_user_specialty[0]['value'] = $svc_user_data['function'];
+        $user_account->field_user_fax[0]['value'] = $svc_user_data['fax'];
+        $user_account->field_user_tel_1[0]['value'] = $svc_user_data['tel_1'];
+        $user_account->field_user_tel_2[0]['value'] = $svc_user_data['tel_2'];
+        $user_account->field_user_address_1[0]['value'] = $svc_user_data['address_1'];
+        $user_account->field_user_address_2[0]['value'] = $svc_user_data['address_2'];
+        $user_account->field_user_zip[0]['value'] = $svc_user_data['post_code'];
+        $user_account->field_user_city[0]['value'] = $svc_user_data['city'];
+        $user_account->field_user_country[0]['value'] = $svc_user_data['country'];
+        $user_account->field_user_opt_1[0]['value'] = $svc_user_data['opt_1'];
+        $user_account->field_user_opt_2[0]['value'] = $svc_user_data['opt_2'];
+        node_save($user_account);
+
+        if ($with_email_sending == TRUE) {
+          // Send notification mail
+          $options = array(
+            'module'    => 'batire_user_excel_import',
+            'mailkey'   => 'batire_user_excel_import_new_user',
+            'recipient' => $svc_user_data['mail'],
+            'subject'   => '',
+            'data'      => array(
+              'prenom-utilisateur' => $svc_user_data['name'],
+              'nom-utilisateur' => $svc_user_data['surname'],
+              'login-utilisateur' => $svc_user_data['login'],
+              'password-utilisateur' => $svc_user_data['pass'],
+              'login-link-utilisateur' => $link,
+            ),
+            'plaintext' => FALSE,
+            'headers' => array(
+              'Reply-to' => BATIRE_EXCEL_UI_MAIL_REPLY,
+            ),
+          );
+          batire_site_send_mail($options, BATIRE_EXCEL_UI_MAIL_FROM);
+        }
+        
+        return t('INFO: Created user with SVC ID @svc_id, UID @uid', array('@svc_id' => $svc_id, '@uid' => $drupal_user->uid));
+      }
+    }
+    else {
+      // Abonnement number does not exist or is not valid
+      return t('ERROR: Abonnement @number does not exist or is not valid', array('@number' => $abo));
+    }
+  }
+  else {
+    // Could not get user data by given SVC ID
+    return t('ERROR: Could not get user data for SVC ID @svc_id', array('@svc_id' => $svc_id));
+  }
+}
+
+/**
+ * Check that the filename ends with an allowed extension. This check is also
+ * enforced for the user #1.
+ *
+ * @param $file
+ *   A Drupal file object.
+ * @param $extensions
+ *   A string with a space separated
+ * @return
+ *   An array. If the file extension is not allowed, it will contain an error message.
+ */
+function _batire_user_excel_import_file_validate_extensions($file, $extensions) {
+  global $user;
+
+  $errors = array();
+
+  $regex = '/\.('. ereg_replace(' +', '|', preg_quote($extensions)) .')$/i';
+  if (!preg_match($regex, $file->filename)) {
+    $errors[] = t('Only files with the following extensions are allowed: %files-allowed.', array('%files-allowed' => $extensions));
+  }
+
+  return $errors;
+}
+
+/**
+ * Generate one time login link
+ */
+function batire_user_excel_import_generate_link(&$user, $save = FALSE) {
+  $user->allow_one_time_login = TRUE;
+  if ($save) {
+    user_save($user, (array)$user);
+  }
+  return url('batire_user/one_time_login/' . md5($user->uid . $user->name), array('absolute' => TRUE));
+}
+
+/**
+ * One time login link handler
+ */
+function batire_user_excel_import_login($hash) {
+  global $user;
+  $query = "SELECT uid FROM {users} u WHERE md5(concat(u.uid, u.name)) = '%s'";
+  $result = db_query($query, $hash);
+  $uid = db_result($result);
+  if ($uid) {
+    $user_to_login = user_load($uid);
+    if (isset($user_to_login->allow_one_time_login) && $user_to_login->allow_one_time_login) {
+      user_save($user_to_login, array('allow_one_time_login' => NULL));
+      if (!empty($user_to_login->name) && !empty($user_to_login->pass) && $user_to_login) {
+        $auth['name'] = $user_to_login->name;
+        $auth['pass'] = $user_to_login->pass;
+        $user = $user_to_login;
+        user_authenticate_finalize($auth);
+        _batire_user_excel_import_log_login($uid);
+      }
+    }
+  }
+  drupal_goto($front_page);
+}
+
+/**
+ * Log user login to excel file.
+ *
+ * @param type $uid
+ */
+function _batire_user_excel_import_log_login($uid) {
+  $user = user_load($uid);
+  $user_profile = batire_user_profile_load($uid);
+
+  if (file_exists(BATIRE_EXCEL_UI_STATS_FILE)) {
+    $excel_reader = PHPExcel_IOFactory::createReader('Excel5');
+    $excel_object = $excel_reader->load(BATIRE_EXCEL_UI_STATS_FILE);
+    $excel_object->setActiveSheetIndex(0);
+    $sheet_data = $excel_object->getActiveSheet();
+  }
+  else {
+    $excel_object = new PHPExcel();
+    $excel_object->setActiveSheetIndex(0);
+    $sheet_data = $excel_object->getActiveSheet();
+    $sheet_data->setCellValueByColumnAndRow(0, 1, t('Prenom'));
+    $sheet_data->setCellValueByColumnAndRow(1, 1, t('Nom'));
+    $sheet_data->setCellValueByColumnAndRow(2, 1, t('SVC ID'));
+    $sheet_data->setCellValueByColumnAndRow(3, 1, t('Date'));
+  }
+  $max = $sheet_data->getHighestRow() + 1;
+  $sheet_data->setCellValueByColumnAndRow(0, $max, $user_profile->field_user_name[0]['value']);
+  $sheet_data->setCellValueByColumnAndRow(1, $max, $user_profile->field_user_surname[0]['value']);
+  $sheet_data->setCellValueByColumnAndRow(2, $max, $user->name);
+  $sheet_data->setCellValueByColumnAndRow(3, $max, date('Y-m-d H:i:s'));
+
+  $excel_writer = PHPExcel_IOFactory::createWriter($excel_object, 'Excel5');
+  $excel_writer->save(BATIRE_EXCEL_UI_STATS_FILE);
+}
+
+/**
+ * Implementation of hook_mailkeys().
+ */
+function batire_user_excel_import_mailkeys() {
+  return array(
+    'batire_user_excel_import_new_user' => t('New user imported from excel file'),
+  );
+}
+
+/**
+ * Implements hook_tokens_list().
+ */
+function batire_user_excel_import_mail_edit_tokens_list($mailkey, $options = array()) {
+  $tokens = array();
+
+  $tokens['!site_name_uc'] = SITE_NAME_UC;
+  $tokens['!site_name_lc'] = SITE_NAME_LC;
+  $tokens['!site_name_fs'] = SITE_NAME_FS;
+
+  switch ($mailkey) {
+    case 'batire_user_excel_import_new_user':
+      $tokens['!prenom-utilisateur'] = t('Imported user name');
+      $tokens['!nom-utilisateur'] = t('Imported user surname');
+      $tokens['!login-utilisateur'] = t('Imported user login');
+      $tokens['!password-utilisateur'] = t('Imported user password');
+      $tokens['!login-link-utilisateur'] = t('Imported user one time login link');
+      break;
+  }
+  return $tokens;
+}
+
+/**
+ * Implementation of hook_mail_edit_tokens_value().
+ * @param $mailkey
+ * @param $mail
+ */
+function batire_user_excel_import_mail_edit_tokens_value($mailkey, $mail) {
+  $tokens = array();
+
+  $tokens['!site_name_uc'] = SITE_NAME_UC;
+  $tokens['!site_name_lc'] = SITE_NAME_LC;
+  $tokens['!site_name_fs'] = SITE_NAME_FS;
+
+  switch ($mailkey) {
+    case 'batire_user_excel_import_new_user':
+      $tokens['!prenom-utilisateur'] = $mail['params']['data']['prenom-utilisateur'];
+      $tokens['!nom-utilisateur'] = $mail['params']['data']['nom-utilisateur'];
+      $tokens['!login-utilisateur'] = $mail['params']['data']['login-utilisateur'];
+      $tokens['!password-utilisateur'] = $mail['params']['data']['password-utilisateur'];
+      $tokens['!login-link-utilisateur'] = $mail['params']['data']['login-link-utilisateur'];
+      break;
+  }
+  return $tokens;
+}
+
+/**
+ * Update user type form.
+ */
+function batire_user_excel_update_user_type_form(&$form_state) {
+  $form['#attributes'] = array('enctype' => 'multipart/form-data');
+  if (file_exists(BATIRE_EXCEL_UI_LOG_FILE)) {
+    $form['log_file'] = array(
+      '#value' => '<p>' . t('Last import log file is available !link.', array('!link' => l('here', BATIRE_EXCEL_UI_LOG_FILE))) . '</p>',
+      '#type' => 'markup',
+    );
+  }
+  if (file_exists(BATIRE_EXCEL_UI_STATS_FILE)) {
+    $form['stats_file'] = array(
+      '#value' => '<p>' . t('Users login log file is available !link.', array('!link' => l('here', BATIRE_EXCEL_UI_STATS_FILE))) . '</p>',
+      '#type' => 'markup',
+    );
+  }
+  $form['excel_file'] = array(
+    '#type' => 'file',
+    '#title' => t('Excel file'),
+    '#description' => t('Excel file containing users data'),
+  );
+  $form['ignore_first_line'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Ignore first row of file'),
+    '#default_value' => TRUE,
+  );
+  $form['abo_col'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Abonnement column'),
+    '#description' => t('Abonnement column index (A, B, C, etc.)'),
+    '#default_value' => BATIRE_EXCEL_UI_ABO_COL_INDEX,
+  );
+  $form['svc_id_col'] = array(
+    '#type' => 'textfield',
+    '#title' => t('SVC ID column'),
+    '#description' => t('SVC ID column index (A, B, C, etc.)'),
+    '#default_value' => BATIRE_EXCEL_UI_SVC_ID_COL_INDEX,
+  );
+  $form['user_type_col'] = array(
+    '#type' => 'textfield',
+    '#title' => t('USER TYPE column'),
+    '#description' => t('USER TYPE column index (A, B, C, etc.)'),
+    '#default_value' => BATIRE_EXCEL_UI_USER_TYPE_COL_INDEX,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Import'),
+  );
+  return $form;
+}
+
+/**
+ * Update user type form submit handler.
+ */
+function batire_user_excel_update_user_type_form_submit($form, &$form_state) {
+  variable_set('batire_excel_ui_abo_col_index', $form_state['values']['abo_col']);
+  variable_set('batire_excel_ui_svc_id_col_index', $form_state['values']['svc_id_col']);
+  variable_set('batire_excel_ui_user_type_col_index', $form_state['values']['user_type_col']);
+
+  $limits = array(
+    'extensions' => 'xls xlsx',
+  );
+
+  $validators = array(
+    '_batire_user_excel_import_file_validate_extensions' => array($limits['extensions']),
+  );
+
+  if ($file = file_save_upload('excel_file', $validators, file_directory_path(), FILE_EXISTS_REPLACE)) {
+    $input_file_type = PHPExcel_IOFactory::identify($file->filepath);
+    $obj_reader = PHPExcel_IOFactory::createReader($input_file_type);
+    $obj_php_excel = $obj_reader->load($file->filepath);
+    $sheet_data = $obj_php_excel->getActiveSheet();
+    // Turn off SVC debug as it may cause memory errors
+    $svc_debug_state = variable_get('batire_svc_debug', 0);
+    variable_set('batire_svc_debug', 0);
+    batire_user_update_type_excel_import_batch($sheet_data, $form_state['values']['ignore_first_line']);
+    variable_set('batire_svc_debug', $svc_debug_state);
+  }
+}
+
+/**
+ * Batch process description and initalization.
+ */
+function batire_user_update_type_excel_import_batch($sheet_data, $ignore_first) {
+  $batch = array(
+    'operations' => array(
+      array('batire_user_excel_import_batch_process', array($sheet_data, $ignore_first, FALSE, BATIRE_EXCEL_UI_UPDATE_USER_TYPE)),
+    ),
+    'finished' => 'batire_user_excel_import_batch_finished',
+    'title' => t('Update users type'),
+    'init_message' => t('Starting to import.'),
+    'progress_message' => t('Processed @current out of @total.'),
+    'error_message' => t('Import process has encountered an error.'),
+  );
+  batch_set($batch);
+  $old_theme = variable_get('maintenance_theme', 'batire_admin');
+  variable_set('maintenance_theme', 'batire');
+  batch_process();
+  variable_set('maintenance_theme', $old_theme);
+}
+
+/**
+ * Imports one user taking one row from excel sheet.
+ *
+ * @param type $sheet_data Excel sheet which contains user data.
+ * @param type $row_index Row index to select data from.
+ */
+function batire_user_excel_update_type_single_user($sheet_data, $row_index) {
+  $abo_col_index = PHPExcel_Cell::columnIndexFromString(BATIRE_EXCEL_UI_ABO_COL_INDEX);
+  $svc_id_col_index = PHPExcel_Cell::columnIndexFromString(BATIRE_EXCEL_UI_SVC_ID_COL_INDEX);
+  $user_type_col_index = PHPExcel_Cell::columnIndexFromString(BATIRE_EXCEL_UI_USER_TYPE_COL_INDEX);
+  $abo = $sheet_data->getCellByColumnAndRow($abo_col_index - 1, $row_index)->getValue();
+  $svc_id = $sheet_data->getCellByColumnAndRow($svc_id_col_index - 1, $row_index)->getValue();
+  $user_type = $sheet_data->getCellByColumnAndRow($user_type_col_index - 1, $row_index)->getValue();
+
+  if (empty($abo) || empty($svc_id)) {
+    return;
+  }
+
+  // Check SVC ID for existance in SVC
+  $svc_user_data = batire_svc_get_user_data($svc_id);
+  if (!$svc_user_data['error']) {
+    // Check abonnement number
+    $abo_validate = batire_svc_validate_abon_num($abo);
+    if (!$abo_validate['error']) {
+      // All seems ok, so proceed with user registration
+      $abo_cnt = batire_svc_get_number_of_accounts_by_product($abo);
+      if ($abo_cnt['error']) {
+        // Error while parsing abo info
+        return t('ERROR: Cound not get posts count for abonnement @number', array('@number' => $abo));
+      }
+      $abo_info = batire_svc_get_abonnement_info($abo);
+      if ($abo_info['error']) {
+        // Error while parsing abo info
+        return t('ERROR: Error while parsing abonnement @number info', array('@number' => $abo));
+      }
+    }
+    else {
+      // Abonnement number does not exist or is not valid
+      return t('ERROR: Abonnement @number does not exist or is not valid', array('@number' => $abo));
+    }
+  }
+  else {
+    // Could not get user data by given SVC ID
+    return t('ERROR: Could not get user data for SVC ID @svc_id', array('@svc_id' => $svc_id));
+  }
+
+  // User with current SVC ID might exist in Drupal already, so check this
+  $drupal_user = user_load(array('name' => $svc_id));
+  if ($drupal_user) {
+    $user_account = batire_user_profile_load($drupal_user->uid, TRUE);
+    if(!$user_type) {
+      $user_type = '';
+    }
+    $user_account->field_user_origene[0]['value'] = $user_type;
+    node_save($user_account);
+
+    return t('INFO: Updated user with SVC ID @svc_id, UID @uid, USER TYPE @type', array('@svc_id' => $svc_id, '@uid' => $drupal_user->uid, '@type' => $user_type));
+  }
+  else {
+    // User does not exist or is not valid
+    return t('ERROR: User with abonnement @number does not exist or is not valid', array('@number' => $abo));
+  }
+}

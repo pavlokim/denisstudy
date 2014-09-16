@@ -1,0 +1,42 @@
+<?php
+
+define('BATIRE_GC_TRIAL_TN_HTTPAUTH_LOGIN', variable_get('batire_gc_trial_tn_httpauth_login', 'user'));
+define('BATIRE_GC_TRIAL_TN_HTTPAUTH_PASS', variable_get('batire_gc_trial_tn_httpauth_pass', 'pass'));
+define('BATIRE_GC_TRIAL_TN_HTTPAUTH_DISABLE', variable_get('batire_gc_trial_tn_httpauth_disable', 0));
+
+define('BATIRE_USER_TRIALTNACCOUNT', variable_get('batire_gc_trial_tn_role_id', 13));
+define('BATIRE_USER_TYPES_TRIALTN', variable_get('batire_gc_trial_tn_term_id', 32184));
+
+define('BATIRE_USER_REG_TYPE_TRIAL_TN', 5);
+
+/**
+ * Implementation of hook_boot().
+ */
+function batire_gc_trial_tn_boot() {
+  if (!BATIRE_GC_TRIAL_TN_HTTPAUTH_DISABLE && ($_GET['q'] == 'user/register/' . BATIRE_USER_REG_TYPE_TRIAL_TN || $_GET['q'] == 'client/inscription/gratuite-textes-normatifs')) {
+    if (!isset($_SERVER['PHP_AUTH_USER']) || !isset($_SERVER['PHP_AUTH_PW']) || $_SERVER['PHP_AUTH_USER'] != BATIRE_GC_TRIAL_TN_HTTPAUTH_LOGIN || $_SERVER['PHP_AUTH_PW'] != BATIRE_GC_TRIAL_TN_HTTPAUTH_PASS) {
+      header('WWW-Authenticate: Basic realm="Inscription à l\'offre d\'essai gratuite"');
+      header('HTTP/1.0 401 Unauthorized');
+      exit;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_gc_trial_tn_menu() {
+  $items = array();
+
+  $items['admin/batire-site/gc/afnor'] = array(
+    'title' => 'Afnor',
+    'description' => 'Trial TN module administrative settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_gc_trial_tn_admin_settings_form'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_gc_trial_tn.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}

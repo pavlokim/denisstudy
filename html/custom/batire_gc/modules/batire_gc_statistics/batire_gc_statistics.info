@@ -1,0 +1,7 @@
+; $Id: batire_gc_statistics.info
+name = Batire GC - Statistics
+description = "Batire Grand Comptes statistics support."
+package = Batire GC
+core = 6.x
+dependencies[] = batire_gc
+dependencies[] = batire_gc_commercial

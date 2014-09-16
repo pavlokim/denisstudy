@@ -1,0 +1,29 @@
+@CHARSET "UTF-8";
+.path-admin-cp-site span.icon {
+  background-position:-210px -30px !important;
+}
+
+.path-admin-cp-site-settings span.icon {
+  background-position:-30px -330px !important;
+}
+
+.path-admin-cp-site-statistics span.icon {
+  background-position:-120px -330px !important;
+}
+
+.path-admin-cp-site-menu span.icon {
+  background-position:-150px -30px !important;
+}
+
+.path-admin-cp-site-cgv span.icon,
+.path-admin-cp-site-faq span.icon {
+  background-position:0 -30px !important;
+}
+
+.path-admin-cp-site-users span.icon {
+  background-position:-210px -90px !important;
+}
+
+.path-admin-cp-site-cp_taxonomy_interface span.icon {
+  background-position:-60px -30px !important;
+}

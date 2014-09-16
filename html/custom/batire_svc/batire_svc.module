@@ -1,0 +1,155 @@
+<?php
+/**
+ * @file
+ * Provides SVC integration for the project
+ */
+
+
+/**
+ * ID of the appelant, which is required for each soap call
+ */
+define('BATIRE_SVC_APPELANT_ID',  variable_get('batire_svc_appelant', 'BAT'));
+
+/**
+ * ID of the product
+ */
+define('BATIRE_SVC_PRODUCT_ID', variable_get('batire_svc_product',  'BTC'));
+
+/**
+ * Path to wsdl
+ */
+define('BATIRE_SVC_WSDL', variable_get('batire_svc_wsdl', ''));
+
+/**
+ * Proxy settings
+ */
+define('BATIRE_SVC_PROXY_ADDR', variable_get('batire_svc_proxy_addr', ''));
+define('BATIRE_SVC_PROXY_PORT', variable_get('batire_svc_proxy_port', ''));
+
+/**
+ * Cache settings
+ */
+define('BATIRE_SVC_DISABLE_CACHE', variable_get('batire_svc_disable_cache', 0));
+
+/**
+ * Results interpretation
+ */
+define('BATIRE_SVC_SEARCH_NO_RESULT', 1);
+define('BATIRE_SVC_SEARCH_ERROR',     2);
+
+/**
+ * Error num for access codes validation, when they're exists
+ */
+define('BATIRE_SVC_VALIDATION_CDA_EXISTE', 2);
+
+/**
+ * For index purposes
+ */
+define('BATIRE_SVC', 'batire_svc');
+
+/**
+ * For logging purposes
+ */
+define('BATIRE_SVC_LOG', 'SVC');
+
+/**
+ * Should we collect debug info
+ */
+define('BATIRE_SVC_DEBUG', variable_get('batire_svc_debug', 0));
+
+/**
+ * Should we collect XML trace
+ */
+define('BATIRE_SVC_TRACE', variable_get('batire_svc_trace', 0));
+
+/**
+ * Helpers for the module
+ */
+module_load_include('inc', 'batire_svc', 'includes/batire_svc');
+/**
+ * All method calls will be stored there
+ */
+module_load_include('calls.inc', 'batire_svc', 'includes/batire_svc');
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_svc_menu() {
+
+  $items['admin/batire-site/settings/svc'] = array(
+    'title'             => 'SVC settings',
+    'page callback'     => 'drupal_get_form',
+    'page arguments'    => array('batire_svc_admin_settings'),
+    'type'              => MENU_LOCAL_TASK,
+    'access arguments'  => array('administer batire configuration'),
+    'file path'         => drupal_get_path('module', 'batire_svc') . '/includes',
+    'file'              => 'batire_svc.admin.inc'
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_requirements().
+ */
+function batire_svc_requirements($phase) {
+  if ($phase == 'runtime') {
+
+    $requirements = array();
+
+    $requirements['batire_svc']['title'] = t('SVC');
+
+    $client = _batire_svc_get_soap();
+    if ($client) {
+      $requirements['batire_svc']['severity'] = REQUIREMENT_OK;
+      $requirements['batire_svc']['value'] = t('Successfully connected to SVC using !wsdl', array('!wsdl' => BATIRE_SVC_WSDL));
+    }
+    elseif (BATIRE_SVC_WSDL) {
+      $requirements['batire_svc']['severity'] = REQUIREMENT_ERROR;
+      $requirements['batire_svc']['value'] = t('Could not connect to SVC using !wsdl', array('!wsdl' => BATIRE_SVC_WSDL));
+    }
+
+    return $requirements;
+  }
+}
+
+/**
+ * Creates connection and stores it locally;
+ */
+function _batire_svc_get_soap() {
+  if (!BATIRE_SVC_WSDL) {
+    return NULL;
+  }
+  //static $client;
+
+  if (!isset($client)) {
+    try {
+      $params = array();
+
+      if (BATIRE_SVC_DISABLE_CACHE) {
+        $params['cache_wsdl'] = WSDL_CACHE_NONE;
+      }
+
+      if (BATIRE_SVC_TRACE) {
+        $params['trace'] = 1;
+      }
+
+      if (BATIRE_SVC_PROXY_ADDR) {
+        $params['proxy_host'] = BATIRE_SVC_PROXY_ADDR;
+        if (BATIRE_SVC_PROXY_PORT) {
+          $params['proxy_port'] = BATIRE_SVC_PROXY_PORT;
+        }
+      }
+
+      $_client = @new SoapClient(BATIRE_SVC_WSDL, $params);
+      if ($_client) {
+        $client = $_client;
+      }
+    }
+    catch (Exception $e) {
+      batire_site_log_watchdog($e->getMessage(), WATCHDOG_ERROR);
+      return NULL;
+    }
+  }
+  return $client;
+}

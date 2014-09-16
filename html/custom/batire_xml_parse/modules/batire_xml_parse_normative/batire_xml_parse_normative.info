@@ -1,0 +1,7 @@
+; $Id$
+name = TN Plugin
+description = Batire XML Parser Plugin for Texte normatives (norme_ud & norme_sommaire)
+package = Batire
+core = 6.x
+version = "6.x-1.0"
+dependencies[] = batire_xml_parse

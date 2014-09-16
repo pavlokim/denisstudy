@@ -1,0 +1,12 @@
+name = MongoDB watchdog
+description = 'A watchdog implementation using MongoDB'
+package = MongoDB
+core = 6.x
+dependencies[] = mongodb
+
+; Information added by drupal.org packaging script on 2011-12-02
+version = "6.x-1.x-dev"
+core = "6.x"
+project = "mongodb"
+datestamp = "1322786179"
+

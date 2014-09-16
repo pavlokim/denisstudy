@@ -1,0 +1,287 @@
+<?php
+
+/**
+ * Implementation of hook_batire_xml_parseapi()
+ *
+ * @param $op
+ *   Operation
+ * @param array &$data
+ *   Result of parse process, if already processed
+ * @param DOMDocument &$dom
+ *   DOM object parsed from XML
+ * @return
+ *   Result of parse process, if already processed
+ */
+function batire_xml_parse_complement_batire_xml_parseapi($op, &$data, $dom = NULL) {
+  switch ($op) {
+    case 'suggest types':
+      $xpath = batire_xml_get_xpath($dom);
+      $product = strtoupper(batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/ns0:type-ud"));
+      if (in_array($product, _batire_xml_parse_get_subtypes())) {
+        return BATIRE_HIERARCHY_DT_COMPLEMENT_TECHNIQUE;
+      }
+      if ($product =='FICHE-QR') {
+          return 'FICHE-QR-IGNORE';
+      }
+      $product = strtoupper(batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/xms:product | /qc:doc-root/qc:doc-meta/ns0:product | /qc:doc-root/qc:doc-meta/ns1:product  | /qc:doc-root/qc:doc-meta/ns1:product"));
+
+      if ($product == 'SOMMAIRE') {
+        $id = batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-content/tdm/@id");
+        if ($id=='CTQ') {
+           return 'CT-SOMMAIRE';
+        }
+      }
+
+    case 'process':
+      if (!isset($data['type'])) {
+        break;
+      }
+      if ($data['type'] == BATIRE_HIERARCHY_DT_COMPLEMENT_TECHNIQUE) {
+        _batire_xml_parse_ct($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process $data[type]:");
+          drush_print_r($data);
+        }
+      } elseif ($data['type'] == 'CT-SOMMAIRE') {
+          module_load_include('inc', 'batire_xml_parse_complement', 'tdm');
+        _batire_xml_parse_ct_summary_parse($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process $data[type]:");
+          drush_print_r($data);
+        }
+      }
+      break;
+    case 'postprocess':
+      if ($data['type'] == BATIRE_HIERARCHY_DT_COMPLEMENT_TECHNIQUE) {
+        _batire_xml_parse_ct_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      } else if ($data['type'] == 'CT-SOMMAIRE') { //set field_broche_title
+        module_load_include('inc', 'batire_xml_parse_complement', 'tdm');
+        _batire_xml_parse_ct_summary_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      }
+      break;
+    case 'postgeneration':
+      //$args = func_get_args();
+      //$nid = $args[2];
+      //$generation_data = $args[3];
+      //$page_data = mongodb_page_get_node_page($nid);
+
+      break;
+  }
+}
+
+function _batire_xml_parse_ct(&$data, $dom) {
+  $data['doc_type'] = BATIRE_HIERARCHY_DT_COMPLEMENT_TECHNIQUE;
+  $data['type'] = BATIRE_HIERARCHY_DT_COMPLEMENT_TECHNIQUE;
+  _batire_xml_parse_ct_common_data($data, $dom);
+
+
+}
+
+
+function _batire_xml_parse_ct_store(&$data, $dom) {
+  $xpath = batire_xml_get_xpath($dom);
+
+  $doc_type = batire_hierarchy_get_doc_type($data['doc_type']);
+
+  //Check if document already exists
+  $hierarchy = batire_hierarchy_get_by_bid($data['bid']);
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+    $data['date_editoriale'] = $node->created;
+  } else {
+    //create new document
+    $node = new stdClass();
+    $data['date_editoriale'] = time();
+    $node->type = $doc_type['content_type'];
+    $node->uid = 1; //@TODO: use some user from settings
+  }
+  $node->title = $data['title'];
+
+
+
+
+  if (isset($data['authors']) && count($data['authors']) > 0) {
+    $node->field_authors = batire_add_cck_field_value($node->field_authors, 'nid', batire_find_author($data['authors'][0]));
+    foreach ($data['authors'] as $author) {
+      $node->field_authors = batire_add_cck_field_value($node->field_authors, 'nid', batire_find_author($author));
+    }
+  }
+
+
+
+
+  $taxonomy   = array_unique(batire_xml_get_taxonomy($xpath));
+  $taxonomy[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT;
+
+  // Category
+  $result = batire_xml_parse_search_term($data['doc_subtype'], BATIRE_SITE_VID_TYPE_CT, NULL, 'description');
+  if ($result & !empty($result['name'])) {
+    $node->field_tab_category = array(array( 'value' => $result['name']));
+    $taxonomy[] = $result['tid'];
+  }
+
+
+  // Rubrique
+  if (!empty($data['rubrique'])) {
+      $result = batire_xml_parse_search_term($data['rubrique'], BATIRE_SITE_VID_RUBRIQUE_CT, NULL, 'description');
+      if ($result & !empty($result['name']))
+      {
+          $node->field_rubric = array(array('value' => $result['name']));
+      }
+      //$node->field_rubric = array(array('value' => _batire_xml_parse_get_CT_get_rubrique($matches[1])));
+  }
+
+
+  // Subrubrique
+  if (!empty($data['sub_rubrique'])) {
+      $node->field_sub_rubric = array(array('value' => $data['sub_rubrique']));
+  }
+
+  // Refart
+  if ($data['doc_subtype'] == 'FICHE-NORME' & !empty($data['refart'])) {
+      $node->field_tab_reference = array(array('value' => $data['refart']));
+  }
+
+
+
+
+   $node->taxonomy = $taxonomy;
+
+  //*****************************************
+
+  $data_map = array(
+    'reference' => 'field_doc_number',
+    'surtitre' => 'field_surtitle',
+    'num_puration' => 'field_release_num',
+    'date_puration' => 'field_release_date date',
+    'bid' => 'field_bid'
+  );
+  foreach ($data_map as $from => $to) {
+    $arr_to = explode(' ', $to);
+    $to = $arr_to[0];
+
+    if (is_numeric($from)) {
+      $from = $to;
+      $to = 'field_' . $to;
+    }
+    if (!empty($data[$from])) {
+      if (isset($arr_to[1]) && $arr_to[1] = 'date') {
+        $node->{$to} = array(array('value' => batire_xml_parse_convert_date($data[$from])));
+      } else {
+        $node->{$to} = array(array('value' => $data[$from]));
+      }
+    } elseif (isset($node->{$to})) {
+      unset($node->{$to});
+    }
+  }
+
+  $node->language = 'fr';
+  $node->parsed_data = $data;
+
+  node_save($node);
+
+
+  $data['node'] = $node;
+  $data['op'] = $node->is_new ? 'add' : 'edit';
+
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+
+  batire_store_links($data['bid'], $data['id'], $data['links']);
+}
+
+
+function _batire_xml_parse_ct_common_data(&$data, $dom) {
+  $xpath = batire_xml_get_xpath($dom);
+
+  $data['doc_subtype'] = batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/ns0:type-ud");
+
+  $parsed = batire_xml_multiple_node_value_get($xpath, array(
+      'id'              => '/qc:doc-root/qc:doc-meta/ns0:id-ud',
+      'title'           => '/qc:doc-root/qc:doc-meta/xms:title',
+      'id_edmon'        => '/qc:doc-root/qc:doc-meta/ns0:id-edmon',
+      'num_puration'    => '/qc:doc-root/qc:doc-meta/ns0:num-parution',
+      'date_puration'   => '/qc:doc-root/qc:doc-meta/ns0:date-parution',
+      'rubrique'        => '//CMPTTECH-RUBRIQUE/@type',
+      'rubrique_id'     => '//CMPTTECH-RUBRIQUE/@ID',
+      'sub_rubrique'    => '//CMPTTECH-RUBRIQUE/CMPTTECH-SOUSRUB/TITRE',
+      //'authors'         => '/qc:doc-root/qc:doc-meta/ns0:auteurs',
+      'illustrator'     => '//'.$data['doc_subtype'].'/@illustrateur',
+      'surtitre'        => '//'.$data['doc_subtype'].'/SURTITRE',
+      'building_type'   => '//gm:indexationManuelle',
+      'reference'       => '//refart',
+      'refart'          => '//FICHE-NORME/REFART',
+      'super_id' => '/qc:doc-root/qc:doc-meta/ns0:id-edmon | /qc:doc-root/qc:doc-content/REVUE/COMPLEMENT-TECHNIQUE/@ID',
+    ));
+  $parsed['super_bid'] = batire_hierarchy_get_document_bid($parsed['super_id'], $data['doc_type']);
+
+  $data['attached'] = array();
+  $file_nodes = $xpath->query('//xms:attached-to');
+  if (is_object($file_nodes) && $file_nodes->length > 0) {
+    foreach ($file_nodes as $file_node) {
+      $data['attached'][] = basename($file_node->nodeValue);
+    }
+  }
+
+  $content_node = $xpath->query("/qc:doc-root/qc:doc-content//*[@ID = '" . $parsed['id'] . "']")->item(0);
+  $data['inner_structure'][]['content'] = batire_xml_parse_inner_structure_recursive_get($xpath, $content_node);
+
+  $authors = $xpath->query('/qc:doc-root/qc:doc-meta/ns0:auteurs');
+  foreach($authors as $author) {
+      if (!empty($author->nodeValue)) {
+        $data['authors'][] = $author->nodeValue;
+      }
+  }
+
+  $data['bid'] = batire_hierarchy_get_document_bid($parsed['id'], $data['doc_type']);
+  $data = array_merge($data, $parsed);
+
+  // prepare body content xml
+  switch($data['doc_subtype']) {
+      case 'FICHE-DETAIL':
+      case 'FICHE-DROIT':
+      case 'FICHE-ARTICLE':
+      case 'FICHE-NORME':
+      case 'FICHE-EQUIPEMENT':
+          // body type A
+          $data['body']['content'] =  '<'.$data['doc_subtype'] .'>'. implode("\n", batire_xml_node_xml_inner_get($xpath, "//".$data['doc_subtype'])) . '</'.$data['doc_subtype'].'>';
+          break;
+      case 'FICHE-DESORDRE':
+      case 'FICHE-INCENDIE':
+          // body type B
+          $data['body']['content'] =  '<'.$data['doc_subtype'] .'>'. implode("\n", batire_xml_node_xml_inner_get($xpath, "//".$data['doc_subtype'])) . '</'.$data['doc_subtype'].'>';
+         break;
+  }
+
+  $data['links'] = batire_xml_get_links($xpath, $data['doc_type']);
+}
+
+
+
+
+function _batire_xml_parse_get_subtypes() {
+    static $subtypes = array('FICHE-DETAIL', 'FICHE-DROIT', 'FICHE-ARTICLE', 'FICHE-DESORDRE', 'FICHE-INCENDIE', 'FICHE-NORME', 'FICHE-EQUIPEMENT');
+    return $subtypes;
+}
+/*
+function _batire_xml_parse_get_CT_get_rubrique($rubriqueID) {
+    static $rubrique = array(1 => 'Decryptage de la reglementation et de la normalisation',
+                             2 => 'Construction',
+                             3 => 'Travaux sur existant',
+                             4 => 'Amenagements exterieurs',
+                             5 => 'Expertise');
+
+    if (isset($rubrique[(integer)$rubriqueID])) {
+        return $rubrique[(integer)$rubriqueID];
+    }
+    return '';
+}
+
+ */

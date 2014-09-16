@@ -1,0 +1,553 @@
+<?php
+
+/**
+ * Implementation of hook_batire_xml_parseapi()
+ *
+ * @param $op
+ *   Operation
+ * @param array &$data
+ *   Result of parse process, if already processed
+ * @param DOMDocument &$dom
+ *   DOM object parsed from XML
+ * @return
+ *   Result of parse process, if already processed
+ */
+function batire_xml_parse_broche_batire_xml_parseapi($op, &$data, $dom = NULL) {
+  switch ($op) {
+    case 'suggest types':
+      $xpath = batire_xml_get_xpath($dom);
+      $product = strtoupper(batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/xms:product | /qc:doc-root/qc:doc-meta/ns0:product | /qc:doc-root/qc:doc-meta/ns1:product  | /qc:doc-root/qc:doc-meta/ns1:product"));
+      if ($product == 'BROCHE') {
+        return 'BROCHE';
+      }
+      if ($product == 'SOMMAIRE') {
+        $id = batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-content/tdm/@id");
+        if (batire_xml_parse_search_term($id, BATIRE_SITE_VID_LIVRES, NULL, 'description')) {
+          return 'BROCHE-SUMMARY';
+        }
+      }
+      break;
+    case 'process':
+      if ($data['type'] == 'BROCHE') {
+        _batire_xml_parse_broche_parse($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process $data[type]:");
+          drush_print_r($data);
+        }
+      } elseif ($data['type'] == 'BROCHE-SUMMARY') {
+        module_load_include('inc', 'batire_xml_parse_broche', 'tdm');
+        _batire_xml_parse_broche_summary_parse($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process $data[type]:");
+          drush_print_r($data);
+        }
+      }
+      break;
+    case 'postprocess':
+      if ($data['type'] == 'BROCHE') {
+        _batire_xml_parse_broche_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      } else if ($data['type'] == 'BROCHE-SUMMARY') { //set field_broche_title
+        module_load_include('inc', 'batire_xml_parse_broche', 'tdm');
+        _batire_xml_parse_broche_summary_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      }
+      break;
+    case 'postgeneration':
+      $args = func_get_args();
+      $nid = $args[2];
+      $generation_data = $args[3];
+      $page_data = mongodb_page_get_node_page($nid);
+      if ($page_data && $page_data['doc_type'] == BATIRE_HIERARCHY_DT_LIVRE && !empty($nid)) {
+        if ($page_data['bid'] != $page_data['super_bid'] . '-EXP') {
+          $resume_node = mongodb_page_get_page_by_bid($page_data['super_bid'] . '-EXP');
+          if ($resume_node) {
+            $page_data['content']['resume'] =   $resume_node['content']['content'];
+            if(!empty($resume_node['illustrators'])) {
+              $page_data['illustrators'] = array_unique(array_merge($page_data['illustrators'], $resume_node['illustrators']));
+            }
+            if(!empty($resume_node['coordinators'])) {
+              $page_data['coordinators'] = array_unique(array_merge($page_data['coordinators'], $resume_node['coordinators']));
+            }
+            mongodb_page_save($page_data);
+          }
+        }
+      }
+      break;
+  }
+}
+
+/**
+ * Parse BROCHE document
+ *
+ * @param array &$data
+ * @param DOMDocument $dom
+ */
+function _batire_xml_parse_broche_parse(&$data, $dom) {
+  $xpath = batire_xml_get_xpath($dom);
+
+  $data['doc_type'] = BATIRE_HIERARCHY_DT_LIVRE;
+
+  $parsed = batire_xml_multiple_node_value_get($xpath, array(
+    'title' => '/qc:doc-root/qc:doc-meta/xms:title | '
+    . '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/*/TITRE',
+    'id' => '/qc:doc-root/qc:doc-meta/ns0:id-ud  | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/*/@ID',
+    'type_ud' => '/qc:doc-root/qc:doc-meta/ns0:type-ud',
+    'id_hz' => '/qc:doc-root/qc:doc-meta/ns0:id',
+    'date_document' => '/qc:doc-root/qc:doc-meta/ns0:date-document | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/*/@datevalid', //@TODO: parse date
+    'version' => '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/*/@version',
+    'reference' => '/qc:doc-root/qc:doc-meta/ns0:numero',
+    'metatitre' => '/qc:doc-root/qc:doc-content/BROCHE//METATITRE',
+    'titre' => '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/*/TITRE',
+    'super_id' => '/qc:doc-root/qc:doc-meta/ns0:id-edmon | /qc:doc-root/qc:doc-content/BROCHE/@ID',
+    'resume' => '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/EXPLOITATION/TXT4EME',
+    'section_num' => '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/SECTIONT/@Numero | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/@Numero',
+    'section_title' => '/qc:doc-root/qc:doc-content/BROCHE//PARTIEB/TITRE | //broche/SAISIEB/titre',
+    'part_num' => '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/SECTIONT/PARTIEB/@Numero | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/CHAPB/@Numero | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/ANNEXE/@Numero',
+    'part_title' => '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/CHAPB/TITRE | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/SECTIONT/PARTIEB/CHAPB/TITRE | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/ANNEXE/TITRE',
+    'chap_title' => '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/CHAPB/TITRE',
+    'collection' => '/qc:doc-root/qc:doc-content//COLLECTION',
+    'subtitle' => '/qc:doc-root/qc:doc-content//STITRE',
+    'section_sub_title' => '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/TITRE | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/TITRE | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/SECTIONT/PARTIEB/TITRE | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/SECTIONT/PARTIEB/CHAPB/TITRE'
+
+    ));
+
+  if (isset($parsed['authors']) && $parsed['authors']) {
+    $data['authors'] = preg_split('/\s*[,;|]\s*/', $parsed['authors']);
+  } else {
+    $data['authors'] = array();
+  }
+  //field for internal numeration of document
+  if ($parsed['type_ud'] == 'FICHEB') {
+    $data['type_ud'] = $parsed['type_ud'];
+  }
+
+  $file_nodes = $xpath->query('//xms:attached-to');
+  if (is_object($file_nodes) && $file_nodes->length > 0) {
+    foreach ($file_nodes as $file_node) {
+      $data['attached'][] = $file_node->nodeValue;
+    }
+  }
+
+  $authors = $xpath->query('/qc:doc-root/qc:doc-meta/ns0:auteurs');
+  if (is_object($authors) && $authors->length > 0) {
+    if (!isset($data['authors']) || !is_array($data['authors'])) {
+      $data['authors'] = array();
+    }
+    foreach ($authors as $author) {
+      $data['authors'][] = $author->nodeValue;
+    }
+  }
+
+  $authors = $xpath->query('/qc:doc-root/qc:doc-content//AUTEURCOMPLET/AUTEUR | /qc:doc-root/qc:doc-content//AUTEURCOMPLET/AFFILIATION');
+  if (is_object($authors) && $authors->length > 0) {
+    if (!is_array($data['authors'])) {
+      $data['authors'] = array();
+    }
+    foreach ($authors as $author) {
+      $data['authors'][] = $author->nodeValue;
+    }
+  }
+  $illustrators = $xpath->query('/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/EXPLOITATION/illustrateur | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/EXPLOITATION/ILLUSTRATEUR');
+  $data['illustrators'] = array();
+  if (is_object($illustrators) && $illustrators->length > 0) {
+    foreach ($illustrators as $illustrator) {
+      $data['illustrators'][] = $illustrator->nodeValue;
+    }
+  }
+
+  $coordinateurs = $xpath->query('/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/EXPLOITATION/COORDINATEUREDITORIAL');
+  $data['coordinators'] = array();
+  if (is_object($coordinateurs) && $coordinateurs->length > 0) {
+    foreach ($coordinateurs as $coordinateur) {
+      $data['coordinators'][] = $coordinateur->nodeValue;
+    }
+  }
+
+  $content_node = $xpath->query('/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/* | /qc:doc-root/qc:doc-content/BROCHE/COMPLETB/*')->item(0);
+  $doc_number_tagName = strtoupper($content_node->tagName);//variable for rule of documents numbering
+  $author_nodes = batire_xml_xpath_run_query($xpath, './/AUTEURCOMPLET/AUTEUR', $content_node);
+  if ($author_nodes && $author_nodes->length) {
+    foreach ($author_nodes as $author_node) {
+      $data['authors'][] = $author_node->nodeValue;
+    }
+    $data['authors'] = array_unique($data['authors']);
+  }
+
+  $data['raw_terms'] = array();
+  $taxonomy_nodes = $xpath->query('//ns0:keywords');
+  foreach ($taxonomy_nodes as $taxonomy_node) {
+     $data['raw_terms'][] = $taxonomy_node->nodeValue;
+  }
+  $data['body'] = array();
+
+  //TODO: $result['all_authors'] = cp_xml_parse_get_child_data($xpath, $domNode, 'AUTEURCOMPLET/AUTEUR', $filename, TRUE);
+
+  // AUTEURCOMPLET was commented out because: see task #58022
+  $ignored_tags = array('TITRE', /*'AUTEURCOMPLET',*/ 'COLLECTION', 'STITRE', 'ISBN', 'ISSN', 'COORDINATEUREDITORIAL', 'ILLUSTRATEUR', 'COPYRIGHT');
+  $data['body'] = array(
+    'resume' => batire_xml_node_xml_get($xpath, '//EXPLOITATION/TXT4EME')
+  );
+  $data['sub_type'] = strtoupper($content_node->tagName);
+  switch (strtoupper($content_node->tagName)) {
+    case 'EXPLOITATION':
+      if (!$parsed['id']) {
+        $parsed['id'] = $parsed['super_id'] .'-EXP';
+      }
+      $data['body']['content'] = '<EXPLOITATION>' . implode("\n", batire_xml_node_xml_inner_get($xpath, ".", $content_node, $ignored_tags)) . '</EXPLOITATION>';
+      $data['body']['hide'] = TRUE;
+      $data['not_export'] = TRUE;
+      $data['common_resume'] = TRUE;
+      if (empty($data['title'])) {
+        $data['title'] = 'EXPLOITATION';
+      }
+      //hack to map in hierarchy, because like this page is not mapped via summary
+      $data['parent_id'] = NULL; //$parsed['super_id'];
+      $data['parent_bid'] = NULL; //  batire_hierarchy_get_document_bid($parsed['super_id'], $data['doc_type']);
+      //$data['position'] = 0;
+      break;
+
+    case 'SIGABR':
+      //@TODO: import abbr, maybe in postprocess
+      $data['body']['content'] = '<SIGABR>' . implode("\n", batire_xml_node_xml_inner_get($xpath, ".", $content_node, $ignored_tags)) . '</SIGABR>';
+      $data['abbreviation'] = array();
+      $abbr_nodes = batire_xml_xpath_run_query($xpath, "//ENTSIG", $content_node);
+      if ($abbr_nodes) {
+        foreach ($abbr_nodes as $abbr_node) {
+          $data['abbreviation'][] = array(
+            "id" => batire_xml_node_value_get($xpath, "./@ID", $abbr_node),
+            "label" => batire_xml_node_value_get($xpath, "SIG", $abbr_node),
+            "definition" => batire_xml_node_value_get($xpath, "DEFINITION", $abbr_node),
+            'super_id' => $parsed['super_id'],
+            'super_bid' => batire_hierarchy_get_document_bid($parsed['super_id'],  $data['doc_type'])
+
+          );
+        }
+      }
+      break;
+    case 'PGREMER':
+      //$entremer = batire_xml_node_xml_inner_get($xpath, "ENTREMER", $content_node, $ignored_tags);
+
+      $data['body']['content'] = '<ENTREMER>' . implode("\n", batire_xml_node_xml_inner_get($xpath, "ENTREMER | DEDICACE", $content_node, $ignored_tags)) . '</ENTREMER>';
+      break;
+    case 'AVPROP':
+    case 'PREFACE':
+    case 'BIBLIOGRAPHIE':
+    case 'ANNEXES':
+    case 'INTRODUCTION':
+    case 'PGSYMBOLE':
+    case 'PGORGANISME':
+    case 'TBLSCH':
+    case 'CONCLUSION':
+    case 'PGAUTEUR':
+    case 'PGTERMINOLOGIE':
+    case 'NIVB':
+
+      $data['body']['content'] = '<' . $content_node->tagName . '>' . implode("\n", batire_xml_node_xml_inner_get($xpath, ".", $content_node, $ignored_tags, FALSE, TRUE)) . '</' . $content_node->tagName . '>';
+      break;
+
+    case 'SECTIONT':
+    case 'PARTIEB':
+    case 'CHAPB':
+      //@TODO: recheck this parsing
+      $content_node = batire_xml_xpath_run_query($xpath, "//*[@ID = string(/qc:doc-root/qc:doc-meta/ns0:id-ud)]");
+      if ($content_node && $content_node->length) {
+        $content_node = $content_node->item(0);
+        $data['titre'] = batire_xml_node_value_get($xpath, "@TITLE", $content_node);
+        $data['metatitle'] = batire_xml_node_value_get($xpath, "@METATITRE", $content_node);
+        $title_prefix = _batire_xml_parse_broche_get_document_number($parsed, $doc_number_tagName); //@pretitle of common.xsl template
+        $data['body']['content'] = '<' . $content_node->tagName . ' pretitle="'.$title_prefix.'"'. '>' . implode("\n", batire_xml_node_xml_inner_get($xpath, ".", $content_node, $ignored_tags, FALSE, TRUE)) . '</' . $content_node->tagName . '>';
+      }
+      break;
+
+    default:
+      $data['errors'][] = 'Unknown content type for Broche: ' . $content_node->tagName;
+      break;
+  }
+
+  if ($parsed['date_document'] && ($date = batire_xml_parse_convert_date($parsed['date_document']))) {
+    $parsed['date_document'] = $date;
+    $parsed['date_vide'] = 0;
+  } else {
+    $date_valid = batire_xml_node_value_get($xpath, '@datevalid', $content_node);
+    if ($date = batire_xml_parse_convert_datevalid($date_valid)) {
+      $parsed['date_document'] = $date;
+      $parsed['date_vide'] = 0;
+    } else {
+      $parsed['date_vide'] = 1;
+    }
+  }
+
+  //@TODO: scan for body IDs
+  //@TODO: scan for related files
+  $data['bid'] = batire_hierarchy_get_document_bid($parsed['id'],  $data['doc_type']);
+  $data['super_bid'] = batire_hierarchy_get_document_bid($parsed['super_id'],  $data['doc_type']);
+  $data['page_version'] =  $parsed['date_document'];
+  $data['taxonomy'] = batire_xml_get_taxonomy($xpath);
+  $data = array_merge($data, $parsed);
+  // links
+  $data['links'] = batire_xml_get_links($xpath, $data['doc_type']);
+  // texteb (chapitre description / document)
+  //Book can have hierarchy with PARTS and without (only Chapters)
+  if ($data['part_title']) {
+    $data['chapter_desc']['title'] = $parsed['part_title'];
+    $data['chapter_desc']['id'] = batire_xml_node_value_get($xpath, '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/CHAPB/@ID | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/SECTIONT/PARTIEB/CHAPB/@ID');
+    $chap_body = batire_xml_node_xml_inner_get($xpath, "/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/CHAPB/TEXTEB | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/CHAPB/TEXTEB | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/SECTIONT/PARTIEB/CHAPB/TEXTEB | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/CHAPB/FICHEB/TEXTEB", NULL, array(), FALSE, TRUE);
+    $data['chapter_desc']['body'] = '<TEXTEB>' . implode("\n", (array) $chap_body) . '</TEXTEB>';
+    $chap_number = batire_xml_node_value_get($xpath, '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/PARTIEB/CHAPB/@Numero | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/CHAPB/@Numero | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/SECTIONT/PARTIEB/CHAPB/@Numero');
+  } elseif ($data['chap_title']) {
+    $data['chapter_desc']['title'] = $parsed['chap_title'];
+    $data['chapter_desc']['id'] = batire_xml_node_value_get($xpath, '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/CHAPB/@ID');
+    $chap_body = batire_xml_node_xml_inner_get($xpath, "/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/CHAPB/TEXTEB | /qc:doc-root/qc:doc-content/BROCHE/SAISIEB/CHAPB/FICHEB/TEXTEB", NULL, array(), FALSE, TRUE);
+    $data['chapter_desc']['body'] = '<TEXTEB>' . implode("\n", (array) $chap_body) . '</TEXTEB>';
+    $chap_number = batire_xml_node_value_get($xpath, '/qc:doc-root/qc:doc-content/BROCHE/SAISIEB/CHAPB/@Numero');
+  }
+  if (isset($chap_number)) {
+    $data['chapter_desc']['bid'] = batire_hierarchy_get_document_bid($data['chapter_desc']['id'], $data['doc_type']);
+    $data['chapter_desc']['super_bid'] = batire_hierarchy_get_document_bid($parsed['super_id'], $data['doc_type']);
+    $data['chapter_desc']['body'] = '<TEXTEB>' . implode("\n", (array) $chap_body) . '</TEXTEB>';
+    $data['chapter_desc']['title_prefix'] = 'Chapitre ' . $chap_number;
+    $data['chapter_desc']['is_empty_body'] = empty($chap_body);
+  }
+
+  $title_prefix = _batire_xml_parse_broche_get_document_number($parsed, $doc_number_tagName);
+  $data['reference'] = $title_prefix;//it can be parced reference or changed by the rules of Livres numbering
+  $data['title'] = $title_prefix . ' ' . $data['title'];
+}
+
+/**
+ * Set document number with general rules for Livres
+ * seen task #56343
+ * @param type $data
+ * @param type $parsed
+ * @param type $tagName
+ */
+function _batire_xml_parse_broche_get_document_number($parsed, $tagName) {
+  //Document number: if the conditions are TRUE -> remove first part of number 4.29.3  -> 29.3
+  if ($tagName == 'PARTIEB' && $parsed['super_id'] != 'VIC') {
+    $arr_doc_title_prefix = explode('.', $parsed['reference']);
+    array_shift($arr_doc_title_prefix);
+    $doc_title_prefix = implode('.', $arr_doc_title_prefix);
+    return $doc_title_prefix;
+  }
+  else {
+    return $doc_title_prefix = $parsed['reference'];
+  }
+}
+
+/**
+ * Save stored data
+ *
+ * @param array &$data
+ * @param DOMDocument $dom
+ */
+function _batire_xml_parse_broche_store(&$data, $dom) {
+  $doc_type = batire_hierarchy_get_doc_type( $data['doc_type']);
+
+  $taxonomy = array();
+
+  //Check if document already exists
+  $hierarchy = batire_hierarchy_get_by_bid($data['bid']);
+  $node = null;
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+    $data['date_editoriale'] = $node->created;
+  }
+  if (!$node) {
+    //create new document
+    $node = new stdClass();
+    $data['date_editoriale'] = time();
+    $node->type = $doc_type['content_type'];
+    $node->uid = 1; //@TODO: use some user from settings
+  }
+
+  //check if super exists
+ /* if ($super = batire_hierarchy_get_by_id($data['super_id'])) {
+    //map field
+    $node->field_broche_title = array(array('value' => $super->title));
+  } elseif (isset($node->field_broche_title)) {
+    unset($node->field_broche_title);
+  }*/
+
+  $title_tid = batire_get_tid_by_description($data['super_id'], BATIRE_SITE_VID_LIVRES);
+  $taxonomy[] = $title_tid;
+  $taxonomy[] = $doc_type['tid'];
+
+  if ($data['raw_terms']) {
+    $mots_clefs_root_tid = batire_get_tid_by_description($data['super_id'], BATIRE_SITE_VID_MOTS_CLEFS);
+    if (!$mots_clefs_root_tid) {
+      if ($title_tid) {
+        $term = (array) taxonomy_get_term($title_tid);
+
+        unset($term['tid']);
+        unset($term['weight']);
+
+      } else {
+        $term = array(
+          'name' => $data['super_id'],
+          'description' => $data['super_id']
+        );
+      }
+      $term['vid'] = BATIRE_SITE_VID_MOTS_CLEFS;
+      taxonomy_save_term($term);
+      $mots_clefs_root_tid = $term['tid'];
+    }
+    $taxonomy = array_merge($taxonomy, batire_xml_parse_add_raw_terms($data['raw_terms'], BATIRE_SITE_VID_MOTS_CLEFS, $mots_clefs_root_tid));
+  }
+
+
+  $data_map = array(
+    'section_num',
+    'section_title',
+    'part_num',
+    'part_title',
+    'date_document' => 'field_date_pub',
+    'collection',
+    'subtitle',
+    'date_vide'
+  );
+  foreach ($data_map as $from => $to) {
+    if (is_numeric($from)) {
+      $from = $to;
+      $to = 'field_' . $to;
+    }
+    if (isset($data[$from]) && !is_null($data[$from])) {
+      $node->{$to} = array(array('value' => $data[$from]));
+    } elseif (isset($node->{$to})) {
+      unset($node->{$to});
+    }
+  }
+
+  //assignment node-title after all conversion in _batire_xml_parse_broche_parse
+  $node->title = $data['title'];
+
+  $node->language = 'fr';
+  $node->parsed_data = $data;
+  //@TODO:
+//    foreach($data['authors'] as $author) {
+//
+//    }
+  // Abbreviations
+  if (isset($data['abbreviation']) && is_array($data['abbreviation'])) {
+    foreach ($data['abbreviation'] as $item) {
+      batire_hierarchy_abbreviation_update_smart((object) $item);
+    }
+  }
+  if (!isset($node->field_author)) {
+    $node->field_author = array();
+  }
+  if (!isset($node->field_authors)) {
+    $node->field_authors = array();
+  }
+  // Author, illustrators and editors (coordinators)
+  if (isset($data['authors']) && count($data['authors']) > 0){
+    $node->field_authors = batire_add_cck_field_value($node->field_author, 'nid', batire_find_author($data['authors'][0]));
+    foreach ($data['authors'] as $author) {
+      $node->field_authors = batire_add_cck_field_value($node->field_authors, 'nid', batire_find_author($author));
+    }
+  }
+  if (!isset($node->field_illustrators)) {
+    $node->field_illustrators = array();
+  }
+  if (isset($data['illustrators']) && count($data['illustrators']) > 0){
+    foreach ($data['illustrators'] as $illustrator) {
+      $node->field_illustrators = batire_add_cck_field_value($node->field_illustrators, 'value', $illustrator);
+    }
+  }
+  if (isset($data['coordinators']) && count($data['coordinators']) > 0){
+    $coordinator = array_pop($data['coordinators']);
+    $node->field_editor = batire_add_cck_field_value($node->field_coordinators, 'value', $coordinator);
+  }
+
+  // links
+  batire_store_links($data['bid'], $data['id'], $data['links']);
+
+  $node->field_import_date = array(array('value' => time()));
+  $taxonomy = array_merge($taxonomy, $data['taxonomy']);
+  $node->taxonomy = array_unique($taxonomy);
+  node_save($node);
+  batire_xml_parse_texteb_node_create($data, $node);
+  $data['node'] = $node;
+  $data['op'] = $node->is_new ? 'add' : 'edit';
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+  if ($data['common_resume']) {
+    // need regeneration of whole book (common resume was changed)
+    $nids_list = batire_hierarchy_get_hierarchy_list($data['bid']);
+    foreach($nids_list as $nid) {
+      batire_xml_parse_queue_content($nid);
+    }
+  }
+
+}
+
+function batire_xml_parse_texteb_node_create(&$data, $cnode) {
+   //Check if document already exists
+  if (!isset($data['chapter_desc'])) {
+    return;
+  }
+  $doc_type = batire_hierarchy_get_doc_type( $data['doc_type']);
+  $hierarchy = batire_hierarchy_get_by_bid($data['chapter_desc']['bid']);
+  $node = null;
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+  }
+  if (!$node) {
+    //create new document from other node
+    $node = $cnode;
+    $node->nid = NULL;
+    $node->vid = NULL;
+  }
+  $texteb = array_merge($data, $data['chapter_desc']);
+  $arr_title_prefix = explode('.', $data['reference']);
+  //Book can have hierarchy with PARTS and without (only Chapters)
+  $title_prefix = '';
+  if ($data['part_title']) {
+    if (count($arr_title_prefix) == 1) {
+      $title_prefix = $arr_title_prefix[0];
+    } else {
+      $title_prefix = $arr_title_prefix[1];
+    }
+  }
+  elseif ($data['chap_title']) {
+    $title_prefix = $arr_title_prefix[0];
+  }
+  $node->title = $title_prefix . '.0 ' . $data['chapter_desc']['title'];
+  unset($texteb['chapter_desc']);
+  $texteb['body'] = array( 'content' => $data['chapter_desc']['body']) ;
+  $texteb['is_chapter'] = TRUE;
+  $node->parsed_data = $texteb;
+  node_save($node);
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+  $data['chapter_desc']['nid'] = $node->nid;
+}
+
+
+
+
+/**
+ *Set broche title field recursive
+ *
+ * @TODO: remove this function
+ *
+ * @param string $id
+ * @param string $title
+ */
+function _batire_xml_parse_broche_set_broche_title_recursive($row, $title) {
+  if ($row->nid) {
+    $node = node_load($row->nid);
+    if ($node && $node->field_broche_title[0]['value'] != $title) {
+      $node->field_broche_title = array(array('value' => $title));
+      node_save($node);
+    }
+  }
+  $children = batire_hierarchy_get_children($row->id);
+  foreach ($children as $child) {
+    _batire_xml_parse_broche_set_broche_title_recursive($child, $title);
+  }
+}

@@ -1,0 +1,1214 @@
+<?php
+
+define('BATIRE_HIERARCHY_DT_LIVRE', 'Livre');
+define('BATIRE_HIERARCHY_DT_CODE', 'Code');
+define('BATIRE_HIERARCHY_DT_FM', 'FM');
+define('BATIRE_HIERARCHY_DT_TEXTE_OFFICIEL', 'TO');
+define('BATIRE_HIERARCHY_DT_TEXTE_NORMATIF', 'TN');
+define('BATIRE_HIERARCHY_CACHE_NAME', 'cache_batire_hierarchy');
+define('BATIRE_HIERARCHY_DT_ARICLE', 'Article');
+define('BATIRE_HIERARCHY_DT_MEDIA', 'Media');
+define('BATIRE_HIERARCHY_DT_COMPLEMENT_TECHNIQUE', 'CT');
+define('BATIRE_HIERARCHY_DT_DOCUMENT_DE_DEFERENCE', 'DDR');
+define('BATIRE_HIERARCHY_DT_DDR_MEDIA', 'DDR Media');
+
+function batire_hierarchy_init() {
+  module_load_include('inc', 'batire_hierarchy', 'batire_links');
+}
+
+/**
+ * hook_boot() implementation
+ */
+function batire_hierarchy_boot() {
+  //wee need drupal_static
+  //module_load_include($type, $module);
+  include_once './sites/all/modules/contrib/drupal_static/drupal_static.module';
+}
+
+/**
+ * Return list of page node types
+ */
+function batire_hierarchy_get_content_types() {
+  $content_types = & drupal_static(__FUNCTION__);
+  if (!$content_types) {
+    $doc_types = batire_hierarchy_get_doc_types();
+    $content_types = array();
+    foreach ($doc_types as $doc_type) {
+      $content_types[] = $doc_type['content_type'];
+    }
+    drupal_static_reset('batire_hierarchy_get_doc_type_prefix');
+  }
+  return $content_types;
+}
+
+/**
+ * Return list of supported doc types
+ */
+function batire_hierarchy_get_doc_types() {
+  $doc_types = & drupal_static(__FUNCTION__);
+  if (!$doc_types) {
+    $cid = "batire_hierarchy_doc_types";
+    $cache = cache_get($cid);
+    if (!$cache) {
+      $doc_types = module_invoke_all('doc_types');
+      drupal_alter('doc_types', $doc_types);
+      cache_set($cid, $doc_types);
+    }
+    else {
+      $doc_types = $cache->data;
+    }
+  }
+  return $doc_types;
+}
+
+/**
+ * hook doc_types() implementation
+ */
+function batire_hierarchy_doc_types() {
+  return array(
+    array('name' => BATIRE_HIERARCHY_DT_LIVRE, 'content_type' => BATIRE_SITE_CT_LIVRE, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE),
+    array('name' => BATIRE_HIERARCHY_DT_FM, 'content_type' => BATIRE_SITE_CT_FM, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM),
+    array('name' => BATIRE_HIERARCHY_DT_TEXTE_OFFICIEL, 'content_type' => BATIRE_SITE_CT_TO, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL),
+    array('name' => BATIRE_HIERARCHY_DT_CODE, 'content_type' => BATIRE_SITE_CT_CODE, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE),
+    array('name' => BATIRE_HIERARCHY_DT_TEXTE_NORMATIF, 'content_type' => BATIRE_SITE_CT_TN, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF),
+    array('name' => BATIRE_HIERARCHY_DT_ARICLE, 'content_type' => BATIRE_SITE_CT_ACTUALITE, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE),
+    array('name' => BATIRE_HIERARCHY_DT_MEDIA, 'content_type' => BATIRE_SITE_CT_ACTUALITE, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE),
+    array('name' => BATIRE_HIERARCHY_DT_COMPLEMENT_TECHNIQUE, 'content_type' => BATIRE_SITE_CT_COMP_TECH, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT),
+    array('name' => BATIRE_HIERARCHY_DT_DOCUMENT_DE_DEFERENCE, 'content_type' => BATIRE_SITE_CT_DR, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE),
+    //array('name' => BATIRE_HIERARCHY_DT_DDR_MEDIA, 'content_type' => BATIRE_SITE_CT_DR, 'tid' => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE),
+
+  );
+}
+
+/**
+ * Return doc type info by name
+ * @param string $name
+ * @return array/bool
+ */
+function batire_hierarchy_get_doc_type($name) {
+  $doc_types = batire_hierarchy_get_doc_types();
+  foreach ($doc_types as $doc_type) {
+    if ($doc_type['name'] == $name) {
+      return $doc_type;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Return doc type prefix, from taxonomy
+ */
+function batire_hierarchy_get_doc_type_prefix($name) {
+  $cache = & drupal_static(__FUNCTION__);
+  if (!$cache) {
+    $cache = array();
+    $doc_types = batire_hierarchy_get_doc_types();
+    $taxonomy = taxonomy_get_tree(BATIRE_SITE_VID_DOC_TYPE);
+    $map = array();
+    foreach ($doc_types as $doc_type) {
+      $cache[$doc_type['name']] = 'XXX';
+      if (!array_key_exists($doc_type['tid'], $map)) {
+        $map[$doc_type['tid']] = array();
+      }
+      $map[$doc_type['tid']][] = $doc_type['name'];
+    }
+    foreach ($taxonomy as $term) {
+      if (array_key_exists($term->tid, $map)) {
+        foreach ($map[$term->tid] as $doc_name) {
+          $cache[$doc_name] = $term->description ? $term->description : 'X' . $term->tid . 'X';
+        }
+      }
+    }
+  }
+  if (array_key_exists($name, $cache)) {
+    return $cache[$name];
+  }
+  return 'XXX';
+}
+
+function batire_hierarchy_get_doc_type_from_bid($bid) {
+  list($prefix) = explode("-", $bid);
+  foreach (batire_hierarchy_get_doc_types() as $doc_type) {
+    if ($prefix == batire_hierarchy_get_doc_type_prefix($doc_type['name'])) {
+      return $doc_type['name'];
+    }
+  }
+  throw new Exception(t("Unknown doc type prefix: @prefix", array('@prefix' => $prefix)));
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function batire_hierarchy_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  switch ($op) {
+    case 'insert':
+    case 'update':
+      if (in_array($node->type, batire_hierarchy_get_content_types()) && isset($node->parsed_data)) {
+        $row = batire_hierarchy_get_by_bid($node->parsed_data['bid']);
+        if (!$row) {
+          $row = new stdClass();
+          $row->type = $node->type;
+          $row->id = $node->parsed_data['id'];
+          $row->bid = $node->parsed_data['bid'];
+          $row->nid = $node->nid;
+//          if ($node->type == BATIRE_SITE_CT_TN && !empty($node->field_subtitle[0]['value'])) {
+//            $row->title = $node->field_subtitle[0]['value'];
+//          }
+//          else {
+//            $row->title = $node->title;
+//          }
+          $row->title = batire_hierarchy_get_title($node);
+          $row->version = $node->parsed_data['page_version'];
+          $row->igroup = @$node->parsed_data['indice_group'];
+
+          batire_hierarchy_insert($row);
+          if (!empty($node->parsed_data['parent_bid'])) {
+            $position = empty($node->parsed_data['position']) ? 9999 : $node->parsed_data['position'];
+            batire_hierarchy_attach_children($node->parsed_data['parent_bid'], $row->bid, $position, $node->parsed_data['parent_id']);
+          }
+        }
+        else {
+          $row->id = $node->parsed_data['id'];
+          $row->type = $node->type;
+          $row->nid = $node->nid;
+          $row->version = $node->parsed_data['page_version'];
+          $row->igroup = @$node->parsed_data['indice_group'];
+//          if ($node->type == BATIRE_SITE_CT_TN && !empty($node->field_subtitle[0]['value'])) {
+//            $row->title = $node->field_subtitle[0]['value'];
+//          }
+//          else if (!$row->title) {
+//            $row->title = $node->title;
+//          }
+          $row->title = batire_hierarchy_get_title($node);
+          batire_hierarchy_update($row);
+          if (!empty($node->parsed_data['parent_bid'])) {
+            $position = empty($node->parsed_data['position']) ? 9999 : $node->parsed_data['position'];
+            batire_hierarchy_attach_children($node->parsed_data['parent_bid'], $row->bid, $position, $node->parsed_data['parent_id']);
+          }
+        }
+        if (!empty($node->parsed_data['super_bid'])) {
+          $super = batire_hierarchy_get_by_bid($node->parsed_data['super_bid']);
+          if (!$super) {
+            $super = new stdClass();
+            $super->type = $node->type;
+            $super->bid = $node->parsed_data['super_bid'];
+            $super->id = $node->parsed_data['super_id'];
+            $super->parent_bid = $node->parsed_data['super_bid'];
+            $super->parent_id = $node->parsed_data['super_id'];
+            batire_hierarchy_insert($super);
+          }
+        }
+      }
+      break;
+    case 'delete':
+      if (in_array($node->type, batire_hierarchy_get_content_types())) {
+        $row = batire_hierarchy_get_by_nid($node->nid);
+        batire_hierarchy_delete($row->bid);
+      }
+      break;
+  }
+}
+
+/**
+ * Get document page title (node page and print page)
+ * @param $node
+ * @return html
+ */
+function batire_hierarchy_get_title($node) {
+  $title = '';
+  switch ($node->type) {
+    case BATIRE_SITE_CT_CODE:
+      if (!empty($node->title)) {
+        $title .= $node->title;
+      }
+//      if (!empty($node->page_data['codes_de_textes'])) {
+//        $title .= '<div class="document-title-sub">' . $node->page_data['codes_de_textes'] . '</div>';
+//      }
+      break;
+
+    case BATIRE_SITE_CT_TO:
+      if (!empty($node->title)) {
+        $title .=  $node->title;
+      }
+      break;
+
+    case BATIRE_SITE_CT_TN:
+//      if (!empty($node->field_doc_number[0]['value'])) {
+//        $title .= $node->field_doc_number[0]['value'];
+//      }
+//
+//      if (!empty($node->title)) {
+//        $title .= ' - ' . $node->title;
+//      }
+      if (!empty($node->field_subtitle[0]['value'])) {
+        $title .= $node->field_subtitle[0]['value'];
+      }
+      break;
+
+    case BATIRE_SITE_CT_FM:
+      if (!empty($node->field_doc_number[0]['value'])) {
+        $title .= $node->field_doc_number[0]['value'];
+        if (!empty($node->title)) {
+          $title .= ' - ' . $node->title;
+        }
+      }
+
+//      if (!empty($node->field_subtitle[0]['value'])) {
+//        $title .= '<div class="document-title">' . $node->field_subtitle[0]['value'] . '</div>';
+//      }
+//
+//      if (!empty($node->taxonomy)) {
+//        foreach ($node->taxonomy as $term) {
+//          if ($term->vid == BATIRE_SITE_VID_FM) {
+//            $title .= '<div class="document-title-sub">' . $term->name . '</div>';
+//          }
+//        }
+//      }
+      break;
+
+    case BATIRE_SITE_CT_LIVRE:
+      if (!empty($node->title)) {
+        $title .= $node->title;
+      }
+      if (!empty($node->parsed_data['title_prefix'])) {
+        $title = $node->parsed_data['title_prefix'] . ' - '.$node->parsed_data['title'];
+      }
+//      if (!empty($node->taxonomy)) {
+//        foreach ($node->taxonomy as $term) {
+//          if ($term->vid == BATIRE_SITE_VID_LIVRES) {
+//            $title .= '<div class="document-title-sub">' . $term->name . '</div>';
+//          }
+//        }
+//      }
+      break;
+
+    case BATIRE_SITE_CT_COMP_TECH:
+      if (!empty($node->title)) {
+        $title .= $node->title;
+      }
+      break;
+
+    case BATIRE_SITE_CT_ACTUALITE:
+      if (!empty($node->field_surtitle[0]['value'])) {
+        $title .= $node->field_surtitle[0]['value'];
+      }
+      if (!empty($node->title)) {
+        $title .= ' ' . $node->title;
+      }
+      if (!empty($node->field_subtitle[0]['value'])) {
+        $title .= ' ' . $node->field_subtitle[0]['value'];
+      }
+      break;
+
+    case BATIRE_SITE_CT_DOC_PRAT:
+      if (!empty($node->title)) {
+        $title .= ' ' . $node->title;
+      }
+      break;
+  }
+  return $title;
+
+}
+
+function batire_hierarchy_cache_clear($set_real_cache_clear = NULL) {
+  static $real_cache_clear = TRUE;
+  if (!is_null($set_real_cache_clear)) {
+    $real_cache_clear = $set_real_cache_clear;
+  }
+  drupal_static_reset('batire_hierarchy_get_content_types');
+  drupal_static_reset('batire_hierarchy_get_doc_type_prefix');
+  if ($real_cache_clear) {
+    drupal_static_reset('batire_hierarchy_search_items');
+    drupal_static_reset('batire_hierarchy_get_hierarchy');
+    drupal_static_reset('batire_hierarchy_get_by_bid');
+    drupal_static_reset('batire_hierarchy_get_by_nid');
+    drupal_static_reset('batire_hierarchy_get_children');
+    cache_clear_all('*', BATIRE_HIERARCHY_CACHE_NAME, TRUE);
+  }
+}
+
+/**
+ * Insert new record to hierarchy
+ *
+ * @param stdClass $row
+ */
+function batire_hierarchy_insert(stdClass $row) {
+  module_invoke_all('batire_hierarchy', 'before insert', $row);
+  drupal_write_record('batire_hierarchy', $row);
+  batire_hierarchy_cache_clear();
+  module_invoke_all('batire_hierarchy', 'after insert', $row);
+}
+
+/**
+ * Update hierarchy record
+ *
+ * @param stdClass $row
+ */
+function batire_hierarchy_update(stdClass $row) {
+  module_invoke_all('batire_hierarchy', 'before update', $row);
+  drupal_write_record('batire_hierarchy', $row, array('bid'));
+  batire_hierarchy_cache_clear();
+  module_invoke_all('batire_hierarchy', 'after update', $row);
+}
+
+/**
+ * Insert new record to hierarchy
+ *
+ * @param stdClass $row
+ */
+function batire_hierarchy_update_smart(stdClass $row, $update_title = FALSE) {
+  $res = db_fetch_array(db_query('SELECT nid, title FROM {batire_hierarchy} WHERE bid = "%s"', $row->bid));
+  if ($res) {
+    // If node is exists do not change title
+    if (!empty($res['nid']) && !empty($res['title']) && $update_title == FALSE) {
+      $row->title = $res['title'];
+    }
+    return batire_hierarchy_update($row);
+  }
+  else {
+    return batire_hierarchy_insert($row);
+  }
+}
+
+/**
+ * Remove record from hierarchy
+ * @param string $id
+ * @param bool $recursive
+ */
+function batire_hierarchy_delete($bid, $recursive = FALSE) {
+  module_invoke_all('batire_hierarchy', 'before delete', $bid, $recursive);
+  if ($recursive) {
+    $sth = db_query("SELECT bid FROM {batire_hierarchy} WHERE parent_bid = %d", $bid);
+    $bids = array();
+    while ($row = db_fetch_array($sth)) {
+      $bids[] = $row['bid'];
+    }
+    foreach ($bids as $child_bid) {
+      batire_hierarchy_delete($child_bid, TRUE);
+    }
+  }
+  db_query("DELETE FROM {batire_hierarchy} WHERE bid='%s'", $bid);
+  batire_hierarchy_cache_clear();
+  module_invoke_all('batire_hierarchy', 'after delete', $bid, $recursive);
+}
+
+/**
+ * Archive hierarchy item
+ *
+ * @param stdClass $row
+ */
+function batire_hierarchy_archive($old_bid, $new_bid, $process_children = TRUE) {
+  $row = batire_hierarchy_get_by_bid($old_bid);
+  batire_hierarchy_invoke('prearchive', $old_bid, $new_bid, $process_children);
+  db_query("UPDATE {batire_hierarchy} SET bid = '%s' WHERE bid = '%s'", $new_bid, $old_bid);
+  if ($process_children) {
+    db_query("UPDATE {batire_hierarchy} SET parent_bid = '%s' WHERE parent_bid = '%s'", $new_bid, $old_bid);
+  }
+  batire_hierarchy_invoke('postarchive', $old_bid, $new_bid, $process_children);
+  batire_hierarchy_cache_clear();
+}
+
+/**
+ * Return hierarchy records by condition
+ *
+ * @param array $props
+ * @param string $order
+ * @param string $field
+ */
+function batire_hierarchy_search_items($props, $order = NULL, $field = NULL) {
+  $cache = & drupal_static('batire_hierarchy_search_items', array());
+//  $cache_key = md5(serialize(array($props, $order, $field)));
+  $cache_key = md5(serialize(func_get_args()));
+
+  if (array_key_exists($cache_key, $cache)) {
+    return $cache[$cache_key];
+  }
+  $conditions = array();
+  foreach ($props as $field_name => $value) {
+    $conditions[] = "$field_name = '%s'";
+  }
+  if (!$field) {
+    $arguments = array("SELECT * FROM {batire_hierarchy}");
+  }
+  else {
+    $arguments = array("SELECT " . $field . " FROM {batire_hierarchy}");
+  }
+  if ($conditions) {
+    $arguments[0] .= ' WHERE ' . implode(' AND ', $conditions);
+    if ($order) {
+      $arguments[0] .= 'ORDER BY ' . $order;
+    }
+    $arguments = array_merge($arguments, array_values($props));
+  }
+  $sth = call_user_func_array('db_query', $arguments);
+  $result = array();
+  while ($row = db_fetch_object($sth)) {
+    $result[] = $field ? $row->{$field} : $row;
+  }
+  $cache[$cache_key] = $result;
+  return $result;
+}
+
+/**
+ * Return rows by ID
+ * warning: rowS not row
+ *
+ * @param string $id
+ * @param string $field
+ */
+function batire_hierarchy_get_by_id($id, $field = NULL) {
+  return batire_hierarchy_search_items(array('id' => $id), NULL, $field);
+}
+
+/**
+ * Return row by BID
+ *
+ * @param string $id
+ * @param string $field
+ */
+function batire_hierarchy_get_by_bid($bid, $field = NULL) {
+  $cache = & drupal_static(__FUNCTION__, array());
+  $result = FALSE;
+  if (array_key_exists($bid, $cache)) {
+    $result = $cache[$bid];
+  } else {
+    $cache[$bid] = $result = db_fetch_object(db_query('SELECT * FROM {batire_hierarchy} WHERE bid= "%s"', $bid));
+  }
+  if ($result && $field) {
+    $result = $result->{$field};
+  }
+  return $result;
+}
+
+/**
+ * Return row by nid
+ *
+ * @param string $nid
+ * @param string $field
+ */
+function batire_hierarchy_get_by_nid($nid, $field = NULL) {
+  $cache = & drupal_static(__FUNCTION__, array());
+  $result = FALSE;
+  if (array_key_exists($nid, $cache)) {
+    $result = $cache[$nid];
+  } else {
+    $cache[$nid] = $result = db_fetch_object(db_query('SELECT * FROM {batire_hierarchy} WHERE nid= %d', $nid));
+  }
+  if ($result && $field) {
+    $result = $result->{$field};
+  }
+  return $result;
+}
+/**
+ * Detach all children from given node
+ * @param type $id
+ */
+function batire_hierarchy_detach_children($id) {
+  db_query('UPDATE {batire_hierarchy} SET parent_id = NULL WHERE parent_id = %d', $id);
+  batire_hierarchy_cache_clear();
+}
+
+/**
+ * Attach child to parent
+ *
+ * @param string $parent_bid
+ * @param string $child_bid
+ * @param int $position
+ */
+function batire_hierarchy_attach_children($parent_bid, $child_bid, $position = NULL, $parent_id = NULL) {
+  module_invoke_all('batire_hierarchy', 'before attach children', $parent_bid, $child_bid, $position, $parent_id);
+  if ($parent_id) {
+    db_query("UPDATE {batire_hierarchy} SET parent_bid = '%s', parent_id = '%s', position = %d WHERE bid = '%s'", $parent_bid, $parent_id, $position, $child_bid);
+  }
+  else {
+    db_query("UPDATE {batire_hierarchy} SET parent_bid = NULL, parent_id = NULL, position = NULL WHERE bid = '%s'", $child_bid);
+  }
+  batire_hierarchy_cache_clear();
+  module_invoke_all('batire_hierarchy', 'after attach children', $parent_bid, $child_bid, $position, $parent_id);
+}
+
+/**
+ * Return children with grandchildren
+ * @param string $bid
+ */
+function batire_hierarchy_get_hierarchy($bid) {
+  $cache = & drupal_static(__FUNCTION__, array());
+  if (array_key_exists($bid, $cache)) {
+    return $cache[$bid];
+  }
+  $result = array();
+  $doc_type = batire_hierarchy_get_doc_type_from_bid($bid);
+  switch ($doc_type) {
+    case BATIRE_HIERARCHY_DT_CODE:
+    case BATIRE_HIERARCHY_DT_TEXTE_OFFICIEL:
+      $self_to_complete = FALSE;
+      $data = mongodb_page_get_page_by_bid($bid);
+      if (!$data) {
+        break;
+      }
+      $to_complete_bid = $data['super_bid'];
+      if (!empty($data['to_complete'])) {
+        $to_complete_bid = $bid;
+        $self_to_complete = TRUE;
+      } elseif (!empty($data['persistent']) && !empty($data['persistent']['super_bid'])) {
+        $to_complete_bid = $data['persistent']['super_bid'];
+      }
+      $cache_key = 'batire_hierarchy:top:' . $to_complete_bid;
+      $cached_hierarchy = cache_get($cache_key, BATIRE_HIERARCHY_CACHE_NAME);
+      if ($cached_hierarchy) {
+        $result = $cached_hierarchy->data;
+      }
+      else {
+        $to_complete_data = mongodb_page_get_page_by_bid($to_complete_bid);
+        if (!empty($to_complete_data['tree'])) {
+          $result = _batire_hierarchy_data_tree_to_children($to_complete_data);
+        }
+        cache_set($cache_key, $result, BATIRE_HIERARCHY_CACHE_NAME);
+      }
+      if (!$self_to_complete && !_batire_hierarchy_check_trail($result, $bid)) {
+        $result = array();
+        if (!empty($data['persistent']) && !empty($data['persistent']['trail'])) {
+          $trail = $data['persistent']['trail'];
+          array_shift($trail);
+          $result = $data;
+          while ($child = array_pop($trail)) {
+            $child["tree"] = array($result);
+            $result = $child;
+          }
+          $result = _batire_hierarchy_data_tree_to_children(array("tree" => array($result)));
+          ///code here
+        }
+      }
+
+      break;
+    case BATIRE_HIERARCHY_DT_FM:
+    case BATIRE_HIERARCHY_DT_LIVRE:
+    case BATIRE_HIERARCHY_DT_TEXTE_NORMATIF:
+      $data = mongodb_page_get_page_by_bid($bid);
+      if (!$data) {
+        break;
+      }
+      $to_complete_bid = $data['super_bid'];
+      $cache_key = 'batire_hierarchy:top:' . $to_complete_bid;
+      $cached_hierarchy = cache_get($cache_key, BATIRE_HIERARCHY_CACHE_NAME);
+      if ($cached_hierarchy) {
+        $result = $cached_hierarchy->data;
+      }
+      else {
+        $result = batire_hierarchy_get_children($data['super_bid'], TRUE);
+        if ($doc_type == BATIRE_HIERARCHY_DT_TEXTE_NORMATIF) {
+          _batire_hierarchy_fill_normes_hierarchy($result);
+        }
+        cache_set($cache_key, $result, BATIRE_HIERARCHY_CACHE_NAME);
+      }
+      _batire_hierarchy_check_trail($result, $bid);
+
+      break;
+    default:
+    //throw error? unknown content type
+  }
+  $cache[$bid] = $result;
+  return $result;
+}
+
+/**
+ * Return children with grandchildren as flat list of nids (not cached)
+ * @param string $bid
+ */
+function batire_hierarchy_get_hierarchy_list($bid) {
+
+  $result = array();
+  $doc_type = batire_hierarchy_get_doc_type_from_bid($bid);
+  switch ($doc_type) {
+    case BATIRE_HIERARCHY_DT_CODE:
+    case BATIRE_HIERARCHY_DT_TEXTE_OFFICIEL:
+      $self_to_complete = FALSE;
+      $data = mongodb_page_get_page_by_bid($bid);
+      if (!$data) {
+        break;
+      }
+      $to_complete_bid = $data['super_bid'];
+      if (!empty($data['to_complete'])) {
+        $to_complete_bid = $bid;
+        $self_to_complete = TRUE;
+      } elseif (!empty($data['persistent']) && !empty($data['persistent']['super_bid'])) {
+        $to_complete_bid = $data['persistent']['super_bid'];
+      }
+
+      $to_complete_data = mongodb_page_get_page_by_bid($to_complete_bid);
+      if (!empty($to_complete_data['tree'])) {
+        $result = _batire_hierarchy_data_tree_to_children($to_complete_data);
+      }
+
+      if (!$self_to_complete && !_batire_hierarchy_check_trail($result, $bid)) {
+        $result = array();
+        if (!empty($data['persistent']) && !empty($data['persistent']['trail'])) {
+          $trail = $data['persistent']['trail'];
+          array_shift($trail);
+          $result = $data;
+          while ($child = array_pop($trail)) {
+            $child["tree"] = array($result);
+            $result = $child;
+          }
+          $result = _batire_hierarchy_data_tree_to_children(array("tree" => array($result)));
+          ///code here
+        }
+      }
+
+      break;
+    case BATIRE_HIERARCHY_DT_FM:
+    case BATIRE_HIERARCHY_DT_LIVRE:
+    case BATIRE_HIERARCHY_DT_TEXTE_NORMATIF:
+      $data = mongodb_page_get_page_by_bid($bid);
+      if (!$data) {
+        break;
+      }
+      $to_complete_bid = $data['super_bid'];
+      $result = batire_hierarchy_get_children($data['super_bid'], TRUE);
+      if ($doc_type == BATIRE_HIERARCHY_DT_TEXTE_NORMATIF) {
+        _batire_hierarchy_fill_normes_hierarchy($result, TRUE);
+      }
+      _batire_hierarchy_check_trail($result, $bid);
+
+      break;
+    default:
+    //throw error? unknown content type
+  }
+  $collector = array();
+  _result_object_to_array($result, $collector);
+  $collector = array_keys($collector);
+  return $collector;
+}
+
+
+function _result_object_to_array($obj, &$collector) {
+  if (is_object($obj) && property_exists($obj, 'nid') && !empty($obj->nid)) {
+    $collector[$obj->nid] = TRUE;
+  }
+  $arrObj = is_object($obj) ? get_object_vars($obj) : $obj;
+  foreach ($arrObj as $key => $val) {
+    $val = (is_array($val) || is_object($val)) ? _result_object_to_array($val, $collector) : $val;
+    $arr[$key] = $val;
+  }
+  return $arr;
+}
+
+/**
+ * Get additional data for tn from mongo
+ * @param $result List
+ */
+function _batire_hierarchy_fill_normes_hierarchy(&$result, $not_remove_summary_node = FALSE) {
+  if (count($result)) {
+    foreach ($result as $id => &$item) {
+      $data = mongodb_page_get_page_by_bid($item->bid);
+      if (isset($data['sub_type'])) {
+        //removing summary node
+        if ($data['sub_type'] == 'Summary' && !$not_remove_summary_node) {
+          unset($result[$id]);
+          continue;
+        }
+        $item->sub_type = $data['sub_type'];
+      }
+      if (isset($item->children)) {
+        _batire_hierarchy_fill_normes_hierarchy($item->children);
+      }
+    }
+  }
+}
+
+/**
+ * Return list of attached children
+ * @param string $parent_bid
+ * @param bool $recursive
+ * @return array
+ */
+function batire_hierarchy_get_children($parent_bid, $recursive = FALSE) {
+  $cache = & drupal_static(__FUNCTION__, array());
+  $cache_key = $parent_bid . '::' . ((bool) $recursive);
+  if (array_key_exists($cache_key, $cache)) {
+    return $cache[$cache_key];
+  }
+  $result = array();
+  $sth = db_query('SELECT * FROM {batire_hierarchy} WHERE parent_bid="%s" AND bid <> parent_bid ORDER BY position, id', $parent_bid);
+  while ($row = db_fetch_object($sth)) {
+      $result[] = $row;
+  }
+  if ($recursive) {
+    foreach ($result as $row) {
+      $row->children = batire_hierarchy_get_children($row->bid, TRUE);
+    }
+  }
+
+  $cache[$cache_key] = $result;
+  return $result;
+}
+
+/**
+ * Get parent bid by bid
+ * @param $bid Bid
+ * @return parent bid or NULL
+ */
+function batire_hierarchy_get_parent_bid($bid) {
+  $result = batire_hierarchy_search_items(array('bid' => $bid), NULL, 'parent_bid');
+  $val = array_shift($result);
+  if (!empty($val)) {
+    return $val;
+  }
+  return NULL;
+}
+
+function batire_hierarchy_set_branch_type($parent_bid, $type) {
+  db_query("UPDATE {batire_hierarchy} SET type = '%s'  WHERE bid = '%s'", $type, $parent_bid);
+  batire_hierarchy_cache_clear();
+  $children = batire_hierarchy_get_children($parent_bid);
+  foreach ($children as $child) {
+    batire_hierarchy_set_branch_type($child->bid, $type);
+  }
+}
+
+/**
+ * Get document cpid by id and type
+ *
+ * @param $type
+ *   Type of the document
+ * @param $id
+ *   Document Id
+
+ * @return
+ *   Document BID
+ */
+function batire_hierarchy_get_document_bid($id, $type, $version = NULL) {
+  $parts = array(batire_hierarchy_get_doc_type_prefix($type), $id);
+  if (!is_null($version)) {
+    $parts[] = $version;
+  }
+  return implode('-', $parts);
+}
+
+/**
+ * Update or Insert new abbreviation
+ * @param stdClass $abbr
+ */
+function batire_hierarchy_abbreviation_update_smart($abbr) {
+  if (db_fetch_array(db_query("SELECT id FROM {batire_abbreviation} WHERE id = '%s' AND super_id = '%s'", $abbr->id, $abbr->super_id))) {
+    drupal_write_record('batire_abbreviation', $abbr, array('id', 'super_id'));
+  }
+  else {
+    drupal_write_record('batire_abbreviation', $abbr);
+  }
+}
+
+function batire_hierarchy_get_versions($id, $type) {
+  $result = array();
+  $bid = batire_hierarchy_get_document_bid($id, $type);
+  switch ($type) {
+    case BATIRE_HIERARCHY_DT_TEXTE_OFFICIEL:
+    case BATIRE_HIERARCHY_DT_CODE:
+
+      $hierarchy = batire_hierarchy_get_by_bid($bid);
+      if ($hierarchy && $hierarchy->nid) {
+        $data = mongodb_page_get_node_page($hierarchy->nid);
+        if (!empty($data['summary']) || !empty($data['summary_codes'])) {
+          if (!empty($data['parent_bid'])) {
+            $versions = batire_hierarchy_get_children($data['parent_bid']);
+          } else {
+            $versions = array($hierarchy);
+          }
+          //add self or super if required
+          $self_founded = FALSE;
+          $super_founded = FALSE;
+
+          foreach ($versions as $version) {
+            if ($data['super_bid'] === $version->bid) {
+              $super_founded = TRUE;
+            }
+            if ($bid === $version->bid) {
+              $self_founded = TRUE;
+            }
+          }
+          if (!$self_founded) {
+            $versions[] = $hierarchy;
+            if ($data['bid'] == $data['super_bid']) {
+              $super_founded = TRUE;
+            }
+          }
+          if (!$super_founded) {
+            $versions[] = batire_hierarchy_get_by_bid($data['super_bid']);
+          }
+          foreach ($versions as $version) {
+            $version_data = array();
+            if ($version->nid) {
+              $version_data = mongodb_page_get_node_page($version->nid);
+              $result[] = (object) array(
+                'id' => $version->id,
+                'nid' => $version->nid,
+                'parent_id' => $version->parent_id,
+                'type' => $version->type,
+                'bid' => $version->bid,
+                'title' => $version->title,
+                'version' => $version_data ? (is_int($version_data['date_debut']) ?  $version_data['date_debut'] : $version_data['date_publi']) : $version->version,
+                'jorf' => $version_data && !empty($version_data['jorf']) ? $version_data['jorf'] : FALSE
+              );
+            }
+
+          }
+        } elseif (!empty($data['versions'])) {
+          $ids = array();
+          foreach ($data['versions'] as $version) {
+            $ids[] = $version['id'];
+          }
+          $sql = "SELECT * FROM {batire_hierarchy} WHERE id IN (" . db_placeholders($ids, 'varchar') . ") and TYPE = '%s' ";
+          $doc_type = batire_hierarchy_get_doc_type($type);
+          $args = array_merge($ids, array($doc_type['content_type']));
+          $sth = db_query($sql, $args);
+          $rows = array();
+          while ($row = db_fetch_object($sth)) {
+            $rows[$row->id] = $row;
+          }
+          foreach ($data['versions'] as $version) {
+            if (array_key_exists($version['id'], $rows)) {
+              //$rows[$version['id']]->version = $version['date_debut'];
+              $result[] = $rows[$version['id']];
+            }
+            else {
+              $result[] = (object) array(
+                'id' => $version['id'],
+                'nid' => NULL,
+                'parent_id' => $hierarchy->parent_id,
+                'type' => $hierarchy->type,
+                'bid' => batire_hierarchy_get_document_bid($version['id'], $type),
+                'title' => NULL,
+                'version' => $version['date_debut']
+              );
+            }
+          }
+        }
+        usort($result, '_batire_hierarchy_cmp_versions');
+      }
+      break;
+    default:
+      $sth = db_query("SELECT * FROM {batire_hierarchy} WHERE bid = '%s' OR bid LIKE '%s-%%' ORDER BY version", $bid, $bid);
+      while ($row = db_fetch_object($sth)) {
+        $result[] = $row;
+      }
+      usort($result, '_batire_hierarchy_cmp_versions');
+  }
+  return $result;
+}
+
+/**
+ * Invoke a hook_cp_xml_parseapi() operation in all modules.
+ *
+ * @param array &$data
+ *   Result of parse process, if already processed
+ * @param DOMDocument &$dom
+ *   DOM object parsed from XML
+ * @return
+ *   The returned value of the invoked hooks.
+ */
+function batire_hierarchy_invoke($op) {
+  $args = func_get_args();
+  $return = array();
+  foreach (module_implements('batire_hierarchy') as $name) {
+    $function = $name . '_batire_hierarchy';
+    $result = call_user_func_array($function, $args);
+    if (isset($result) && is_array($result)) {
+      $return = array_merge($return, $result);
+    }
+    elseif (isset($result)) {
+      $return[] = $result;
+    }
+  }
+  return $return;
+}
+
+/**
+ * Destroy all hierarchy recursively
+ *
+ * @param string $bid
+ */
+function batire_hierarchy_destroy_hierarchy($bid) {
+  $children = batire_hierarchy_get_children($bid);
+  foreach ($children as $child) {
+    batire_hierarchy_attach_children(NULL, $child->bid, NULL);
+    batire_hierarchy_destroy_hierarchy($child->bid);
+  }
+}
+
+function batire_hierarchy_get_other_normes_parts($bid) {
+  $group = batire_hierarchy_get_by_bid($bid, 'igroup');
+  if (!$group) {
+    return NULL;
+  }
+  $condition = array('igroup' => $group);
+  $group_rows = batire_hierarchy_search_items($condition);
+  $return = array();
+  foreach ($group_rows as $row) {
+    if ($row->bid == $bid) {
+      continue;
+    }
+    $data = mongodb_page_get_node_page($row->nid);
+    if ($data) {
+      $return[] = array('bid' => $row->bid, 'nref' => $data['reference'], 'title' => $row->title);
+    }
+  }
+  usort($return, "_batire_hierarchy_custom_sort");
+  return $return;
+}
+
+function _batire_hierarchy_custom_sort($a, $b) {
+  return $a['nref']>$b['nref'];
+}
+
+/**
+ * Implementation of hook_views_api().
+ * @return array
+ */
+function batire_hierarchy_views_api() {
+  return array('api' => '3');
+}
+
+/**
+ * Implementation of hook_views_data()
+ */
+function batire_hierarchy_views_data() {
+  // Define the base group of this table. Fields that don't
+  // have a group defined will go into this field by default.
+  $data['batire_hierarchy'] = array(
+    'table' => array(
+      'base' => array(
+        'field' => 'bid',
+        'title' => t('Main hierarchy table'),
+      ),
+      'group' => t('Batire hierarchy'),
+      'join' => array(
+        'node' => array(
+          'left_field' => 'nid',
+          'field' => 'nid'
+        )
+      )
+    ),
+    'bid' => array(
+      'title' => t('BID'),
+      'help' => t('Document`s BID'),
+      'field' => array(
+        'handler' => 'views_handler_field',
+        'click sortable' => TRUE,
+      ),
+      'filter' => array(
+        'handler' => 'views_handler_filter_string',
+      ),
+      'sort' => array(
+        'handler' => 'views_handler_sort',
+      ),
+      'argument' => array(
+        'handler' => 'views_handler_argument_string',
+      )
+    ),
+    'nid' => array(
+      'title' => t('Node ID'),
+      'relationship' => array(
+        'base' => 'node',
+        'field' => 'nid',
+        'handler' => 'views_handler_relationship',
+        'label' => t('Example node'),
+      )
+    )
+  );
+//
+//  $data['batire_hierarchy']['table']['base'] = array(
+//    'field' => 'bid',
+//    'title' => t('BID'),
+//    'help' => t("Batire`s document unique ID."),
+//  );
+//
+//  //joins
+  return $data;
+}
+
+/**
+ *
+ */
+function _batire_hierarchy_data_tree_to_children($data) {
+  $result = array();
+  foreach ($data['tree'] as $children_data) {
+    $tag_name = empty($data['tag_name']) ? '' : $data['tag_name'];
+    if (!_batire_hierarchy_match_version($data['etat'], $children_data['etat'], $children_data['bid'], $tag_name)) {
+      continue;
+    }
+    $child = array(
+      'bid' => $children_data['bid'],
+      'title' => $children_data['title'],
+    );
+    $hierarchy = batire_hierarchy_get_by_bid($child['bid']);
+    if ($hierarchy) {
+      $child = array_merge($child, (array) $hierarchy);
+    }
+    if (!empty($children_data['tree'])) {
+      $child['children'] = _batire_hierarchy_data_tree_to_children($children_data);
+    }
+    if ($hierarchy || !empty($child['children'])) {
+      $child = (object) $child;
+      if(!in_array($child, $result)) {
+        $result[] = $child;
+      }
+    }
+  }
+  return $result;
+}
+
+function _batire_hierarchy_check_trail(&$hierarchy, $bid) {
+  $result = FALSE;
+  foreach ($hierarchy as &$child) {
+    $child->active = FALSE;
+    if ($child->bid == $bid) {
+      $result = $child->active = TRUE;
+    }
+    elseif (!empty($child->children)) {
+      if (_batire_hierarchy_check_trail($child->children, $bid)) {
+        $result = $child->active = TRUE;
+      }
+    }
+  }
+  return $result;
+}
+
+function _batire_hierarchy_cmp_versions($a, $b) {
+  //none parsed dates
+  if (!is_numeric($a->version)) {
+    return 1;
+  } elseif (!is_numeric($b->version)) {
+    return -1;
+  }
+
+  if (empty($a->jorf) xor !empty($b->jorf)) {
+    if ((int)$a->version > (int)$b->version) {
+      return -1;
+    } elseif ((int)$a->version < (int)$b->version) {
+      return 1;
+    } else {
+      return 0;
+    }
+  } elseif (empty($a->jorf)) {
+    return -1;
+  } else {
+    return 1;
+  }
+}
+
+/**
+ * C-P from MJCP
+ *
+ * @param string $text_version
+ * @param string $article_version
+ * @return type
+ */
+function _batire_hierarchy_match_version($text_version = '', $article_version = '', $bid = NULL, $tag_name = '') {
+
+  //1 = Affichage de l’article dans le texte
+  //0 = Pas d’affichage de l’article dans le texte.
+
+static  $versions = array(
+   'VIGUEUR'        => array('VIGUEUR'=>1, 'VIGUEUR_DIFF'=>1, 'ABROGE'=>1, 'ABROGE_DIFF'=>1, 'ANNULE'=>0, 'DISJOINT'=>0, 'PERIME'=>1, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>1),
+   'VIGUEUR_DIFF'   => array('VIGUEUR'=>1, 'VIGUEUR_DIFF'=>1, 'ABROGE'=>0, 'ABROGE_DIFF'=>0, 'ANNULE'=>0, 'DISJOINT'=>0, 'PERIME'=>0, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>0),
+   'ABROGE'         => array('VIGUEUR'=>1, 'VIGUEUR_DIFF'=>1, 'ABROGE'=>1, 'ABROGE_DIFF'=>1, 'ANNULE'=>1, 'DISJOINT'=>0, 'PERIME'=>1, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>1),
+   'ABROGE_DIFF'    => array('VIGUEUR'=>1, 'VIGUEUR_DIFF'=>1, 'ABROGE'=>0, 'ABROGE_DIFF'=>1, 'ANNULE'=>0, 'DISJOINT'=>0, 'PERIME'=>0, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>1),
+   'ANNULE'         => array('VIGUEUR'=>0, 'VIGUEUR_DIFF'=>0, 'ABROGE'=>0, 'ABROGE_DIFF'=>0, 'ANNULE'=>1, 'DISJOINT'=>0, 'PERIME'=>1, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>0),
+   'DISJOINT'       => array('VIGUEUR'=>0, 'VIGUEUR_DIFF'=>0, 'ABROGE'=>0, 'ABROGE_DIFF'=>0, 'ANNULE'=>0, 'DISJOINT'=>1, 'PERIME'=>0, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>0),
+   'MODIFIE'        => array('VIGUEUR'=>1, 'VIGUEUR_DIFF'=>1, 'ABROGE'=>0, 'ABROGE_DIFF'=>0, 'ANNULE'=>1, 'DISJOINT'=>0, 'PERIME'=>0, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>1),
+   'PERIME'         => array('VIGUEUR'=>1, 'VIGUEUR_DIFF'=>0, 'ABROGE'=>1, 'ABROGE_DIFF'=>0, 'ANNULE'=>0, 'DISJOINT'=>0, 'PERIME'=>1, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>1),
+   'SUBSTITUE'      => array('VIGUEUR'=>0, 'VIGUEUR_DIFF'=>0, 'ABROGE'=>0, 'ABROGE_DIFF'=>0, 'ANNULE'=>0, 'DISJOINT'=>0, 'PERIME'=>0, 'SUBSTITUE'=>1, 'TRANSFERE'=>0, 'MODIFIE'=>0),
+   'TRANSFERE'      => array('VIGUEUR'=>1, 'VIGUEUR_DIFF'=>0, 'ABROGE'=>1, 'ABROGE_DIFF'=>0, 'ANNULE'=>0, 'DISJOINT'=>0, 'PERIME'=>1, 'SUBSTITUE'=>0, 'TRANSFERE'=>1, 'MODIFIE'=>1),
+   'MODIFIE_MORT_NE'=> array('VIGUEUR'=>0, 'VIGUEUR_DIFF'=>0, 'ABROGE'=>0, 'ABROGE_DIFF'=>0, 'ANNULE'=>0, 'DISJOINT'=>0, 'PERIME'=>0, 'SUBSTITUE'=>0, 'TRANSFERE'=>0, 'MODIFIE'=>0),
+  );
+  static $final_status = array(
+  'VIGUEUR'     => TRUE,
+  'DISJOINT'    => TRUE,
+  'ABROGE'      => TRUE,
+  'ABROGE_DIFF' => TRUE,
+  'ANNULE'      => TRUE,
+  'PERIME'      => TRUE,
+  'MODIFIE_MORT_NE' => TRUE,
+  'VIGUEUR_DIFF' => FALSE,
+  'TRANSFERE'    => FALSE,
+  'MODIFIE'      => FALSE
+  );
+
+  if (empty($text_version)) {
+    $text_version = 'VIGUEUR';
+  }
+  if (empty($article_version)) {
+    $article_version = 'VIGUEUR';
+  }
+  // first simple check
+  $return = isset($versions[$article_version]) && isset($versions[$article_version][$text_version]) && $versions[$article_version][$text_version];
+  if (!$return || !$bid) {
+    return $return;
+  }
+  
+  // chech root items for VIGUEUR
+  if($tag_name == 'section_ta' && $text_version != 'VIGUEUR'){
+    return FALSE;
+  }
+  
+  // deep check
+  $page_data = mongodb_page_get_page_by_bid($bid);
+
+
+  // check number of versions
+  if ( !$page_data || !isset($page_data['versions']) || count($page_data['versions'])<2   ) {
+    // it's one only
+    return TRUE;
+  }
+  $current_versions = array();
+  foreach($page_data['versions'] as $version) {
+    // exclude JORF
+    if (substr($version['id'], 0, 1) == "J") {
+      // skip JORF
+      continue;
+    }
+    // exclude by simple filter
+    if (!(isset($versions[$version['etat']]) && isset($versions[$version['etat']][$text_version]) && $versions[$version['etat']][$text_version])) {
+      continue;
+    }
+
+    // exclude modifie
+    if ($text_version == 'MODIFIE' && $version['etat'] == 'MODIFIE') {
+      continue;
+    }
+
+    $current_versions[] = $version;
+
+  }
+  if (count($current_versions)<2) {
+    // it's one only
+    return TRUE;
+  }
+  // if article's status modifie and text modifie and versions > 1
+  if ($text_version == 'MODIFIE' && $article_version == 'MODIFIE') {
+    return FALSE;
+  }
+
+  // find latest debute date and count this versions
+  $latest_date = 0;
+  $latest_count = 0;
+  foreach($current_versions as $version) {
+    if ($version['date_debut'] > $latest_date) {
+      $latest_date = $version['date_debut'];
+      $latest_count = 1;
+    }elseif ($version['date_debut'] == $latest_date) {
+      $latest_count++;
+    }
+  }
+  if($latest_count == 1 && $page_data['date_debut_art'] == $latest_date) {
+    // this is latest document
+    return TRUE;
+  } elseif($page_data['date_debut_art'] != $latest_date){
+    // this is not latest document
+    return FALSE;
+  }
+  // there are two or more documents with equal date_debut - check status
+  return $final_status[$text_version];
+
+
+}

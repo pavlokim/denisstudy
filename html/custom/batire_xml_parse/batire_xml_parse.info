@@ -1,0 +1,9 @@
+; $Id$
+name = XML Parser
+description = Provides Api for XML parsing
+package = Batire
+core = 6.x
+version = "6.x-1.0"
+dependencies[] = date_api
+dependencies[] = job_queue
+dependencies[] = batire_hierarchy

@@ -1,0 +1,12 @@
+; $Id: batire_site.info
+name = Batire site
+description = "Batire site functionallity."
+package = Batire
+core = 6.x
+
+dependencies[] = views
+dependencies[] = ctools
+dependencies[] = drupal_static
+dependencies[] = mongodb_user
+dependencies[] = mongodb_docs
+dependencies[] = mimemail

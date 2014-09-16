@@ -1,0 +1,36 @@
+2011-02-20 dman
+
+== Feature changes ==
+
+Removed constraint on image-field-must-be-multiple.
+  Single-value fields mean that only the cover page will be processed.
+
+Fixed behavior on one-page PDFs - previously they would not process correctly.
+  
+Deleting or replacing pdf original should also delete/rebuild the derived images
+
+== Internal changes ==
+
+Minor PHP-strict fixes.
+
+Added watchdog logs before processing.
+
+Shifted processing from hook_file_insert into hook_nodeapi
+  Deleted function pdf_to_imagefield_file_insert()
+  Added function pdf_to_imagefield_file_insert()
+
+Added utility function to check if a node had p_t_i settings on its filefields
+  pdf_to_imagefield_source_filefield()
+
+Renamed 
+  pdf_to_imagefield_save_image($filename, $path)
+  to  
+  pdf_to_imagefield_save_file($filepath)
+
+Renamed internal variables to be more explicit. 
+Sometimes $pdf was referring to the queued job, sometimes to the file data object.
+Named the field definition objects explicitly so it was always clear whether 
+$field is referring to 
+- the source data field name, 
+- the source data field cck definition, 
+- the destination data field name or definition. 

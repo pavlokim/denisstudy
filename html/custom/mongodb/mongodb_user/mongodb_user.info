@@ -1,0 +1,5 @@
+name = 'MongoDB user'
+description = 'A user data implementation using MongoDB'
+package = 'MongoDB'
+core = '6.x'
+dependencies[] = 'mongodb'

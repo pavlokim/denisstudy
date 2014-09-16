@@ -1,0 +1,935 @@
+<?php
+
+/**
+ * @file
+ * Provides webmaster functionallity and restrictions
+ */
+define('BATIRE_WEBMASTER_RID', 4);
+define('BATIRE_WEBMASTER_VID_FAQ', 1);
+define('BATIRE_WEBMASTER_NID_TRICKS', 718);
+define('BATIRE_EXPORT_USERS_FILES_DIRECTORY', file_create_path() . '/export_users');
+
+/**
+ * Views support
+ */
+module_load_include('inc', 'batire_webmaster', 'includes/views');
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_webmaster_menu() {
+
+  $items['admin/batire-site/users/%user/extend-free-period'] = array(
+    'title' => 'Extend free account',
+    'description' => t('Extends free trial period for user'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_webmaster_extend_user_free_period', 3),
+    'access arguments' => array('modify free trial term'),
+    'type' => MENU_CALLBACK
+  );
+
+  $items['admin/batire-site/product'] = array(
+    'title'             => 'Gestion des Produits',
+    'description'       => t('Gestion des Produits, ajout/edition/suppression, changement de l\'ordre'),
+    'position'          => 'left',
+    'weight'            =>  2,
+    'page callback'     => 'system_admin_menu_block_page',
+    'access arguments'  => array('administer batire configuration'),
+    'file'              => 'system.admin.inc',
+    'file path'         => drupal_get_path('module', 'system'),
+  );
+
+  $items['admin/batire-site/product/add-product-module-1-2'] = array(
+    'title'             => 'Ajouter un Produit du Module 1-2',
+    'page callback'     => 'drupal_goto',
+    'page arguments'    => array('node/add/batire-product-module-1-2'),
+    'access arguments'  => array('administer batire configuration'),
+    );
+
+  $items['admin/batire-site/product/add-product-module-3'] = array(
+    'title'             => 'Ajouter un Produit du Module 3',
+    'page callback'     => 'drupal_goto',
+    'page arguments'    => array('node/add/batire-product-module-3'),
+    'access arguments'  => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/product/terms'] = array(
+    'title'             => 'Categories des Produits',
+    'page callback'     => 'drupal_goto',
+    'page arguments'    => array('admin/content/taxonomy/' . BATIRE_USER_PRODUCTS_TYPES_VID),
+    'access arguments'  => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/settings/content-settings'] = array(
+    'title' => 'Content settings',
+    'position' => 'left',
+    'weight' => 4,
+    'description' => 'Content settings',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system')
+  );
+
+  $items['admin/batire-site/settings/content-settings/tricks'] = array(
+    'title' => '5 astuces',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('node/' . BATIRE_WEBMASTER_NID_TRICKS . '/edit', 'query' => 'destination=admin/batire-site/settings/content-settings'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/settings/content-settings/sites_moniter'] = array(
+    'title' => 'Sites moniteur',
+    'position' => 'left',
+    'weight' => 4,
+    'description' => 'Sites moniteur',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system')
+  );
+
+  $items['admin/batire-site/settings/content-settings/info_veille'] = array(
+    'title' => 'Info veille',
+    'position' => 'left',
+    'weight' => 4,
+    'description' => 'Info veille',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system')
+  );
+
+  $items['admin/batire-site/settings/content-settings/sites_moniter/list'] = array(
+    'title' => 'List',
+    'weight' => 2,
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('admin/batire-site/settings/content-settings/sites_moniteur'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/settings/content-settings/sites_moniter/create'] = array(
+    'title' => 'Créer',
+    'weight' => 2,
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('node/add/batire-homepage-blocks'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/settings/content-settings/info_veille/list_veilles'] = array(
+    'title' => 'List of infos veille',
+    'weight' => 2,
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('admin/batire-site/settings/content-settings/info_veille/list_infos_veilles'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/settings/content-settings/info_veille/create_info_veille'] = array(
+    'title' => 'Créer',
+    'weight' => 2,
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('node/add/batire-last-documents'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/manage'] = array(
+    'title' => 'Gestion',
+    'position' => 'left',
+    'weight' => 4,
+    'description' => 'Sites moniteur',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system')
+  );
+
+  $items['admin/batire-site/manage/menu'] = array(
+    'title' => 'Menu',
+    'description' => 'Ajouter/Editer/Supprimer des menus',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('admin/build/menu/list'),
+    'access arguments' => array('administer batire configuration'),
+    'weight' => 2
+  );
+
+  $items['admin/batire-site/manage/faq'] = array(
+    'title' => 'FAQ',
+    'description' => 'Gestion de la FAQ, ajout/edition/suppression, changement de l\'ordre',
+    'position' => 'left',
+    'weight' => 3,
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system')
+  );
+
+  $items['admin/batire-site/manage/faq/add'] = array(
+    'title' => 'Ajouter une FAQ',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('node/add/faq'),
+    'access arguments' => array('administer batire configuration')
+  );
+
+  $items['admin/batire-site/manage/faq/order'] = array(
+    'title' => 'Trier la FAQ',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('faq/order'),
+    'access arguments' => array('administer batire configuration')
+  );
+
+  $items['admin/batire-site/manage/faq/terms'] = array(
+    'title' => 'Modifier FAQ vocabulaire',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('admin/content/taxonomy/' . BATIRE_WEBMASTER_VID_FAQ),
+    'access arguments' => array('administer batire configuration')
+  );
+
+  $items['admin/batire-site/manage/cgv'] = array(
+    'title' => 'CGV',
+    'description' => 'Gestion des CGV',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+    'weight' => 10
+  );
+
+  $items['admin/batire-site/manage/cgv/view'] = array(
+    'title' => 'Voir',
+    'description' => 'Voir',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('node/' . BATIRE_SITE_CGV_NODE_NID),
+    'access arguments' => array('administer batire configuration'),
+    'weight' => 1
+  );
+
+  $items['admin/batire-site/manage/cgv/edit'] = array(
+    'title' => 'Modifier',
+    'description' => 'Modifier',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('node/' . BATIRE_SITE_CGV_NODE_NID . '/edit'),
+    'access arguments' => array('administer batire configuration'),
+    'weight' => 2
+  );
+
+  $items['admin/batire-site/manage/plan-du-site'] = array(
+    'title' => 'Plan du site',
+    'description' => 'Plan du site',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('admin/build/menu-customize/menu-plan-du-site'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/manage/email'] = array(
+    'title' => 'Email',
+    'description' => 'Gestion du email',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('admin/build/mail-edit'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_webmaster_init() {
+  /**
+   * Here we need to restrict for role "webmaster" access to front office;
+   */
+  global $user;
+
+  $allowed_urls = array('admin', 'logout', 'node', 'batch', 'faq', 'views');
+
+  if (array_key_exists(BATIRE_WEBMASTER_RID, $user->roles)) {
+
+    if (!in_array(arg(0), $allowed_urls)) {
+      drupal_goto('admin');
+    }
+    elseif (arg(0) == 'node') {
+      if (!(arg(2) == 'edit' || arg(1) == 'add' || arg(2) == 'delete')) {
+        drupal_goto('admin');
+      }
+      elseif (!(arg(1) == 'add' && arg(2) == 'faq' || arg(2) == 'edit')) {
+        drupal_goto('admin');
+      }
+    }
+    elseif (arg(0) == 'faq' && arg(1) != 'order') {
+      drupal_goto('admin');
+    }
+  }
+
+  if (arg(0) == 'faq' && arg(1) == 'order') {
+    /**
+     * Forcing admin theme;
+     */
+    global $custom_theme;
+    $custom_theme = variable_get('admin_theme', '0');
+  }
+
+  drupal_add_css(drupal_get_path('module', 'batire_webmaster') . '/styles/batire_webmaster.css');
+  if (array_key_exists(BATIRE_WEBMASTER_RID, $user->roles)) {
+    drupal_add_js(drupal_get_path('module', 'batire_webmaster') . '/scripts/batire_webmaster.js');
+  }
+}
+
+/**
+ * Implementation of hook_menu_alter().
+ */
+function batire_webmaster_menu_alter($items) {
+  $items['admin']['access callback'] = '_batire_webmaster_access_admin';
+  $items['admin']['page callback'] = '_batire_webmaster_admin_page';
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
+function batire_webmaster_form_user_login_alter(&$form, $form_state) {
+  $form['#validate'] = array_merge(
+  array('_batire_webmaster_user_login_validate'), user_login_default_validators()
+  );
+}
+
+/**
+ * Validation handler for login form
+ */
+function _batire_webmaster_user_login_validate($form, &$form_state) {
+  /**
+   * Here we need to allow to login only admin and webmasters;
+   */
+  $account = user_load(
+  array(
+    'name' => $form_state['values']['name'],
+    'pass' => trim($form_state['values']['pass']),
+    'status' => 1
+  )
+  );
+
+  if ($account) {
+    if (!($account->uid == 1 || array_key_exists(BATIRE_WEBMASTER_RID, $account->roles))) {
+      drupal_set_message(t('This username is not allowed to access this site'), 'error');
+      form_set_error('name', t('This username is not allowed to access this site'));
+    }
+  }
+  return TRUE;
+}
+
+/**
+ * Access callback for accessing admin page
+ */
+function _batire_webmaster_access_admin() {
+  /**
+   * Here we need to see, if user either webmaster or admin -
+   * then we're returning true.
+   */
+  global $user;
+
+  return $user->uid == 1 || array_key_exists(BATIRE_WEBMASTER_RID, $user->roles);
+}
+
+/**
+ * Page callback for admin page
+ */
+function _batire_webmaster_admin_page() {
+  global $user;
+
+  if ($user->uid == 1) {
+    /**
+     * Displaying default admin page;
+     */
+    module_load_include('admin.inc', 'system');
+    $arguments = func_get_args();
+    return call_user_func_array('system_main_admin_page', $arguments);
+  }
+  elseif (array_key_exists(BATIRE_WEBMASTER_RID, $user->roles)) {
+    drupal_goto('admin/batire-site');
+  }
+}
+
+/**
+ * Implementation of hook_preprocess_page().
+ */
+function batire_webmaster_preprocess_page(&$vars, $hook) {
+  if ('admin/batire-site' == arg(0) . '/' . arg(1)) {
+    switch (arg(2)) {
+      case 'faq' :
+        break;
+      default :
+        $vars['hide_tabs'] = TRUE;
+        unset($vars['tabs']);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_form_alter().
+ */
+function batire_webmaster_form_alter(&$form, &$form_state, $form_id) {
+  global $user;
+
+  if (array_key_exists(BATIRE_WEBMASTER_RID, $user->roles)) {
+    $avail_vocabularies = array(BATIRE_WEBMASTER_VID_FAQ);
+
+    switch ($form_id) {
+      case 'taxonomy_overview_vocabularies':
+        foreach ($form as $key => $item) {
+          if (is_numeric($key) && !in_array($key, $avail_vocabularies)) {
+            unset($form[$key]);
+          }
+        }
+        break;
+      case 'taxonomy_form_vocabulary':
+        drupal_goto('admin/batire-site');
+        break;
+      case 'taxonomy_form_term':
+        if (!isset($form['#vocabulary']) || (isset($form['#vocabulary']) && !in_array($form['#vocabulary']['vid'], $avail_vocabularies))) {
+          drupal_goto('admin/batire-site');
+        }
+        break;
+    }
+  }
+
+  switch ($form_id) {
+    case 'batire_5_advices_node_form':
+      if ($form['nid']['#value'] == BATIRE_WEBMASTER_NID_TRICKS) {
+        $form['buttons']['submit']['#submit'][] = 'batire_webmaster_block_5_advices_form_submit';
+      }
+      break;
+  }
+}
+
+/**
+ * Admin form for extending user free trial
+ */
+function batire_webmaster_extend_user_free_period($form_state, $account) {
+  /**
+   * First of all we need to check
+   * 1. If $account is free
+   * 2. If $account is monoposte or multiposte admin
+   */
+  if (_batire_user_is_paid($account)) {
+    drupal_set_message(t('You can not extend free trial term for paid user'), 'error');
+    drupal_goto('admin/batire-site/users');
+  }
+
+  if (!_batire_user_is_monopost($account) && !_batire_user_is_multipost($account, TRUE)) {
+    drupal_set_message(t('You can not extend free trial term for subaccount'), 'error');
+    drupal_goto('admin/batire-site/users');
+  }
+
+  /**
+   * All checks performed, we need to construct the form;
+   */
+  $profile = batire_user_profile_load($account->uid);
+
+  $form = array();
+
+  $form['#account'] = $account;
+  $form['#profile'] = $profile;
+
+  $form['current'] = array(
+    '#type' => 'item',
+    '#value' => format_date($profile->field_user_dates[0]['value2']),
+    '#title' => t('Current')
+  );
+
+  $form['extend_to'] = array(
+    '#type' => 'date',
+    '#title' => t('Extend to')
+  );
+
+  $form['notify'] = array(
+    '#type' => 'checkbox',
+    '#default_value' => 1,
+    '#title' => t('Notify user about free trial extension')
+  );
+
+  $form['buttons']['submit'] = array('#type' => 'submit', '#value' => t('Save'));
+
+  return $form;
+}
+
+/**
+ * Validation handler for the form
+ */
+function batire_webmaster_extend_user_free_period_validate($form, &$form_state) {
+  $form_state['storage']['#account'] = $form['#account'];
+  $form_state['storage']['#profile'] = $form['#profile'];
+
+  $form_state['values']['extend_to'] = mktime(
+  23, 59, 59, $form_state['values']['extend_to']['month'], $form_state['values']['extend_to']['day'], $form_state['values']['extend_to']['year']
+  );
+}
+
+/**
+ * Submit handler for the form
+ */
+function batire_webmaster_extend_user_free_period_submit($form, &$form_state) {
+
+  $profile = $form_state['storage']['#profile'];
+
+  $profile->field_user_dates[0]['value2'] = $form_state['values']['extend_to'];
+
+  node_save($profile);
+
+  /**
+   * If this user is multipost admin, then we need to change dates for all his
+   * subaccounts;
+   */
+  if ($profile->field_user_subacc[0]['uid']) {
+    foreach ($profile->field_user_subacc as $subaccount) {
+      if ($subaccount['uid']) {
+        $sub_profile = batire_user_profile_load($subaccount['uid']);
+        if (isset($sub_profile->uid) && $sub_profile->uid) {
+          $sub_profile->field_user_dates[0]['value2'] = $form_state['values']['extend_to'];
+          node_save($sub_profile);
+          if ($form_state['values']['notify']) {
+            /**
+             * Here we need to send email to subaccount.
+             */
+            _batire_webmaster_free_extension_notify($sub_profile);
+          }
+        }
+      }
+    }
+  }
+
+  if ($form_state['values']['notify']) {
+    /**
+     * Here we need to send email to user.
+     */
+    _batire_webmaster_free_extension_notify($profile);
+  }
+
+  drupal_set_message(t('Free trial period was extended'));
+  drupal_goto('admin/batire-site/users');
+}
+
+/**
+ * Sends notification email out;
+ */
+function _batire_webmaster_free_extension_notify($profile) {
+  $account = user_load($profile->uid);
+  $options = array(
+    'module' => 'batire_webmaster',
+    'mailkey' => 'batire_webmaster_free_trial_extension',
+    'recipient' => $account->mail,
+    'subject' => '',
+    'data' => array(
+      'name' => $profile->field_user_name[0]['value'],
+      'surname' => $profile->field_user_surname[0]['value'],
+      'salutation' => $profile->field_user_salut[0]['value'],
+      'site_link' => l(SITE_NAME_UC, '<front>', array('absolute' => TRUE)),
+      'new_date' => format_date($profile->field_user_dates[0]['value2'], 'custom', 'd/m/Y'),
+    ),
+    'plaintext' => FALSE
+  );
+
+  batire_site_send_mail($options);
+}
+
+/**
+ * Implementation of hook_user_operations().
+ */
+function batire_webmaster_user_operations() {
+  $operations = array(
+    'batire_webmaster_users_export' => array(
+      'label' => t('Export users'),
+      'callback' => 'batire_webmaster_user_operations_export_users',
+    ),
+  );
+  return $operations;
+}
+
+/**
+ * Implementation of hook_node_operations().
+ */
+function batire_webmaster_node_operations() {
+  $operations = array(
+    'batire_webmaster_users_export' => array(
+      'label' => t('Export users'),
+      'callback' => 'batire_webmaster_node_operations_export_users',
+    ),
+  );
+  return $operations;
+}
+
+/**
+ * Export users function node operation callback
+ * Get export users file
+ */
+function batire_webmaster_user_operations_export_users($users_nids) {
+
+  try {
+    if (!batire_user_statistics_file_check_directory()) {
+      throw new Exception();
+    }
+    $date = format_date(time(), 'custom', 'd-m-Y--H-i');
+    $filepath = batire_site_get_file_path('export_users', array('date' => $date));
+    if (file_exists($filepath)) {
+      file_delete($filepath);
+    }
+
+    $data = batire_webmaster_export_users_get_data($users_nids);
+    if (empty($data)) {
+      throw new Exception();
+    }
+
+    //@todo need ask
+    $function = batire_site_get_generate_file_function(
+    'batire_webmaster_export_users_generate_excel_file', 'batire_webmaster_export_users_generate_csv_file'
+    );
+
+    if ($function($data, $filepath)) {
+
+      $furl = file_create_url($filepath);
+      drupal_set_message('<strong>' . t('You can download exported data file !here', array(
+        '!here' => l(t('here'), $furl)
+      )) . '</strong><script type="text/javascript">$(function(){location.href="' . url($furl) . '";});</script>');
+    }
+    else {
+      throw new Exception();
+    }
+  }
+  catch (Exception $e) {
+    drupal_set_message(t('Data not found'));
+    drupal_goto('admin/batire-site/users');
+  }
+}
+
+/**
+ * Save export users data to excel file.
+ * @param Array $data File data
+ * @param String $filepath Path to file
+ * @return String Path to file
+ */
+function batire_webmaster_export_users_generate_excel_file($data, $filepath) {
+  $titles = _batire_webmaster_export_users_get_file_header();
+  $map = _batire_webmaster_export_users_get_map();
+  return batire_site_generate_excel_file($filepath, $map, $data, $titles);
+}
+
+/**
+ * Save export users data to csv file
+ * @param $data Report data
+ * @param $filepath Path to report file
+ */
+function batire_webmaster_export_users_generate_csv_file($data, $filepath) {
+  $map = _batire_webmaster_export_users_get_map();
+  $titles = _batire_webmaster_export_users_get_file_header();
+  return batire_site_generate_csv_file($filepath, $map, $data, $titles);
+}
+
+/**
+ * Get export users data
+ */
+function batire_webmaster_export_users_get_data($users_nids) {
+  //filter nids
+  foreach ($users_nids as $key => $nid) {
+    if (!is_numeric($nid)) {
+      unset($users_nids[$key]);
+    }
+  }
+
+  $users_types = array(
+    BATIRE_USER_TYPES_PAID,
+    BATIRE_USER_TYPES_MONTH,
+    BATIRE_USER_TYPES_FREE,
+    BATIRE_USER_TYPES_TRIALTN,
+  );
+
+  $sql = 'SELECT
+     -- get user salut
+     ctup.field_user_salut_value AS salut,
+
+     -- get user surname
+      ctup.field_user_surname_value AS surname,
+
+     -- get user name
+      ctup.field_user_name_value AS name,
+
+     -- get user email
+     u.mail AS email,
+
+     -- get user telephone 1
+     ctup.field_user_tel_1_value AS tel_1,
+
+     -- get user telephone 2
+     ctup.field_user_tel_2_value AS tel_2,
+
+     -- get user fax
+     ctup.field_user_fax_value AS fax,
+
+     -- get user promo
+      ctup.field_user_promo_value AS promo,
+
+     -- get user position
+     ctup.field_user_position_value AS position,
+
+     -- get user specialty
+     ctup.field_user_specialty_value AS specialty,
+
+     -- get user statut
+     ctup.field_user_statut_value AS statut,
+
+     -- get user company name
+     ctup.field_user_company_value AS company_name,
+
+     -- get user address 1
+     ctup.field_user_address_1_value AS address_1,
+
+     -- get user address 2
+     ctup.field_user_address_2_value AS address_2,
+
+     -- get user zip
+     ctup.field_user_zip_value AS zip,
+
+     -- get user city
+     ctup.field_user_city_value AS city,
+
+     -- get user country
+     ctup.field_user_country_value AS country,
+
+     -- get user origene
+     ctup.field_user_origene_value AS origene,
+
+     -- get user login
+     u.svc_login AS login,
+
+     -- get user newsletter subscription status
+     ctup.field_subscribed_to_newsletter_value AS subscribed_to_newsletter,
+
+     -- get user status
+     u.status AS status,
+
+     -- get SVC id
+     u.name AS svc_id,
+
+     -- get user roles
+     (SELECT GROUP_CONCAT(rol.name, "") FROM {role} rol LEFT JOIN {users_roles} usr ON usr.rid = rol.rid WHERE usr.uid = u.uid) AS roles,
+
+     -- get offre
+      (SELECT td.name FROM {term_data} td LEFT JOIN {term_node} tn ON td.tid = tn.tid
+      WHERE tn.vid = ctup.vid AND td.tid IN (' . db_placeholders($users_types, 'int') . ') ) AS offre,
+
+     -- get user abo num
+     u.abo_num AS abo_num,
+
+     -- get created date
+     (CASE u.created WHEN 0 THEN "" ELSE u.created END) AS created_date,
+
+     -- get due date
+     (CASE ctup.field_user_dates_value2 WHEN 0 THEN "" ELSE ctup.field_user_dates_value2 END) AS due_date,
+
+     -- get date of last user login
+     (CASE u.login WHEN 0 THEN "" ELSE u.login END) AS last_login,
+
+     -- get user products
+     (SELECT GROUP_CONCAT(DISTINCT pn.title ORDER BY pn.nid ASC SEPARATOR \', \') FROM {node} un
+       LEFT JOIN {content_field_user_products} cfup ON cfup.vid = un.vid
+       LEFT JOIN {node} pn ON pn.nid = cfup.field_user_products_nid
+       WHERE un.type = \'batire_user_profile\' AND un.uid = u.uid) AS products
+
+
+    FROM {users} u
+      LEFT JOIN {node} node ON node.uid = u.uid
+      LEFT JOIN {content_type_batire_user_profile} ctup ON node.vid = ctup.vid
+    WHERE node.type = "batire_user_profile"  AND u.uid IN (' . db_placeholders($users_nids, 'int') . ')
+
+    GROUP BY u.uid';
+
+  $db_result = db_query($sql, array_merge($users_types, $users_nids));
+
+  $result = array();
+  $field_user_statut = content_fields('field_user_statut', 'batire_user_profile');
+  $field_user_statut_values = content_allowed_values($field_user_statut);
+
+  while ($profile = db_fetch_object($db_result)) {
+    $profile->created_date = format_date($profile->created_date, 'custom', 'd/m/Y H:i');
+    $profile->due_date = format_date($profile->due_date, 'custom', 'd/m/Y H:i');
+    $profile->last_login = format_date($profile->last_login, 'custom', 'd/m/Y H:i');
+    $profile->status = $profile->status ? t('Actif') : t('Inactif');
+
+    $svc_data = batire_svc_get_user_data('', $profile->login);
+    if (!empty($svc_data) && !$svc_data['error'] && isset($svc_data['data'])) {
+      $data = _batire_svc_unpack_profile($svc_data['data']);
+      $profile->pasw = $data['pass'];
+    }
+    else {
+      $profile->pasw = '';
+    }
+    if ($profile->subscribed_to_newsletter == 1) {
+      $profile->subscribed_to_newsletter = t('Yes');
+    }
+    else {
+      $profile->subscribed_to_newsletter = t('No');
+    }
+    $profile->statut = isset($field_user_statut_values[$profile->statut]) ? $field_user_statut_values[$profile->statut] : '';
+    $result[] = $profile;
+  }
+  return $result;
+}
+
+/**
+ * Get map for export users
+ * @return Array List of keys
+ */
+function _batire_webmaster_export_users_get_map() {
+  return array(
+    'A' => 'salut',
+    'B' => 'surname',
+    'C' => 'name',
+    'D' => 'email',
+    'E' => 'tel_1',
+    'F' => 'tel_2',
+    'G' => 'fax',
+    'H' => 'promo',
+    'I' => 'position',
+    'J' => 'statut',
+    'K' => 'company_name',
+    'L' => 'address_1',
+    'M' => 'address_2',
+    'N' => 'zip',
+    'O' => 'city',
+    'P' => 'country',
+    'Q' => 'svc_id',
+    'R' => 'login',
+    'S' => 'subscribed_to_newsletter',
+    'T' => 'pasw',
+    'U' => 'status',
+    'V' => 'roles',
+    'W' => 'offre',
+    'X' => 'abo_num',
+    'Y' => 'created_date',
+    'Z' => 'due_date',
+    'AA' => 'last_login',
+    'AB' => 'products',
+    'AC' => 'origene',
+  );
+}
+
+/**
+ * Get header for export users
+ * @return Array List of column names
+ */
+function _batire_webmaster_export_users_get_file_header() {
+  return array(
+    'A' => t('Civilité'),
+    'B' => t('Nom'),
+    'C' => t('Prénom'),
+    'D' => 'Email',
+    'E' => t('Téléphone'),
+    'F' => t('Autre téléphone'),
+    'G' => t('Fax'),
+    'H' => t('Code privilège'),
+    'I' => t('Fonction'),
+    'J' => t('Statut'),
+    'K' => t('Raison sociale'),
+    'L' => t('Adresse 1'),
+    'M' => t('Adresse 2'),
+    'N' => t('Code postal'),
+    'O' => t('Ville'),
+    'P' => t('Pays'),
+    'Q' => 'SVC ID',
+    'R' => 'Login',
+    'S' => t('Subscribed to newsletter'),
+    'T' => t('Mot de passe'),
+    'U' => t('Actif'),
+    'V' => t('Role'),
+    'W' => t('Offre'),
+    'X' => t('N° d’abonné'),
+    'Y' => t('Date de création'),
+    'Z' => t('Date d’échéance'),
+    'AA' => t('Date dernièr accés'),
+    'AB' => t('Products'),
+    'AC' => t('Type utilisateur'),
+  );
+}
+
+/**
+ * Implements hook_mailkeys().
+ */
+function batire_webmaster_mailkeys() {
+  return array(
+    'batire_webmaster_free_trial_extension' => t('Free trial extension'),
+  );
+}
+
+/**
+ * Implementation of hook_mail_edit_tokens_value().
+ * @param $mailkey
+ * @param $mail
+ */
+function batire_webmaster_mail_edit_tokens_value($mailkey, $mail) {
+  $tokens = array();
+
+  $tokens['!site_name_uc'] = SITE_NAME_UC;
+  $tokens['!site_name_lc'] = SITE_NAME_LC;
+  $tokens['!site_name_fs'] = SITE_NAME_FS;
+
+  switch ($mailkey) {
+    case 'batire_webmaster_free_trial_extension':
+      $tokens['!name'] = $mail['params']['data']['name'];
+      $tokens['!surname'] = $mail['params']['data']['surname'];
+      $tokens['!salutation'] = $mail['params']['data']['salutation'];
+      $tokens['!new_date'] = $mail['params']['data']['new_date'];
+      $tokens['!site_link'] = $mail['params']['data']['site_link'];
+      break;
+  }
+
+  return $tokens;
+}
+
+/**
+ * Implements hook_tokens_list().
+ */
+function batire_webmaster_mail_edit_tokens_list($mailkey, $options = array()) {
+  $tokens = array();
+
+  $tokens['!site_name_uc'] = SITE_NAME_UC;
+  $tokens['!site_name_lc'] = SITE_NAME_LC;
+  $tokens['!site_name_fs'] = SITE_NAME_FS;
+
+  $tokens['!name'] = t('Name');
+  $tokens['!surname'] = t('Surname');
+  $tokens['!salutation'] = t('Salutation');
+
+  switch ($mailkey) {
+    case 'batire_webmaster_free_trial_extension':
+      $tokens['!new_date'] = t('Date extended to');
+      $tokens['!site_link'] = t('Home page link');
+      break;
+  }
+
+  return $tokens;
+}
+
+/**
+ * Submit for block "5 astuces"
+ */
+function batire_webmaster_block_5_advices_form_submit($form, &$form_state) {
+  drupal_get_messages();
+  drupal_set_message(t('Block "5 astuces" was saved successfully.'));
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function batire_webmaster_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  switch ($op) {
+    case 'insert':
+      switch ($node->type) {
+        case 'batire_homepage_blocks':
+          drupal_set_message(t('@type %title has been created.', array('@type' => node_get_types('name', $node), '%title' => $node->title)));
+          drupal_goto('admin/batire-site/settings/content-settings/sites_moniteur');
+          break;
+
+        case 'batire_last_documents':
+          drupal_set_message(t('@type %title has been created.', array('@type' => node_get_types('name', $node), '%title' => $node->title)));
+          drupal_goto('admin/batire-site/settings/content-settings/info_veille/list_infos_veilles');
+          break;
+      }
+      break;
+  }
+}

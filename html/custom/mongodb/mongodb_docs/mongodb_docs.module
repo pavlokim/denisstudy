@@ -1,0 +1,873 @@
+<?php
+
+/**
+ * @file
+ * Documents related stuff to mongodb.
+ */
+
+define('MONGODB_DOCS_COLLECTION', 'docs');
+define('MONGODB_DOCS_ACCESS_COLLECTION', 'docs_access');
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function mongodb_docs_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  global $user;
+  if (!isset($node->type)) {
+    return;
+  }
+  if ($node->type == 'batire_user_annotation') {
+    $shared = $node->field_annotation_shared[0]['value'] ? 'shared' : 'private';
+    switch ($op) {
+      case 'insert' :
+        mongodb_docs_add_annotation($node->field_annotation_doc[0]['nid'], $shared, $node->nid, $node->changed, $node->field_annotation_text[0]['value'], $node->uid);
+        break;
+
+      case 'update' :
+        mongodb_docs_edit_annotation($node->field_annotation_doc[0]['nid'], $shared, $node->nid, $node->changed, $node->field_annotation_text[0]['value'], $node->uid);
+        break;
+
+      case 'delete' :
+        mongodb_docs_del_annotation($node->field_annotation_doc[0]['nid'], $node->nid, $shared, $node->uid);
+        break;
+    }
+  }
+  elseif (_batire_site_is_document($node->type)) {
+    switch ($op) {
+      case 'view'   :
+        if (arg(0) == 'node') {
+          $keys = array('uid' => (int) $user->uid);
+          $data = mongodb_select_one(MONGODB_DOCS_ACCESS_COLLECTION, $keys);
+
+          //Check is user have any doc
+          if (!(isset($data) && $data)) {
+            $data = array(
+              'uid'   => (int) $user->uid,
+              'docs'  => array(),
+            );
+            mongodb_update(MONGODB_DOCS_ACCESS_COLLECTION, $keys, $data);
+          }
+
+          $data['docs']['d' . $node->nid]['last_access_date'] = REQUEST_TIME;
+          mongodb_update(MONGODB_DOCS_ACCESS_COLLECTION, $keys, $data);
+        }
+        break;
+    }
+  }
+}
+
+/**
+ * Add document to MongoDB
+ *
+ * @param type $did
+ * @param type $adddate
+ * @param type $fid
+ * @param type $fname
+ * @param type $shared
+ * @param type $user_id
+ */
+function mongodb_docs_add_doc($did, $adddate, $fid, $fname, $shared = NULL, $user_id = NULL, $recursive = FALSE) {
+  if (isset($user_id)) {
+    $user = user_load($user_id);
+  }
+  else {
+    global $user;
+  }
+
+  if ($user->uid) {
+    //Check is user have any doc
+    $keys = array('uid' => (int) $user->uid);
+    $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+    if (!(isset($data) && $data)) {
+      $data = array(
+        'uid'   => (int) $user->uid,
+        'docs'  => array(),
+      );
+      mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+    }
+
+    //Check is user have this doc
+    if (!(isset($data['docs']['d' . $did]) && $data['docs']['d' . $did])) {
+      $data['docs']['d' . $did] = array(
+        'nid'              => (int) $did,
+        'last_access_date' => time(),
+        'folders' => array(),
+        'anno_cnt' => 0,
+        'anno_s_cnt' => 0,
+        'anno_p_cnt' => 0,
+        'anno' => array(
+            'p' => array(),
+            's' => array(),
+        ),
+      );
+      mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+
+      //Stat update
+      $ukeys = array('data.uid' => (int) $user->uid);
+      $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+      if ((isset($udata) && $udata)) {
+        $udata['folders']['stat']['d_cnt']++;
+        if ($shared) {
+          $udata['folders']['stat']['d_scnt']++;
+        }
+        else {
+          $udata['folders']['stat']['d_pcnt']++;
+        }
+        //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+        mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-1');
+      }
+    }
+    else {
+      //Stat update
+      $ukeys = array('data.uid' => (int) $user->uid);
+      $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+      if ((isset($udata) && $udata)) {
+        $doc_folders = mongodb_docs_folders_list($user->uid, $did);
+        $folder_shared = FALSE;
+        $folder_prv    = FALSE;
+        foreach ($doc_folders as $doc_folder) {
+          //@todo isset
+          if (isset($doc_folder['nid'])) {
+            if (mongodb_user_folder_shared($doc_folder['nid'], $user->uid)) {
+              $folder_shared = TRUE;
+            } else {
+              $folder_prv = TRUE;
+            }
+          }
+        }
+
+        if ($shared == 1 && !$folder_shared) {
+          $udata['folders']['stat']['d_scnt']++;
+        }
+        elseif ($shared != 1 && !$folder_prv) {
+          $udata['folders']['stat']['d_pcnt']++;
+        }
+        //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+        mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-2');
+
+      }
+    }
+
+    //Check is user have this doc in this folders
+    if (!(isset($data['docs']['d' . $did]['folders']['f' . $fid]) && $data['docs']['d' . $did]['folders']['f' . $fid])) {
+      $data['docs']['d' . $did]['folders']['f' . $fid] = array(
+        'nid'    => (int) $fid,
+        'name'   => $fname,
+        'shared' => (int) $shared,
+        'date'   => (int) $adddate,
+      );
+      mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+    }
+
+    //Check if multi account
+    if (is_object($user) && (array_key_exists(BATIRE_USER_MULTIADMIN, $user->roles) || array_key_exists(BATIRE_USER_SUBACCOUNT, $user->roles)) && $shared && !$recursive) {
+      //Update last doc
+      //Get admin id
+      $ukeys = array('data.uid' => (int) $user->uid);
+      $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+      $admin_id = $udata['admin_id'];
+      //User is admin
+      if ($admin_id == $user->uid) {
+        $udata['members']['u' . $user->uid]['last_doc_add'] = array(
+          'nid'  => (int) $did,
+          'date' => (int) $adddate,
+        );
+        //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+        mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-3');
+
+      }
+      else {
+        //Update admin members data
+        $akeys = array('data.uid' => (int) $admin_id);
+        $adata = mongodb_select_one(MONGODB_USER_COLLECTION, $akeys);
+
+        $adata['members']['u' . $user->uid]['last_doc_add'] = array(
+          'nid'  => (int) $did,
+          'date' => (int) $adddate,
+        );
+        //mongodb_update(MONGODB_USER_COLLECTION, $akeys, $adata);
+        mongodb_user_update($akeys, $adata, __FUNCTION__ . '-4');
+      }
+
+      //ADD TO OTHER MEMBERS
+      //Get members
+      $mkeys = array('data.uid' => (int) $admin_id);
+      $mdata = mongodb_select_one(MONGODB_USER_COLLECTION, $mkeys);
+
+      $members = array();
+      if (isset($mdata['members']) && $mdata['members']) {
+        $members = $mdata['members'];
+      }
+      foreach ($members as $member) {
+        $muid = $member['uid'];
+        if ($muid != $user->uid) {
+          mongodb_docs_add_doc($did, $adddate, $fid, $fname, $shared, $muid, TRUE);
+        }
+      }
+    }
+
+    //Invalidate infobar cache
+    cache_clear_all('batire_user_docs_infobar:' . $did . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+  }
+}
+
+/**
+ * Delete document from MongoDB
+ *
+ * @param type $did
+ * @param type $fid
+ * @param type $shared
+ * @param type $user_id
+ */
+function mongodb_docs_del_doc($did, $fid, $shared = NULL, $user_id = NULL, $recursive = FALSE, $del_p_anno = TRUE) {
+  if (isset($user_id)) {
+    $user = user_load($user_id);
+  }
+  else {
+    global $user;
+  }
+  $keys = array('uid' => (int) $user->uid);
+  $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+
+  //Check is user have this doc in this folders
+  if ((isset($data['docs']['d' . $did]['folders']['f' . $fid]) && $data['docs']['d' . $did]['folders']['f' . $fid])) {
+    unset($data['docs']['d' . $did]['folders']['f' . $fid]);
+    mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+  }
+
+  //Check is doc in other folders
+  if (isset($data['docs']['d' . $did]['folders']) && count($data['docs']['d' . $did]['folders']) > 0) {
+    $ukeys = array('data.uid' => (int) $user->uid);
+    $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+    $doc_folders = mongodb_docs_folders_list($user->uid, $did);
+    $folder_shared = FALSE;
+    $folder_prv    = FALSE;
+    foreach ($doc_folders as $doc_folder) {
+      if ($doc_folder['shared']) {
+        $folder_shared = TRUE;
+      }
+      else {
+        $folder_prv = TRUE;
+      }
+    }
+
+    if ($shared == 1) {
+      if (!$folder_shared) {
+        $udata['folders']['stat']['d_scnt']--;
+        //delete shared annotations case no shared docs left
+        if (isset($data['docs']['d' . $did]['anno']['s'])) {
+          $annos = $data['docs']['d' . $did]['anno']['s'];
+          foreach ($annos as $aid => $anno) {
+            node_delete(substr($aid, 1));
+          }
+        }
+      }
+    }
+    else {
+      if (!$folder_prv) {
+        $udata['folders']['stat']['d_pcnt']--;
+        //delete private annotations
+        if (isset($data['docs']['d' . $did]['anno']['p'])) {
+          $annos = $data['docs']['d' . $did]['anno']['p'];
+          foreach ($annos as $aid => $anno) {
+            if ($del_p_anno) {
+              node_delete(substr($aid, 1));
+            }
+          }
+        }
+      }
+    }
+    //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+    mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-1');
+
+  }
+  else {
+    //remove all annotations
+    if (isset($data['docs']['d' . $did]['anno']['s'])) {
+      $annos = $data['docs']['d' . $did]['anno']['s'];
+      foreach ($annos as $aid => $anno) {
+        node_delete(substr($aid, 1));
+      }
+    }
+    if (isset($data['docs']['d' . $did]['anno']['p'])) {
+      $annos = $data['docs']['d' . $did]['anno']['p'];
+      foreach ($annos as $aid => $anno) {
+        if ($del_p_anno) {
+          node_delete(substr($aid, 1));
+        }
+      }
+    }
+
+    //clean up trash
+    unset($data['docs']['d' . $did]);
+    mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+    //Stat update
+    $ukeys = array('data.uid' => (int) $user->uid);
+    $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+    if ((isset($udata) && $udata)) {
+      $udata['folders']['stat']['d_cnt']--;
+      if ($shared == 1) {
+        $udata['folders']['stat']['d_scnt']--;
+      }
+      else {
+        $udata['folders']['stat']['d_pcnt']--;
+      }
+      //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+      mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-2');
+    }
+  }
+
+  //Check if multi account and doc shared. If it is - update last doc for all members
+  if ((array_key_exists(BATIRE_USER_MULTIADMIN, $user->roles) || array_key_exists(BATIRE_USER_SUBACCOUNT, $user->roles)) && $shared && !$recursive) {
+    //Update last docs
+    //Get admin id
+    $ukeys = array('data.uid' => (int) $user->uid);
+    $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+    $admin_id = $udata['admin_id'];
+
+    if ($admin_id == $user->uid) {
+      if ($udata['members']['u' . $user->uid]['last_doc_add']['nid'] == $did) {
+        //find last doc added
+        $doc_query = db_query('
+        SELECT field_folder_documents_nid, field_folder_documents_added
+          FROM  content_field_folder_documents
+            LEFT JOIN node ON content_field_folder_documents.vid = node.nid
+            LEFT JOIN content_field_folder_shared ON content_field_folder_documents.vid = content_field_folder_shared.vid
+          WHERE field_folder_shared_value = 1 AND field_folder_documents_owner = %d
+          ORDER BY field_folder_documents_added DESC
+          LIMIT 1
+        ', $user->uid);
+        $doc = db_fetch_object($doc_query);
+        //update
+        $udata['members']['u' . $user->uid]['last_doc_add'] = array(
+          'nid'  => (int) isset($doc->field_folder_documents_nid) ? $doc->field_folder_documents_nid : 0,
+          'date' => (int) isset($doc->field_folder_documents_added) ? $doc->field_folder_documents_added : 0,
+        );
+        //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+        mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-3');
+      }
+    }
+    else {
+      //Update admin members data
+      $akeys = array('data.uid' => (int) $admin_id);
+      $adata = mongodb_select_one(MONGODB_USER_COLLECTION, $akeys);
+
+      if ($adata['members']['u' . $user->uid]['last_doc_add']['nid'] == $did) {
+        //find last doc added
+        $doc_query = db_query('
+        SELECT field_folder_documents_nid, field_folder_documents_added
+          FROM  content_field_folder_documents
+            LEFT JOIN node ON content_field_folder_documents.vid = node.nid
+            LEFT JOIN content_field_folder_shared ON content_field_folder_documents.vid = content_field_folder_shared.vid
+          WHERE field_folder_shared_value = 1 AND field_folder_documents_owner = %d
+          ORDER BY field_folder_documents_added DESC
+          LIMIT 1
+        ', $user->uid);
+        $doc = db_fetch_object($doc_query);
+        //update
+        $adata['members']['u' . $user->uid]['last_doc_add'] = array(
+          'nid'  => (int) isset($doc->field_folder_documents_nid) ? $doc->field_folder_documents_nid : 0,
+          'date' => (int) isset($doc->field_folder_documents_added) ? $doc->field_folder_documents_added : 0,
+        );
+        //mongodb_update(MONGODB_USER_COLLECTION, $akeys, $adata);
+        mongodb_user_update($akeys, $adata, __FUNCTION__ . '-4');
+      }
+    }
+    //DEL FROM OTHER MEMBERS
+    //Get members
+    $mkeys = array('data.uid' => (int) $admin_id);
+    $mdata = mongodb_select_one(MONGODB_USER_COLLECTION, $mkeys);
+
+    $members = array();
+    if (isset($mdata['members']) && $mdata['members']) {
+      $members = $mdata['members'];
+    }
+    foreach ($members as $member) {
+      $muid = $member['uid'];
+      if ($muid != $user->uid) {
+        mongodb_docs_del_doc($did, $fid, $shared, $muid, TRUE);
+      }
+    }
+  }
+  //Invalidate infobar cache
+  cache_clear_all('batire_user_docs_infobar:' . $did . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+}
+
+/**
+ * Add annotation in MongoDB
+ *
+ * @param type $did
+ * @param type $atype
+ * @param type $aid
+ * @param type $adate
+ * @param type $atext
+ * @param type $user_id
+ * @param type $owner_id
+ */
+function mongodb_docs_add_annotation($did, $atype, $aid, $adate, $atext, $user_id = NULL, $owner_id = NULL, $recursive = FALSE) {
+  if (isset($user_id)) {
+    $user = user_load($user_id);
+  }
+  else {
+    global $user;
+  }
+
+  $keys = array('uid' => (int) $user->uid);
+  $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+  if (isset($data) && $data) {
+    $data['docs']['d' . $did]['anno_cnt']++;
+    if ($atype == 'shared') {
+      if (!isset($owner_id)) {
+        $owner    = mongodb_user_get_user_fullname($user->uid);
+        $owner_id = $user->uid;
+      }
+      else {
+        $owner = mongodb_user_get_user_fullname($owner_id);
+      }
+
+      $data['docs']['d' . $did]['anno_s_cnt']++;
+      $data['docs']['d' . $did]['anno']['s']['a' . $aid] = array(
+        'date'   => (int) $adate,
+        'text'   => $atext,
+        'owner'  => array(
+          'name' => $owner,
+          'uid'  => (int) $owner_id,
+        ),
+      );
+    }
+    else {
+      $data['docs']['d' . $did]['anno_p_cnt']++;
+      $data['docs']['d' . $did]['anno']['p']['a' . $aid] = array(
+        'date'   => (int) $adate,
+        'text'   => $atext,
+      );
+    }
+    mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+    cache_clear_all('batire_user_docs_infobar:' . $did . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+  }
+
+  //Check if multi account
+  if (is_object($user) && (array_key_exists(BATIRE_USER_MULTIADMIN, $user->roles) || array_key_exists(BATIRE_USER_SUBACCOUNT, $user->roles)) && $atype == 'shared' && !$recursive) {
+    //Update last anno
+    //Get admin id
+    $ukeys = array('data.uid' => (int) $user->uid);
+    $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+    $admin_id = $udata['admin_id'];
+
+    if ($admin_id == $user->uid) {
+      $udata['members']['u' . $user->uid]['last_anno_add'] = array(
+        'did'  => (int) $did,
+        'aid'  => (int) $aid,
+        'date' => (int) $adate,
+      );
+      //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+      mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-1');
+      $members = $udata['members'];
+    }
+    else {
+      //Update admin members data
+      $akeys = array('data.uid' => (int) $admin_id);
+      $adata = mongodb_select_one(MONGODB_USER_COLLECTION, $akeys);
+
+      $adata['members']['u' . $user->uid]['last_anno_add'] = array(
+        'did'  => (int) $did,
+        'aid'  => (int) $aid,
+        'date' => (int) $adate,
+      );
+      //mongodb_update(MONGODB_USER_COLLECTION, $akeys, $adata);
+      mongodb_user_update($akeys, $adata, __FUNCTION__ . '-2');
+      $members = $adata['members'];
+    }
+
+    //Add annotation to shared members
+    foreach ($members as $member) {
+      $muid = $member['uid'];
+      if ($muid != $user->uid) {
+        mongodb_docs_add_annotation($did, $atype, $aid, $adate, $atext, $muid, $owner_id, TRUE);
+      }
+    }
+  }
+}
+
+/**
+ * Edit annotation in MongoDB
+ *
+ * @param type $did
+ * @param type $aid
+ * @param type $adate
+ * @param type $atext
+ * @param type $user_id
+ */
+function mongodb_docs_edit_annotation($did, $atype, $aid, $adate, $atext, $user_id = NULL, $recursive = FALSE) {
+  if (isset($user_id)) {
+    $user = user_load($user_id);
+  }
+  else {
+    global $user;
+  }
+
+  $keys = array('uid' => (int) $user->uid);
+  $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+  if (isset($data) && $data) {
+    if ($atype == 'shared') {
+      $data['docs']['d' . $did]['anno']['s']['a' . $aid]['date'] = (int) $adate;
+      $data['docs']['d' . $did]['anno']['s']['a' . $aid]['text'] = $atext;
+    }
+    else {
+      $data['docs']['d' . $did]['anno']['p']['a' . $aid]['date'] = (int) $adate;
+      $data['docs']['d' . $did]['anno']['p']['a' . $aid]['text'] = $atext;
+    }
+    mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+    cache_clear_all('batire_user_docs_infobar:' . $did . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+  }
+
+  //Check if multi account
+  if ((array_key_exists(BATIRE_USER_MULTIADMIN, $user->roles) || array_key_exists(BATIRE_USER_SUBACCOUNT, $user->roles)) && $atype == 'shared' && !$recursive) {
+    //Update last anno
+    //Get admin id
+    $ukeys = array('data.uid' => (int) $user->uid);
+    $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+    $admin_id = $udata['admin_id'];
+
+    if ($admin_id == $user->uid) {
+      $udata['members']['u' . $user->uid]['last_anno_add'] = array(
+        'did'  => (int) $did,
+        'aid'  => (int) $aid,
+        'date' => (int) $adate,
+      );
+      //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+      mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-1');
+      $members = $udata['members'];
+    }
+    else {
+      //Update admin members data
+      $akeys = array('data.uid' => (int) $admin_id);
+      $adata = mongodb_select_one(MONGODB_USER_COLLECTION, $akeys);
+
+      $adata['members']['u' . $user->uid]['last_anno_add'] = array(
+        'did'  => (int) $did,
+        'aid'  => (int) $aid,
+        'date' => (int) $adate,
+      );
+      //mongodb_update(MONGODB_USER_COLLECTION, $akeys, $adata);
+      mongodb_user_update($akeys, $adata, __FUNCTION__ . '-2');
+      $members = $adata['members'];
+    }
+
+    //Edit annotation for shared members
+    foreach ($members as $member) {
+      $muid = $member['uid'];
+      if ($muid != $user->uid) {
+        mongodb_docs_edit_annotation($did, $atype, $aid, $adate, $atext, $muid, TRUE);
+      }
+    }
+  }
+}
+
+function mongodb_docs_del_annotation($did, $aid, $atype, $user_id = NULL, $recursive = FALSE) {
+  if (isset($user_id)) {
+    $user = user_load($user_id);
+  }
+  else {
+    global $user;
+  }
+
+  $keys = array('uid' => (int) $user->uid);
+  $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+  if (isset($data) && $data) {
+    $data['docs']['d' . $did]['anno_cnt']--;
+    if ($atype == 'shared') {
+      $data['docs']['d' . $did]['anno_s_cnt']--;
+      unset($data['docs']['d' . $did]['anno']['s']['a' . $aid]);
+    }
+    else {
+      $data['docs']['d' . $did]['anno_p_cnt']--;
+      unset($data['docs']['d' . $did]['anno']['p']['a' . $aid]);
+    }
+    mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+    cache_clear_all('batire_user_docs_infobar:' . $did . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+  }
+
+  //Check if multi account
+  if ((array_key_exists(BATIRE_USER_MULTIADMIN, $user->roles) || array_key_exists(BATIRE_USER_SUBACCOUNT, $user->roles)) && $atype == 'shared' && !$recursive) {
+    //Update last anno
+    //Get admin id
+    $ukeys = array('data.uid' => (int) $user->uid);
+    $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+    $admin_id = $udata['admin_id'];
+
+    if ($admin_id == $user->uid) {
+      if ($udata['members']['u' . $user->uid]['last_anno_add']['aid'] == $aid) {
+        //find last anno
+        $anno_query = db_query('
+        SELECT content_type_batire_user_annotation.vid, field_annotation_doc_nid, changed
+          FROM  content_type_batire_user_annotation
+            LEFT JOIN node ON content_type_batire_user_annotation.vid = node.nid
+            LEFT JOIN content_field_annotation_shared ON content_type_batire_user_annotation.vid = content_field_annotation_shared.vid
+          WHERE field_annotation_shared_value = 1 AND uid = %d
+          ORDER BY changed DESC
+          LIMIT 1
+        ', $user->uid);
+        $anno = db_fetch_object($anno_query);
+        if (isset($anno) && $anno) {
+          //update
+          $udata['members']['u' . $user->uid]['last_anno_add'] = array(
+            'did'  => (int) $anno->field_annotation_doc_nid,
+            'aid'  => (int) $anno->vid,
+            'date' => (int) $anno->changed,
+          );
+          //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+          mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-1');
+          $members = $udata['members'];
+        }
+      }
+    }
+    else {
+      //Update admin members data
+      $akeys = array('data.uid' => (int) $admin_id);
+      $adata = mongodb_select_one(MONGODB_USER_COLLECTION, $akeys);
+
+      if ($adata['members']['u' . $user->uid]['last_anno_add']['aid'] == $aid) {
+        //find last anno
+        $anno_query = db_query('
+        SELECT content_type_batire_user_annotation.vid, field_annotation_doc_nid, changed
+          FROM  content_type_batire_user_annotation
+            LEFT JOIN node ON content_type_batire_user_annotation.vid = node.nid
+            LEFT JOIN content_field_annotation_shared ON content_type_batire_user_annotation.vid = content_field_annotation_shared.vid
+          WHERE field_annotation_shared_value = 1 AND uid = %d
+          ORDER BY changed DESC
+          LIMIT 1
+        ', $user->uid);
+        $anno = db_fetch_object($anno_query);
+        //update
+        $adata['members']['u' . $user->uid]['last_anno_add'] = array(
+          'did'  => (int) $anno->field_annotation_doc_nid,
+          'aid'  => (int) $anno->vid,
+          'date' => (int) $anno->changed,
+        );
+        //mongodb_update(MONGODB_USER_COLLECTION, $akeys, $adata);
+        mongodb_user_update($akeys, $adata, __FUNCTION__ . '-2');
+        $members = $adata['members'];
+      }
+    }
+
+    //Delete annotation from shared members
+    if (isset($members) && $members) {
+      foreach ($members as $member) {
+        $muid = $member['uid'];
+        if ($muid != $user->uid) {
+          mongodb_docs_del_annotation($did, $aid, $atype, $muid, TRUE);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Get folders list by document id
+ *
+ * @param type $uid
+ * @param type $did
+ * @return array of nid and name
+ */
+function mongodb_docs_folders_list($uid, $did) {
+  $keys = array('uid' => (int) $uid);
+  $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+  if (isset($data['docs']['d' . $did]['folders']) && $data['docs']['d' . $did]['folders']) {
+    return $data['docs']['d' . $did]['folders'];
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ * Count document annotations per uid by type
+ *
+ * @param type $uid
+ * @param type $did
+ * @param type $type
+ * @return count
+ */
+function mongodb_docs_count_annotations($uid, $did, $type = 'all') {
+  $keys = array('uid' => (int) $uid);
+  $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+  if (isset($data['docs']['d' . $did]) && $data['docs']['d' . $did]) {
+    switch ($type) {
+      case 'all' :
+        return $data['docs']['d' . $did]['anno_cnt'];
+      case 'p' :
+        return $data['docs']['d' . $did]['anno_p_cnt'];
+      case 's' :
+        return $data['docs']['d' . $did]['anno_s_cnt'];
+    }
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Count user annotations by type
+ *
+ * @param type $uid
+ * @param type $type
+ * @return count
+ */
+function mongodb_docs_count_user_annotations($uid, $type = 'all') {
+  $keys = array('uid' => (int) $uid);
+  $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+  if (isset($data['docs']) && $data['docs']) {
+    $cnt   = 0;
+    $cnt_p = 0;
+    $cnt_s = 0;
+
+    foreach ($data['docs'] as $doc) {
+      if (!(empty($doc['anno_cnt']))) {
+        $cnt += $doc['anno_cnt'];
+      }
+      if (!(empty($doc['anno_p_cnt']))) {
+        $cnt_p += $doc['anno_p_cnt'];
+      }
+      if (!(empty($doc['anno_s_cnt']))) {
+        $cnt_s += $doc['anno_s_cnt'];
+      }
+    }
+
+    switch ($type) {
+      case 'all' :
+        return $cnt;
+      case 'p' :
+        return $cnt_p;
+      case 's' :
+        return $cnt_s;
+    }
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Get user annotations by type with sorting and limit
+ *
+ * @param int $did Document id
+ * @param string $type 'all' || 'p' || 's'
+ * @param int $limit 0 by default
+ * @param int $sort SORT_ASC || SORT_DESC
+ * @param int $uid User id
+ * @return array Array of annotations
+ */
+function mongodb_docs_get_user_annotations($did, $type = 'all', $limit = 0, $sort = SORT_ASC, $uid = NULL) {
+  if (!(isset($uid) && $uid)) {
+    global $user;
+    $uid = $user->uid;
+  }
+  $data = &drupal_static(__FUNCTION__);
+
+  if (!isset($data)) {
+    $keys = array('uid' => (int) $uid);
+    $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+  }
+
+  $result = array();
+
+  switch ($type) {
+    case 's' :
+      if (isset($data['docs']['d' . $did]['anno']['s']) && $data['docs']['d' . $did]['anno']['s']) {
+        $annotations = $data['docs']['d' . $did]['anno']['s'];
+        //get keys for sort
+        foreach ($annotations as $key => $row) {
+          $date[$key]  = $row['date'];
+        }
+
+        array_multisort($date, $sort, $annotations);
+        if ($limit) {
+          $result = array_slice($annotations, 0, $limit);
+        }
+        else {
+          $result = $annotations;
+        }
+      }
+      break;
+    case 'p' :
+      if (isset($data['docs']['d' . $did]['anno']['p']) && $data['docs']['d' . $did]['anno']['p']) {
+        $annotations = $data['docs']['d' . $did]['anno']['p'];
+        //get keys for sort
+        foreach ($annotations as $key => $row) {
+          $date[$key]  = $row['date'];
+        }
+
+        array_multisort($date, $sort, $annotations);
+        if ($limit) {
+          $result = array_slice($annotations, 0, $limit);
+        }
+        else {
+          $result = $annotations;
+        }
+      }
+      break;
+    case 'all' :
+      $s_anno = array();
+      $p_anno = array();
+
+      if (isset($data['docs']['d' . $did]['anno']['s']) && $data['docs']['d' . $did]['anno']['s']) {
+        $s_anno = $data['docs']['d' . $did]['anno']['s'];
+      }
+      if (isset($data['docs']['d' . $did]['anno']['p']) && $data['docs']['d' . $did]['anno']['p']) {
+        $p_anno = $data['docs']['d' . $did]['anno']['p'];
+      }
+      $annotations = array_merge($s_anno, $p_anno);
+
+      if (isset($annotations) && $annotations) {
+        //get keys for sort
+        foreach ($annotations as $key => $row) {
+          $date[$key]  = $row['date'];
+        }
+
+        array_multisort($date, $sort, $annotations);
+        if ($limit) {
+          $result = array_slice($annotations, 0, $limit);
+        }
+        else {
+          $result = $annotations;
+        }
+      }
+      break;
+  }
+  return $result;
+}
+
+/**
+ * Returns user last access date to document
+ * @param $nid
+ * @param $uid
+ */
+function mongodb_docs_get_user_last_access($nid, $uid = FALSE) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $key = $nid . '.' . $uid;
+
+  $cache = &drupal_static(__FUNCTION__);
+
+  if (isset($cache[$key])) {
+    return $cache[$key];
+  }
+
+  $data = mongodb_select_one(
+    MONGODB_DOCS_ACCESS_COLLECTION,
+    array('uid' => (int) $uid),
+    array('docs.d' . $nid . '.last_access_date')
+  );
+
+  $cache[$key] = 0;
+
+  if (isset($data['docs']['d' . $nid]['last_access_date'])) {
+    $cache[$key] = $data['docs']['d' . $nid]['last_access_date'];
+  }
+
+  return $cache[$key];
+}

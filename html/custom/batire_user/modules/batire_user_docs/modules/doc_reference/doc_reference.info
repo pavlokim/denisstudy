@@ -1,0 +1,8 @@
+name = Doc Reference
+description = Defines a field type for referencing document from document container.
+dependencies[] = content
+dependencies[] = date
+dependencies[] = text
+dependencies[] = optionwidgets
+package = Batire
+core = 6.x

@@ -1,0 +1,76 @@
+<?php
+function antidot_publications_antidot_info() {
+  return array(
+    BATIRE_SITE_CT_COMP_TECH => 'antidot_publications',
+    BATIRE_SITE_CT_ACTUALITE => 'antidot_publications',
+    BATIRE_SITE_CT_LIVRE     => 'antidot_publications',
+    BATIRE_SITE_CT_FM        => 'antidot_publications',
+  );
+}
+
+function antidot_publications_xml_preprocess($node, &$data) {
+  if (is_array($node->taxonomy)) {
+    foreach ($node->taxonomy as $tax) {
+      switch ($tax->vid) {
+        case BATIRE_SITE_VID_FM:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+        case BATIRE_SITE_VID_LIVRES:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+        case BATIRE_SITE_VID_SUPPORT:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+        case BATIRE_SITE_VID_TYPE_CT:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+      }
+    }
+  }
+
+  $data->version = 1;
+  $data->date_archive = '';
+  $data->version_ante = 0;
+
+  switch ($node->type) {
+    case 'batire_complement_technique' :
+      $data->numero_ref  = $node->page_data['reference'];
+      $data->niveau      = $node->field_rubric[0]['value'];
+      $data->sous_niveau = $node->field_sub_rubric[0]['value'];
+      $data->date        = date_format_date(date_make_date($node->field_release_date[0]['value'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+      break;
+    case 'batire_actualite' :
+      $data->rubrique    = $node->page_data['taxonomy']['presse_rubrique'];
+      break;
+    case 'batire_livres' :
+      $data->numero_ref  = $node->page_data['reference'];
+      $data->niveau      = $node->field_section_title[0]['value'];
+      $data->sous_niveau = $node->field_part_title[0]['value'];
+      break;
+    case 'batire_feuillet_mobile' :
+      $data->numero_ref  = $node->field_doc_number[0]['value'];
+      $data->niveau      = $node->field_sublayer_level_title[0]['value'];
+      $data->sous_niveau = $node->field_sublayer_sublevel_title[0]['value'];
+
+      $arr = explode('-', $node->page_data['bid']);
+      if (count($arr) > 2) {
+        $data->version = 0;
+        if (!empty($node->field_date_archive[0]['value'])) {
+          $data->date_archive = date_format_date(date_make_date($node->page_data['page_version'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+        }
+      }
+
+      $versions = batire_hierarchy_get_versions($node->page_data['id'], $node->page_data['doc_type']);
+      if (count($versions) > 1) {
+        $data->version_ante = 1;
+      }
+  }
+
+  $data->editorial = '';
+  if (isset($node->field_authors[0]['nid']) && $node->field_authors[0]['nid']) {
+    foreach ($node->field_authors as $author) {
+      $editorial = node_load($author);
+      $data->editorial .= _batire_antidot_export_xml_tag('editeur', $editorial->title);
+    }
+  }
+}

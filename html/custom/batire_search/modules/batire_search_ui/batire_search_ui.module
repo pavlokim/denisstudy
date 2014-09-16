@@ -1,0 +1,2205 @@
+<?php
+
+/**
+ * @file
+ * User interfase for search functional on site
+ */
+// Count document ids for one cookie
+define('BATIRE_SEARCH_UI_COUNT_COOKIE_IDS', 200);
+define('BATIRE_SEARCH_UI_SESSION_NAMESPACE', 'batire_search_ui');
+
+module_load_include('inc', 'batire_search_ui', 'includes/batire_search_ui');
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_search_ui_init() {
+  drupal_add_js(
+  array(
+    'batire_search_ui' => array(
+      'search_criteries_header' => url('js/batire_search/header-search-criteries'),
+      'popup_create_search' => url('js/batire_search_ui/create-search'),
+      'popup_register_docs' => url('js/batire_search_ui/register-docs'),
+      'search_count_cookie_ids' => BATIRE_SEARCH_UI_COUNT_COOKIE_IDS,
+    )
+  ), 'setting'
+  );
+  if (!empty($_GET['action'])) {
+    $key = base64_decode($_GET['action']);
+    drupal_add_js(
+    array(
+      'batire_search_ui' => array(
+        'search_after_login_function' => $key,
+      )
+    ), 'setting'
+    );
+  }
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_search_ui_menu() {
+  $items = array();
+  $items['print-results/%'] = array(
+    'page callback' => 'batire_search_ui_print_results',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'title' => 'Imprimer résultats de recherche',
+  );
+  $items['recherche-avancee/%'] = array(
+    'page callback' => 'batire_search_ui_advanced_search_page',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'title' => 'Recherche avancée',
+  );
+  $items['recherche-avancee'] = array(
+    'page callback' => 'batire_search_ui_advanced_search_page_new_search',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['js/batire_search/header-search-criteries'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_search_ui_save_search_criteries_js',
+    'access arguments' => array('access content'),
+  );
+
+  $items['js/batire_search_ui/create-search'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_search_ui_create_search_js',
+    'access arguments' => array('access content'),
+  );
+
+  $items['js/batire_search_ui/register-docs'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_search_ui_create_register_docs_js',
+    'access arguments' => array('access content'),
+  );
+
+  $items['recherche-avancee/metier'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/documents'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/table-des-matieres'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/feuillets-mobiles'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/livres'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/complement-technique'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/nouveaux-documents'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/modifier-recherche'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/profil-de-recherche-par-defaut'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/texte-normatifs'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/suggestion'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  $items['recherche-avancee/limit-products'] = array(
+    'page callback' => 'batire_search_ui_apply_criterias_in_results_page',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function batire_search_ui_theme() {
+  return array(
+    'batire_search_ui_footer_search_block_content' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_search_ui_header_search_block_content' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_search_ui_header_search_form_content' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_search_ui_search_results_form_content' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_search_ui_search_results_filters_content' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_search_ui_search_results_info_content' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_search_ui_advanced_search_page_content' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_search_ui_advanced_search_form_content' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_render_checboxes_list' => array(
+      'arguments' => array('element' => NULL),
+    ),
+    'batire_render_search_form_submit' => array(
+      'arguments' => array('element' => NULL),
+    ),
+    'batire_search_ui_popup_save_search_content' => array(
+      'arguments' => array('search_id' => NULL, 'r_search_id' => NULL),
+      'file' => 'theme.inc',
+    ),
+    'batire_search_ui_save_search_form_content' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme.inc',
+    ),
+    'batire_search_ui_popup_register_docs_content' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme.inc',
+    ),
+    'batire_search_ui_document_pager_content' => array(
+      'arguments' => array('data' => array()),
+      'file' => 'theme.inc',
+    ),
+    'batire_search_ui_results_back_link' => array(
+      'arguments' => array('data' => array()),
+      'file' => 'theme.inc',
+    ),
+    'batire_search_ui_print_results' => array(
+      'arguments' => array('print' => array()),
+      'file' => 'theme.inc',
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_batire_site_popups_info().
+ */
+function batire_search_ui_batire_site_popups_info($type) {
+  switch ($type) {
+    case 'save_search_profile':
+    case 'register_docs':
+      return 'batire_search_ui';
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_batire_site_popups().
+ */
+function batire_search_ui_batire_site_popups($type, $nids) {
+  global $user;
+
+  $result = array(
+    'error' => FALSE,
+    'data' => ''
+  );
+  if (!user_access('access user docs')) {
+    $result['error'] = TRUE;
+    return $result;
+  }
+
+  switch ($type) {
+    case 'save_search_profile':
+      $r_sid = !empty($_GET['r_search_id']) ? $_GET['r_search_id'] : NULL;
+      $sid = !empty($_GET['search_id']) ? $_GET['search_id'] : '';
+      $n_sid = _batire_search_ui_preregister_process($_GET['search_id'], $r_sid);
+      if ($sid != $n_sid) {
+        $s_data = _batire_site_get_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $sid, NULL);
+        if ($s_data) {
+          //_batire_site_set_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $n_sid, $s_data);
+        }
+      }
+      $result['data'] = theme('batire_search_ui_popup_save_search_content', $n_sid, $r_sid);
+      break;
+
+    case 'register_docs':
+      $result['data'] = theme('batire_search_ui_popup_register_docs_content', drupal_get_form('batire_user_docs_register_document_form'));
+      break;
+  }
+
+  if (!$result['data']) {
+    return array();
+  }
+
+  return $result;
+}
+
+/**
+ * Implementation of hook_batire_site_breadcrumb().
+ */
+function batire_search_ui_batire_site_breadcrumb($args) {
+  $crumbs = array();
+  switch ($args[0]) {
+    case 'recherche-avancee':
+      switch ($args[1]) {
+        case 'resultats':
+          $crumbs[] = array(
+            'title' => t('Recherche avancée'),
+            'href' => 'recherche-avancee/' . $args[2],
+            'weight' => 1,
+          );
+          $crumbs[] = array(
+            'title' => t('Résultats de recherche'),
+            'href' => 'recherche-avancee/resultats/' . $args[2],
+            'weight' => 2
+          );
+          break;
+      }
+      break;
+  }
+  return $crumbs;
+}
+
+/**
+ * Implementation of hook_batire_site_breadcrumb_cache_info().
+ */
+function batire_search_ui_batire_site_breadcrumb_cache_info($url) {
+  $args = arg(NULL, $url);
+  switch ($args[0]) {
+    case 'recherche-avancee':
+      switch ($args[1]) {
+        case 'resultats':
+          return array($url => TRUE);
+          break;
+      }
+      break;
+    case 'node':
+      if (batire_search_ui_check_is_node_after_search($args)) {
+        return array($url => TRUE);
+      }
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_batire_breadcrumb_alter().
+ */
+function batire_search_ui_batire_breadcrumb_alter($crumbs) {
+  $args = arg();
+  switch ($args[0]) {
+    case 'recherche-avancee':
+      switch ($args[1]) {
+        case 'resultats':
+          $search_criteries = batire_search_load_search_criteries($args[2]);
+          $crumbs = array();
+          $crumbs[] = array(
+            'title' => t('Accueil'),
+            'href' => '',
+            'weight' => -1,
+          );
+          switch ($search_criteries['search_type']) {
+            case 'footer':
+            case 'header':
+            case 'default':
+              $crumbs[] = array(
+                'title' => t('Recherche avancée'),
+                'href' => 'recherche-avancee/' . $args[2],
+                'weight' => 1,
+                'click' => FALSE,
+              );
+              break;
+
+            default:
+              $crumbs[] = array(
+                'title' => t('Recherche avancée'),
+                'href' => 'recherche-avancee/' . $args[2],
+                'weight' => 1,
+              );
+              break;
+          }
+          $crumbs[] = array(
+            'title' => t('Résultats de recherche'),
+            'href' => 'recherche-avancee/resultats/' . $args[2],
+            'weight' => 2
+          );
+          break;
+      }
+      break;
+
+/*    case 'node':
+      if (batire_search_ui_check_is_node_after_search($args)) {
+        $id = batire_search_ui_check_is_url_has_search_id();
+        $attributes = array();
+        if ($id) {
+          $pager = _batire_site_get_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $id, NULL);
+          $page = _batire_search_ui_document_pager_get_doc_pager_page($pager, $args[1]); // get current page
+          $attributes['query'] = batire_search_generate_facet_query($id);
+          if ($page) {
+            $attributes['query'] = !empty($attributes['query']) ? $attributes['query'] . '&page=' . $page : 'page=' . $page;
+          }
+        }
+        $crumbs[1]['weight'] = 1;
+        $crumbs[] = array(
+          'title' => t('Liste de résultats'),
+          'href' => 'recherche-avancee/resultats/' . $id,
+          'attributes' => $attributes,
+          'weight' => 0,
+        );
+      }
+      break;*/
+  }
+  return $crumbs;
+}
+
+/**
+ * Implementation of hook_ctools_plugin_api().
+ */
+function batire_search_ui_ctools_plugin_api($owner, $api) {
+  if ($owner == 'panels' && $api == 'styles') {
+    return array('version' => 2.0);
+  }
+
+  if (module_exists('panels_everywhere') && $owner == 'page_manager' && $api == 'pages_default') {
+    return array('version' => 1);
+  }
+}
+
+/**
+ * Implementation of hook_ctools_plugin_directory().
+ */
+function batire_search_ui_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'plugins/' . $plugin;
+  }
+  if ($module == 'page_manager' && $plugin == 'tasks') {
+    return 'plugins/' . $plugin;
+  }
+}
+
+/**
+ * Form constructor for footer search.
+ *
+ * @ingroup forms
+ */
+function batire_search_ui_footer_search_form(&$form_state) {
+  $search_data = _batire_search_ui_get_search_data_result_page();
+
+  $form = array();
+  $form['search_word'] = array(
+    '#title' => t('Rechercher'),
+    '#type' => 'textfield',
+    '#maxlength' => BATIRE_SEARCH_MAX_SEARCH_WORD,
+    '#default_value' => isset($search_data['search_word']) ? drupal_html_to_text($search_data['search_word']) : NULL,
+    '#attributes' => array(
+      'title' => '',
+    ),
+  );
+  $form['type_form'] = array(
+    '#type' => 'hidden',
+    '#value' => 'footer'
+  );
+  $form['submit'] = array(
+    '#value' => t('Rechercher'),
+    '#type' => 'submit',
+  );
+  $form['#validate'][] = 'batire_search_form_validate';
+  $form['#submit'][] = 'batire_search_form_submit';
+
+  return $form;
+}
+
+/**
+ * Form constructor for header search.
+ *
+ * @ingroup forms
+ */
+function batire_search_ui_header_search_form(&$form_state) {
+  $search_data = _batire_search_ui_get_search_data_result_page();
+  $form = array();
+
+  if (isset($search_data['sid'])) {
+    $criteries = batire_search_load_search_criteries($search_data['sid']);
+    $criteries = batire_search_ui_return_unrender_sources($criteries);
+  }
+  else {
+    $criteries = batire_search_ui_return_default_search();
+    $criteries = batire_search_ui_clear_criteries_for_default_profile($criteries);
+    $criteries = batire_search_ui_return_unrender_sources($criteries);
+  }
+
+  $form['search_word'] = array(
+    '#title' => t('Rechercher'),
+    '#type' => 'textfield',
+    '#maxlength' => BATIRE_SEARCH_MAX_SEARCH_WORD,
+    '#attributes' => array('title' => t('Mot(s)-clé(s) recherché(s)…')),
+    '#default_value' => isset($search_data['search_word']) ? drupal_html_to_text($search_data['search_word']) : NULL,
+  );
+
+  $form['list_criteries_sources'] = array(
+    '#type' => 'checkboxes',
+    '#options' => batire_search_ui_search_options('sources'),
+    '#default_value' => !empty($criteries['sources']) ? $criteries['sources'] : array(),
+  );
+  $form['list_criteries_types'] = array(
+    '#type' => 'checkboxes',
+    '#options' => batire_search_ui_search_options('building_types'),
+    '#default_value' => !empty($criteries['types']) ? $criteries['types'] : array(),
+  );
+  $form['list_criteries_trades'] = array(
+    '#type' => 'checkboxes',
+    '#options' => batire_search_ui_search_options('trades'),
+    '#default_value' => !empty($criteries['trades']) ? $criteries['trades'] : array(),
+  );
+  $form['list_criteries_themes'] = array(
+    '#type' => 'checkboxes',
+    '#options' => batire_search_ui_search_options('themes'),
+    '#default_value' => !empty($criteries['themes']) ? $criteries['themes'] : array(),
+  );
+  $form['title_only'] = array(
+    '#title' => t('Dans les titres uniquement'),
+    '#type' => 'checkbox',
+    '#default_value' => isset($search_data['title_only']) ? $search_data['title_only'] : FALSE,
+  );
+  if (module_exists('batire_user_products') && batire_user_products_should_filter()) {
+    $form['access_products'] = array(
+      '#title' => t('Limiter la recherche aux produits de mon abonnement'),
+      '#type' => 'checkbox',
+      '#default_value' => isset($search_data['access_products']) ? $search_data['access_products'] : FALSE,
+    );
+  }
+  else {
+    $form['access_products'] = array(
+      '#type' => 'hidden',
+      '#value' => 0,
+    );
+  }
+  $form['type_form'] = array(
+    '#type' => 'hidden',
+    '#value' => 'header'
+  );
+  $form['front_page'] = array(
+    '#type' => 'hidden',
+    '#value' => drupal_is_front_page()
+  );
+  $form['search_id'] = array(
+    '#type' => 'hidden',
+    '#value' => isset($search_data['sid']) ? $search_data['sid'] : NULL,
+  );
+  $form['submit_text'] = array(
+    '#title' =>'text',
+    '#value' => 'text_search',
+    '#type' => 'submit',
+    '#theme' => 'batire_render_search_form_submit',
+    '#attributes' => array('class' => 'recherche'),
+  );
+  $form['submit_image'] = array(
+    '#title' =>'image',
+    '#value' => 'image_search',
+    '#type' => 'submit',
+    '#theme' => 'batire_render_search_form_submit',
+    '#attributes' => array('class' => 'recherche-img'),
+  );
+  $form['search_type_hidden'] = array(
+    '#value' => '',
+    '#type' => 'hidden',
+    '#attributes' => array('class' => 'search_type_hidden'),
+  );
+  $form['#validate'][] = 'batire_search_form_validate';
+  $form['#submit'][] = 'batire_search_form_submit';
+  $form['#theme'] = 'batire_search_ui_header_search_form_content';
+
+  return $form;
+}
+
+/**
+ * Advanced search page
+ */
+function batire_search_ui_advanced_search_page($sid) {
+  batire_search_filter_sid($sid);
+  global $user;
+  if (!mongodb_search_find_search_id($sid) && batire_search_search_is_active($sid)) {
+    drupal_goto(BATIRE_SITE_NOT_FOUND_URL);
+  }
+  $search_data = mongodb_search_get_search_data($sid);
+  //_batire_site_set_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $sid);
+  if ($search_data['uid'] != $user->uid) {
+    $new_sid = batire_search_create_search_copy($sid);
+    drupal_goto('recherche-avancee/' . $new_sid);
+  }
+  $data = array();
+  $data['content'] = drupal_get_form('batire_search_ui_advanced_search_form');
+  return theme('batire_search_ui_advanced_search_page_content', $data);
+}
+
+/**
+ * Advanced search page (new search)
+ */
+function batire_search_ui_advanced_search_page_new_search() {
+  $search_id = batire_search_generate_id();
+  batire_search_save_search_criteria($search_id, batire_search_get_list_default_search_data());
+  //_batire_site_set_var(BATIRE_SEARCH_UI_SESSION_NAMESPACE, $search_id, TRUE);
+  drupal_goto('recherche-avancee/' . $search_id);
+}
+
+/**
+ * Form constructor for Advanced search.
+ *
+ * @ingroup forms
+ */
+function batire_search_ui_advanced_search_form(&$form_state) {
+  $form = array();
+  $search_id = arg(1);
+  $criteries = batire_search_load_search_criteries($search_id);
+
+  if (!empty($criteries['sources'])) {
+    $criteries = batire_search_ui_return_unrender_sources($criteries, FALSE);
+    $criteries['sources'] = batire_search_ui_return_render_sources($criteries['sources'], TRUE);
+    foreach ($criteries['sources'] as $key => $val) {
+      if ($val == 'tous') {
+        unset($criteries['sources'][$key]);
+      }
+    }
+  }
+  if (!$criteries['status']) {
+    $criteries = batire_search_ui_return_default_search();
+    $criteries = batire_search_ui_clear_criteries_for_default_profile($criteries);
+  }
+  $form['keywords'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Mots clés'),
+  );
+  $form['keywords']['search_word'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Mots clés'),
+    '#default_value' => isset($criteries['search_word']) ? drupal_html_to_text($criteries['search_word']) : NULL,
+    '#attributes' => array('title' => t('Mot(s)-clé(s) recherché(s)…')),
+    '#maxlength' => BATIRE_SEARCH_MAX_SEARCH_WORD,
+  );
+  $form['keywords']['title_only'] = array(
+    '#title' => t('Dans les titres uniquement'),
+    '#type' => 'checkbox',
+    '#default_value' => isset($criteries['title_only']) ? $criteries['title_only'] : NULL,
+  );
+  if (module_exists('batire_user_products') && batire_user_products_should_filter()) {
+    $form['keywords']['access_products'] = array(
+      '#title' => t('Limiter la recherche aux produits de mon abonnement'),
+      '#type' => 'checkbox',
+      '#default_value' => isset($criteries['access_products']) ? $criteries['access_products'] : FALSE,
+    );
+  }
+  else {
+    $form['keywords']['access_products'] = array(
+      '#type' => 'hidden',
+      '#value' => 0,
+    );
+  }
+  $form['keywords']['date_type'] = array(
+    '#title' => t('Date / période'),
+    '#type' => 'select',
+    '#options' => array(
+      '' => t('Précisez...'),
+      'accurate' => t('Une date (précise)'),
+      'of_to' => t('Du ... au ...'),
+      'last_7_day' => t('Depuis 7 jours'),
+      'last_30_day' => t('Depuis 30 jours'),
+      'last_6_month' => t('Depuis 6 mois'),
+      'current_year' => t('En @year', array('@year' => format_date(time(), 'custom', 'Y'))),
+      'last_year' => t('Depuis un an'),
+      'over_year' => t("Depuis plus d'un an"),
+    ),
+    '#default_value' => isset($criteries['date_type']) ? $criteries['date_type'] : NUll,
+  );
+  $form['keywords']['reference'] = array(
+    '#title' => t('N° de Référence'),
+    '#type' => 'select',
+    '#options' => array(
+      '' => t('Sélectionnez une source'),
+      'codes' => t('Codes'),
+      'to' => t('Textes officiels'),
+      'tn' => t('Textes normatifs'),
+      'fm' => t('Classeurs à mises à jour'),
+    ),
+    '#default_value' => isset($criteries['reference']) ? $criteries['reference'] : NUll,
+  );
+  $form['keywords']['reference_text'] = array(
+    '#title' => t('Node rèfèrence'),
+    '#type' => 'textfield',
+    '#default_value' => isset($criteries['reference_text']) ? $criteries['reference_text'] : NUll,
+    '#attributes' => array('title' => t('n° de référence')),
+  );
+
+  $vocab_array = array(
+    BATIRE_SITE_VID_BATIMENT => t("Types de bâtiments ou d'aménagements"),
+    BATIRE_SITE_VID_CORPS => t("Corps d'état"),
+  );
+  $keywords_array = array(
+    BATIRE_SITE_VID_BATIMENT => 'types',
+    BATIRE_SITE_VID_CORPS => 'trades',
+  );
+
+  /* Get vocabr tree and create form checboxes */
+  foreach ($vocab_array as $vid => $vname) {
+    $vocab_tree = batire_search_batire_taxonomy_get_tree($vid, 'tree');
+
+    $form['keywords'][$keywords_array[$vid]] = array(
+      '#theme' => 'batire_render_checboxes_list',
+      '#title' => batire_site_check_text($vname),
+    );
+
+    foreach ($vocab_tree as $vocab_key => $vocab) {
+      if (isset($vocab['childrens'])) {
+        $form['keywords'][$keywords_array[$vid]][$vocab_key] = array(
+          '#type' => 'checkboxes',
+          '#title' => batire_site_check_text($vocab['name']),
+          '#options' => $vocab['childrens'],
+          '#default_value' => isset($criteries[$keywords_array[$vid]]) ? $criteries[$keywords_array[$vid]] : array(),
+          '#attributes' => array('class' => isset($vocab['class']) ? $vocab['class'] : ''),
+        );
+      }
+      else {
+        $form['keywords'][$keywords_array[$vid]][$vocab_key] = array(
+          '#type' => 'checkbox',
+          '#title' => batire_site_check_text($vocab['name']),
+          '#default_value' => isset($criteries[$keywords_array[$vid]][$vocab_key]) ? $criteries[$keywords_array[$vid]] : array(),
+          '#attributes' => array('class' => isset($vocab['class']) ? $vocab['class'] : ''),
+        );
+      }
+    }
+  }
+
+  $form['keywords']['themes'] = array(
+    '#title' => t('Themes')
+  );
+  $form['keywords']['themes']['batire_themes'] = array(
+    '#type' => 'checkboxes',
+    '#theme' => 'batire_render_checboxes_list',
+    '#attributes' => array('class' => 'no-checkboxes-class adv_select_all'),
+    '#options' => batire_search_ui_search_options_sources('batire_themes'),
+    '#default_value' => isset($criteries['themes']) ? $criteries['themes'] : array(),
+  );
+
+  /* Sources */
+  $form['sources'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Types de documents')
+  );
+
+  $form['sources']['codes'] = array(
+    '#title' => t("Codes"),
+  );
+  $form['sources']['codes']['batire_codes'] = array(
+    '#type' => 'checkboxes',
+    '#theme' => 'batire_render_checboxes_list',
+    '#attributes' => array('class' => 'no-checkboxes-class adv_select_all'),
+    '#options' => batire_search_ui_search_options_sources('batire_codes'),
+    '#default_value' => isset($criteries['sources']) ? $criteries['sources'] : array(),
+  );
+
+  $form['sources']['officiel'] = array(
+    '#title' => t("Textes officiels"),
+  );
+  $form['sources']['officiel']['batire_texte_officiel'] = array(
+    '#type' => 'checkboxes',
+    '#theme' => 'batire_render_checboxes_list',
+    '#attributes' => array('class' => 'no-checkboxes-class adv_select_all'),
+    '#options' => batire_search_ui_search_options_sources('batire_texte_officiel'),
+    '#default_value' => isset($criteries['sources']) ? $criteries['sources'] : array(),
+  );
+
+  $form['sources']['public_date_type'] = array(
+    '#title' => t('Publication au JO'),
+    '#type' => 'select',
+    '#options' => array(
+      '' => t('Précisez...'),
+      'accurate' => t('Une date (précise)'),
+      'of_to' => t('Du ... au ...'),
+      'less_year' => t('Depuis moins d’un an'),
+    ),
+    '#default_value' => isset($criteries['public_date_type']) ? $criteries['public_date_type'] : NULL,
+  );
+
+  $form['sources']['normative'] = array(
+    '#title' => t('Textes normatifs'),
+  );
+  $form['sources']['normative']['batire_texte_normatifs'] = array(
+    '#type' => 'checkboxes',
+    '#theme' => 'batire_render_checboxes_list',
+    '#attributes' => array('class' => 'no-checkboxes-class adv_select_all'),
+    '#options' => batire_search_ui_search_options_sources('batire_texte_normatifs'),
+    '#default_value' => isset($criteries['sources']) ? $criteries['sources'] : array(),
+  );
+
+  $form['sources']['include_db'] = array(
+    '#title' => t('Inclure toutes les notices de la base'),
+    '#type' => 'checkbox',
+    '#default_value' => isset($criteries['sources']['include_db']) ? $criteries['sources']['include_db'] : array(),
+  );
+
+  $form['sources']['mobiles'] = array(
+    '#title' => t('Classeurs à mises à jour'),
+  );
+
+  $form['sources']['mobiles']['batire_feuillet_mobile'] = array(
+    '#type' => 'checkboxes',
+    '#theme' => 'batire_render_checboxes_list',
+    '#attributes' => array('class' => 'no-checkboxes-class adv_select_all'),
+    '#options' => batire_search_ui_search_options_sources('batire_feuillet_mobile'),
+    '#default_value' => isset($criteries['sources']) ? $criteries['sources'] : array(),
+  );
+
+  $vocab_tree = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE, 'tree');
+  $form['sources']['documents_reference'] = array(
+    '#title' => t('Document de référence'),
+    '#theme' => 'batire_render_checboxes_list',
+  );
+
+  foreach ($vocab_tree as $vocab_key => $vocab) {
+    if (isset($vocab['childrens'])) {
+      $form['sources']['documents_reference'][$vocab_key] = array(
+        '#type' => 'checkboxes',
+        '#title' => batire_site_check_text($vocab['name']),
+        '#options' => $vocab['childrens'],
+        '#default_value' => isset($criteries['sources']) ? $criteries['sources'] : array(),
+        '#attributes' => array('class' => isset($vocab['class']) ? $vocab['class'] : ''),
+      );
+    }
+    else {
+      $form['sources']['documents_reference'][$vocab_key] = array(
+        '#type' => 'checkbox',
+        '#title' => batire_site_check_text($vocab['name']),
+        '#default_value' => isset($criteries['sources']) ? $criteries['sources'] : array(),
+        '#attributes' => array('class' => isset($vocab['class']) ? $vocab['class'] : ''),
+      );
+    }
+  }
+
+  $form['sources']['livres'] = array(
+    '#title' => t('Livres'),
+  );
+  $form['sources']['livres']['batire_livres'] = array(
+    '#type' => 'checkboxes',
+    '#theme' => 'batire_render_checboxes_list',
+    '#attributes' => array('class' => 'no-checkboxes-class adv_select_all'),
+    '#options' => batire_search_ui_search_options_sources('batire_livres'),
+    '#default_value' => isset($criteries['sources']) ? $criteries['sources'] : array(),
+  );
+
+  $form['sources']['technical'] = array(
+    '#title' => t('Complément Technique'),
+  );
+  $form['sources']['technical']['batire_complement_technique'] = array(
+    '#type' => 'checkboxes',
+    '#theme' => 'batire_render_checboxes_list',
+    '#attributes' => array('class' => 'no-checkboxes-class adv_select_all'),
+    '#options' => batire_search_ui_search_options_sources('batire_complement_technique'),
+    '#default_value' => isset($criteries['sources']) ? $criteries['sources'] : array(),
+  );
+
+//  @todo enable Documents Pratiques in search ui
+//  $form['sources']['batire_document_pratique'] = array(
+//    '#title' => t('Documents pratiques'),
+//    '#type' => 'checkbox',
+//    '#default_value' => isset($criteries['sources']['batire_document_pratique']) ? $criteries['sources']['batire_document_pratique'] : array(),
+//  );
+  $form['sources']['batire_actualite'] = array(
+    '#title' => t('Actualité'),
+    '#type' => 'checkbox',
+    '#default_value' => isset($criteries['sources']['batire_actualite']) ? $criteries['sources']['batire_actualite'] : array(),
+  );
+
+  $form['submit_text'] = array(
+    '#title' =>'text',
+    '#value' => 'text_search',
+    '#type' => 'submit',
+    '#theme' => 'batire_render_search_form_submit',
+    '#attributes' => array('class' => 'recherche'),
+  );
+  $form['submit_image'] = array(
+    '#title' =>'image',
+    '#value' => 'image_search',
+    '#type' => 'submit',
+    '#theme' => 'batire_render_search_form_submit',
+    '#attributes' => array('class' => 'recherche-img'),
+  );
+  $form['type_form'] = array(
+    '#type' => 'hidden',
+    '#value' => 'advanced'
+  );
+  $form['search_key'] = array(
+    '#type' => 'hidden',
+    '#value' => $search_id,
+  );
+
+  $form['keywords']['first_date'] = array(
+    '#type' => 'textfield',
+    '#attributes' => array('title' => t('jj/mm/aaa')),
+    '#title' => t('du'),
+    '#default_value' => isset($criteries['first_date']) ? $criteries['first_date'] : NULL,
+  );
+  $form['keywords']['last_date'] = array(
+    '#type' => 'textfield',
+    '#attributes' => array('title' => t('jj/mm/aaa')),
+    '#title' => t('au'),
+    '#default_value' => isset($criteries['last_date']) ? $criteries['last_date'] : NULL,
+  );
+
+  $form['sources']['public_first_date'] = array(
+    '#type' => 'textfield',
+    '#attributes' => array('title' => t('jj/mm/aaa')),
+    '#title' => t('du'),
+    '#default_value' => isset($criteries['public_first_date']) ? $criteries['public_first_date'] : NULL,
+  );
+  $form['sources']['public_last_date'] = array(
+    '#type' => 'textfield',
+    '#attributes' => array('title' => t('jj/mm/aaa')),
+    '#title' => t('au'),
+    '#default_value' => isset($criteries['public_last_date']) ? $criteries['public_last_date'] : NULL,
+  );
+
+  $form['#validate'][] = 'batire_search_form_validate';
+  $form['#theme'] = 'batire_search_ui_advanced_search_form_content';
+  $form['#submit'][] = 'batire_search_form_submit';
+  return $form;
+}
+
+/**
+ * Create criteries for search form.
+ */
+function batire_search_ui_search_options($type) {
+  $options = array();
+  switch ($type) {
+    default:
+    case 'sources':
+      $norm_array = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_NORMATIF);
+      $con_type_array = batire_site_get_document_types_list();
+      $additional_tids = array(BATIRE_SITE_TID_REGLES_RAGE);
+      $options = batire_search_ui_build_header_sources_array($norm_array, $con_type_array, $additional_tids);
+      break;
+
+    case 'building_types':
+      $options = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_BATIMENT);
+      break;
+
+    case 'trades':
+      $options = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_CORPS);
+      break;
+
+    case 'themes':
+      $options = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_THEMES);
+      break;
+  }
+  return $options;
+}
+
+/*
+ * Switch mode search form
+ */
+function batire_search_ui_switch_mode_search_form(&$form_state) {
+  $form = array();
+  $search_id = arg(2);
+  $form['type_form'] = array(
+    '#type' => 'hidden',
+    '#value' => 'switcher'
+  );
+  $form['search_key'] = array(
+    '#type' => 'hidden',
+    '#value' => $search_id,
+  );
+  $form['submit'] = array(
+    '#title' =>'text',
+    '#value' => 'search',
+    '#type' => 'submit',
+    '#access' => TRUE,
+    '#attributes' => array('class' => 'switch_recherche'),
+  );
+  $form['#submit'][] = 'batire_search_form_submit';
+
+  return $form;
+}
+/**
+ * Create criteries for sources.
+ */
+function batire_search_ui_search_options_sources($type) {
+  $options = array();
+  switch ($type) {
+    case 'batire_themes':
+      $options['tous'] = array('name' => t('Tous les themes'));
+      $options += batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_THEMES, 'array');
+      break;
+
+    case 'batire_codes':
+      $options['tous'] = array('name' => t('Tous les codes'));
+      $options += batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_CODES, 'array');
+      break;
+
+    case 'batire_texte_officiel':
+      $options['tous'] = array('name' => t('Tous les textes officiels'));
+      $options += batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_TO, 'array');
+      break;
+
+    case 'batire_feuillet_mobile':
+      $options['tous'] = array('name' => t('Tous les classeurs à mises à jour'));
+      $options += batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_FM, 'array');
+      break;
+
+    case 'batire_texte_normatifs':
+      $options['tous'] = array('name' => t('Tous les textes normatifs'));
+      $options += batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_NORMATIF, 'array');
+      break;
+
+    case 'batire_livres':
+      $options['tous'] = array('name' => t('Tous les livres'));
+      $options += batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_LIVRES, 'array');
+      // According to #45633 some items need to be removed (temporarily)
+      $options_to_remove = array(
+        165, // Vocabulaire illustré de la construction
+        168, // Introduction à la mécanique des sols
+        170, // Diagnostic des structures
+        172, // Formulation des bétons
+      );
+      foreach ($options_to_remove as $tid) {
+        unset($options[$tid]);
+      }
+      break;
+
+    case 'batire_complement_technique':
+      $options['tous'] = array('name' => t('Tous les articles de la revue Complément technique'));
+      $options += batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_TYPE_CT, 'array');
+      break;
+    case 'batire_document_reference':
+      $options['tous'] = array('name' => t('Tous les Documents de reference'));
+      $options += batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE, 'array');
+      break;
+  }
+  $options_array = array();
+  foreach ($options as $opt_key => $opt) {
+    $options_array[$opt_key] = $opt['name'];
+  }
+
+  return $options_array;
+}
+
+/**
+ * Save search criteries from header search form
+ */
+function batire_search_ui_save_search_criteries_js() {
+  $message = array(
+    'status' => 0,
+    'message' => '',
+    'url' => ''
+  );
+
+  try {
+    $default_criteries = batire_search_get_list_default_search_data();
+    $search_id = batire_search_generate_id();
+    $criteries = array();
+    $criteries['search_word'] = isset($_POST['search_name']) ? $_POST['search_name'] : '';
+    $criteries['title_only'] = isset($_POST['title_only']) ? $_POST['title_only'] : 0;
+    $criteries['list_criteries_sources'] = isset($_POST['sources']) ? $_POST['sources'] : '';
+    $criteries['list_criteries_types'] = isset($_POST['types']) ? $_POST['types'] : '';
+    $criteries['list_criteries_trades'] = isset($_POST['corps']) ? $_POST['corps'] : '';
+    $criteries['list_criteries_themes'] = isset($_POST['themes']) ? $_POST['themes'] : '';
+    $criteries['type_form'] = 'header';
+
+    $render_criteries = array();
+    if (!empty($criteries['list_criteries_sources'])) {
+      foreach ($criteries['list_criteries_sources'] as $value) {
+        $render_criteries[$value] = $value;
+      }
+
+      $criteries['list_criteries_sources'] = batire_search_ui_return_render_sources($render_criteries);
+    }
+
+    $default_criteries = batire_search_search_form_build_criteria($criteries);
+
+    batire_search_save_search_criteria($search_id, $default_criteries);
+
+    $message['status'] = 1;
+    $message['url'] = url("recherche-avancee/" . $search_id);
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Form constructor for save search.
+ *
+ * @ingroup forms
+ */
+function batire_search_ui_save_search_form(&$form_state, $sid, $r_sid) {
+  $form = array();
+
+  $field = content_fields('field_alert_period', 'batire_user_search_profile');
+  $field_week = content_fields('field_alert_period_week', 'batire_user_search_profile');
+  $field_month = content_fields('field_alert_period_month', 'batire_user_search_profile');
+
+  $allowed_values = content_allowed_values($field);
+  $allowed_values_week = content_allowed_values($field_week);
+  $allowed_values_month = content_allowed_values($field_month);
+
+  $form['search_name'] = array(
+    '#title' => t('Nom de cette recherche'),
+    '#type' => 'textfield',
+    '#attributes' => array('title' => t('Saisir le nom donné à cette recherche')),
+    '#maxlength' => BATIRE_SITE_MAX_NAME_LENGTH
+  );
+  $f_sid = $sid;
+  if (!empty($r_sid) && mongodb_search_find_search_id($r_sid)) {
+    $f_sid = $r_sid;
+  }
+
+  $criterias = batire_search_load_search_criteries($f_sid);
+  if (!empty($criterias['search_depend'])) {
+    $search_data = mongodb_search_get_search_data($criterias['search_depend']);
+    if (!empty($search_data['nid'])) {
+      $node = node_load($search_data['nid']);
+      $alert = batire_search_ui_return_alert_for_search($node->nid);
+      $search_alert = node_load($alert['nid']);
+
+      if (!empty($search_alert)) {
+        switch ($search_alert->field_alert_period[0]['value']) {
+          case 0:
+            $form['alert_period_day'][0]['#value'] = 0;
+            break;
+
+          case 1:
+            $form['alert_period_day'][1]['#value'] = 1;
+            $form['alert_period_week'][$search_alert->field_alert_period_week[0]['value']]['#value'] = $search_alert->field_alert_period_week[0]['value'];
+            break;
+
+          case 2:
+            $form['alert_period_day'][2]['#value'] = 2;
+            $form['alert_period_month'][$search_alert->field_alert_period_month[0]['value']]['#value'] = $search_alert->field_alert_period_month[0]['value'];
+            break;
+        }
+      }
+
+      $form['search_name']['#attributes']['data-depend-title'] = $node->title;
+      $form['search_name']['#value'] = $node->title;
+    }
+  }
+
+  $form['search_id'] = array(
+    '#type' => 'hidden',
+    '#value' => $sid
+  );
+  if (!empty($r_sid)) {
+    $form['r_search_id'] = array(
+      '#type' => 'hidden',
+      '#value' => $r_sid
+    );
+  }
+  $form['mode'] = array(
+    '#type' => 'hidden',
+    '#value' => 'insert'
+  );
+  $form['alert_period_day'] = array(
+    '#type' => 'radios',
+    '#options' => $allowed_values,
+  );
+  $form['alert_period_week'] = array(
+    '#type' => 'radios',
+    '#options' => $allowed_values_week,
+    '#attributes' => array('class' => 'period-week')
+  );
+  $form['alert_period_month'] = array(
+    '#type' => 'radios',
+    '#options' => $allowed_values_month,
+    '#attributes' => array('class' => 'period-month')
+  );
+  $form['submit'] = array(
+    '#value' => t('Valider'),
+    '#type' => 'submit',
+  );
+
+  $form['#theme'] = 'batire_search_ui_save_search_form_content';
+
+  return $form;
+}
+
+/**
+ * Handler for form save search.
+ */
+function batire_search_ui_create_search_js() {
+  global $user;
+
+  $message = array(
+    'status' => 0,
+    'message' => ''
+  );
+
+  try {
+    $sid = batire_site_check_text($_POST['search_id']);
+    $mode = batire_site_check_text($_POST['mode']);
+    $title = $_POST['search_name'];
+    $r_sid = isset($_POST['r_search_id']) ? batire_site_check_text($_POST['r_search_id']) : NULL;
+    if (!mongodb_search_find_search_id($sid)) {
+      throw new Exception(t("Search id doesn't exist"), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if (!empty($r_sid) && !mongodb_search_find_search_id($r_sid)) {
+      $r_sid = NULL;
+    }
+
+    $f_sid = $sid;
+    if (!empty($r_sid) && mongodb_search_find_search_id($r_sid)) {
+      $f_sid = $r_sid;
+      $sid_data = mongodb_search_get_search_data($sid);
+      batire_search_save_search_criteria($sid, $sid_data['data'], $sid_data['nid'], 'update', TRUE, TRUE);
+    }
+
+    $s_data = mongodb_search_get_search_data($f_sid);
+
+    $search_criteria = $s_data['data'];
+
+    if (!empty($search_criteria['search_depend'])) {
+      $search_data = mongodb_search_get_search_data($search_criteria['search_depend']);
+      if (!empty($search_data['nid'])) {
+        $search = node_load($search_data['nid']);
+        $search->title == $title ? $mode = 'update' : $mode = 'insert';
+      }
+    }
+    $query = '';
+    $session_search = _batire_site_get_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $sid, NULL);
+    switch ($mode) {
+      case 'update':
+        if (!isset($search_data)) {
+          $search_data = mongodb_search_get_search_data($search_criteria['search_depend']);
+        }
+        if (!isset($search)) {
+          $search = node_load($search_data['nid']);
+        }
+        $search->field_search_total[0]['value'] = $session_search->count_all_results;
+        node_save($search);
+        $search_criteria['result_url_from_node'] = batire_search_generate_facet_query($f_sid);
+        $search_criteria['static_refine_search'] = $search_criteria['refine_search'];
+
+        $aid = batire_search_ui_return_alert_for_search($search->nid);
+        if (!empty($aid) && !empty($aid['nid'])) {
+          $search_alert = node_load($aid['nid']);
+          if (!empty($search_alert)) {
+            if (isset($_POST['alert_period_day'])) {
+              $period = (int) batire_site_check_text($_POST['alert_period_day']);
+              $period_week = '';
+              $period_month = '';
+
+              if (isset($_POST['alert_period_week'])) {
+                $period_week = (int) batire_site_check_text($_POST['alert_period_week']);
+              }
+              if (isset($_POST['alert_period_month'])) {
+                $period_month = (int) batire_site_check_text($_POST['alert_period_month']);
+              }
+              $search_alert->field_alert_period[0]['value'] = $period;
+              $search_alert->field_alert_period_week[0]['value'] = $period_week;
+              $search_alert->field_alert_period_month[0]['value'] = $period_month;
+              node_save($search_alert);
+
+              if (!$search_alert->nid) {
+                throw new Exception(t("Can't save the node: @title.", array('@title' => $title)), BATIRE_SITE_ERROR_SYSTEM);
+              }
+            }
+          }
+        }
+        $data = mongodb_search_get_search_data($search->field_search_id[0]['value']);
+        unset($search_criteria['search_depend']);
+        $search_criteria['result_url_from_node'] = batire_search_generate_facet_query($f_sid);
+        $search_criteria['static_refine_search'] = $search_criteria['refine_search'];
+
+        batire_search_save_search_criteria($search->field_search_id[0]['value'], $search_criteria, $search->nid, 'update', $data['status'], TRUE);
+        $message['change_url'] = url('recherche-avancee/modifier-recherche/' . $search->field_search_id[0]['value']);
+        $data = mongodb_search_get_search_data($f_sid);
+        if ($data['undelete']) {
+          batire_search_save_search_criteria($f_sid, $search_criteria, NULL, 'update', FALSE, TRUE);
+        }
+        else {
+          mongodb_search_delete_search($f_sid);
+          if ($f_sid != $search->field_search_id[0]['value']) {
+
+            if ($search_criteria['result_url_from_node']) {
+              $query = $search_criteria['result_url_from_node'];
+            }
+            $message['url'] = url('recherche-avancee/resultats/' . $search->field_search_id[0]['value'], array('query' => $query));
+          }
+        }
+        break;
+
+      case 'insert':
+        $count = batire_user_docs_get_user_searches_cnt($user->uid, 0);
+        $max_count_search = BATIRE_USER_SEARCHES_MAXIMUM_SAVED_SEARCHES;
+        $search_data = mongodb_search_get_search_data($sid);
+        if (!empty($search_data['data']['search_depend'])) {
+          $session_search = _batire_site_get_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $search_data['data']['search_depend'], NULL);
+        }
+        if (!empty($search_data['data']['related_search']) && !$session_search) {
+          $session_search = _batire_site_get_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $search_data['data']['related_search'], NULL);
+        }
+        if ($count >= $max_count_search) {
+          throw new Exception(t("Vous avez atteint le nombre maximum autorise de @number recherches enregistrees. Pour en memoriser de nouvelles, vous devez d'abord en supprimer certaines", array('@number' => $max_count_search)), BATIRE_SITE_ERROR_SYSTEM);
+        }
+        $node = new stdClass();
+        $node->title = $title;
+        $node->status = 1;
+        $node->uid = $user->uid;
+        $node->type = 'batire_user_search_profile';
+        $node->field_profile_type[0]['value'] = 0;
+        $node->field_search_id[0]['value'] = $f_sid;
+        $node->field_search_total[0]['value'] = $session_search->count_all_results;
+
+        if ($s_data['uid'] != $user->uid) {
+          $new_search_id = batire_search_create_search_copy($f_sid);
+          $node->field_search_id[0]['value'] = $new_search_id;
+          node_save($node);
+          if (!empty($search_criteria['result_url_from_node'])) {
+            $query = $search_criteria['result_url_from_node'];
+          }
+          $message['url'] = url('recherche-avancee/resultats/' . $new_search_id, array('query' => $query));
+          if (!$node->nid) {
+            throw new Exception(t("Can't save the node: @title.", array('@title' => $title)), BATIRE_SITE_ERROR_SYSTEM);
+          }
+        }
+        else {
+          node_save($node);
+          if (!$node->nid) {
+            throw new Exception(t("Can't save the node: @title.", array('@title' => $title)), BATIRE_SITE_ERROR_SYSTEM);
+          }
+          $search_criteria['result_url_from_node'] = batire_search_generate_facet_query($f_sid);
+          $search_criteria['static_refine_search'] = $search_criteria['refine_search'];
+
+          if (!empty($search_criteria['search_depend']) && $f_sid != $r_sid) {
+            unset($search_criteria['search_depend']);
+            $url = 'recherche-avancee/resultats/' . $sid;
+            if ($f_sid != $sid) {
+              $url .= '/' . $f_sid;
+            }
+            if (!empty($search_criteria['result_url_from_node'])) {
+              $query = $search_criteria['result_url_from_node'];
+            }
+            $message['url'] = url($url, array('query' => $query));
+          }
+
+          batire_search_save_search_criteria($f_sid, $search_criteria, $node->nid, 'update');
+        }
+        $message['message'] = t('Votre profil de recherche a été enregistré');
+
+        if (isset($_POST['alert_period_day'])) {
+          $period = (int) batire_site_check_text($_POST['alert_period_day']);
+          $period_week = '';
+          $period_month = '';
+
+          if (isset($_POST['alert_period_week'])) {
+            $period_week = (int) batire_site_check_text($_POST['alert_period_week']);
+          }
+          if (isset($_POST['alert_period_month'])) {
+            $period_month = (int) batire_site_check_text($_POST['alert_period_month']);
+          }
+
+          $alert = new stdClass();
+          $alert->title = $title;
+          $alert->status = 1;
+          $alert->uid = $user->uid;
+          $alert->type = 'batire_user_search_profile';
+          $alert->field_alert_document[0]['nid'] = $node->nid;
+          $alert->field_search_new[0]['value'] = -1;
+          $alert->field_profile_type[0]['value'] = 1;
+          $alert->field_alert_period[0]['value'] = $period;
+          $alert->field_alert_period_week[0]['value'] = $period_week;
+          $alert->field_alert_period_month[0]['value'] = $period_month;
+          $alert->field_search_id[0]['value'] = $sid;
+          $alert->field_last_run[0]['value'] = strtotime(date('Y-m-d', time()) .' ' . BATIRE_USER_SEARCHES_SEND_ALERTS_TIME);
+          $search_data = mongodb_search_get_search_data($sid);
+          batire_search_save_search_criteria($sid, $search_data['data'], $node->nid, 'update', $search_data['status'], TRUE);
+
+          node_save($alert);
+
+          if (!$alert->nid) {
+            throw new Exception(t("Can't save the node: @title.", array('@title' => $title)), BATIRE_SITE_ERROR_SYSTEM);
+          }
+          $message['message'] = t('Votre profil de recherche et alerté ont été enregistrés');
+        }
+        break;
+    }
+    $message['status'] = 1;
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Create form of search results.
+ *
+ * @ingroup forms
+ */
+function batire_search_ui_search_results_form(&$form_state, $sid) {
+  $form = array();
+  $storage = batire_search_get_storage_data();
+  $pager = &drupal_static('batire_search_results', array());
+  $arg3 = arg(3);
+  $r_sid = NULL;
+  if (!empty($arg3)) {
+    $r_sid = $arg3;
+    $form['related_search_id'] = array(
+      '#type' => 'hidden',
+      '#value' => $r_sid
+    );
+  }
+  $form['show_teasers'] = array(
+    '#title' => t('Tout prévisualiser'),
+    '#type' => 'checkbox',
+    '#default_value' => $storage['search_previsualiser'] ? TRUE : FALSE
+  );
+  $form['show_keywords'] = array(
+    '#title' => t('Surligner les mots(s) clé(s)'),
+    '#type' => 'checkbox',
+    '#default_value' => $storage['search_show_keywords'] ? TRUE : FALSE
+  );
+  $form['count_on_page'] = array(
+    '#title' => t('Nbre résultats par page'),
+    '#type' => 'select',
+    '#options' => $pager->feed == 'IMAGES' ? array(21 => 21, 42 => 42, 60 => 60) : array(10 => 10, 25 => 25, 50 => 50),
+    '#default_value' => $pager->feed == 'IMAGES' ? $storage['search_pp_images'] : $storage['search_pp'],
+    '#attributes' => array('class' => $pager->feed == 'IMAGES' ? 'search_pp_images' : 'search_pp'),
+  );
+
+  $form['select_all_per_page'] = array(
+    '#title' => t('Sélectionner tous les documents de la page'),
+    '#type' => 'checkbox'
+  );
+
+  $form['search_id'] = array(
+    '#type' => 'hidden',
+    '#value' => $sid
+  );
+
+  //_batire_site_get_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $sid, NULL);
+  if ($pager) {
+    batire_search_ui_set_pager_data($pager);
+    $form['search_pager'] = array(
+      '#value' => theme('pager', array(), $pager->feed == 'IMAGES' ? $storage['search_pp_images'] : $storage['search_pp'])
+    );
+    $form['results'] = array(
+      '#type' => 'fieldset',
+      '#title' => NULL,
+      '#printed' => TRUE
+    );
+
+    foreach ($pager->results as $value) {
+      if ($pager->feed == 'IMAGES') {
+        $doc = $value;
+        $nid = $doc->node->image_id;
+      }
+      else {
+        $doc = $value->reply[0];
+        $nid = (int) $doc->node->nid;
+      }
+      if (!empty($nid)) {
+        $default_value = in_array($nid, $storage['documents']);
+        $form['results']['docs']['document_' . $nid] = array(
+          '#type' => 'checkbox',
+          '#attributes' => array('class' => 'batire-search-results-doc batire-search-results-doc-' . $nid),
+          '#default_value' => $default_value
+        );
+      }
+    }
+  }
+  $form['#theme'] = 'batire_search_ui_search_results_form_content';
+  return $form;
+}
+
+/**
+ * Build header search sources array
+ * @param array $norm_array
+ * @param array $con_type_array
+ */
+function batire_search_ui_build_header_sources_array($norm_array, $con_type_array, $additional_tids) {
+  $source_array = array();
+  /*
+   * Part of Kheox V2
+   */
+  $additional_array = array();
+  if (!empty($additional_tids)) {
+    foreach ($additional_tids as $tid) {
+      $term = taxonomy_get_term($tid);
+      $additional_array[$term->tid] = $term->name;
+    }
+  }
+  $default_array = array(
+    BATIRE_SITE_CT_FM   => $con_type_array[BATIRE_SITE_CT_FM],
+    BATIRE_SITE_CT_CODE => $con_type_array[BATIRE_SITE_CT_CODE],
+    BATIRE_SITE_CT_TO   => $con_type_array[BATIRE_SITE_CT_TO]
+  );
+  $default_array += $norm_array;
+  $default_array += $additional_array;
+  $default_array += array(
+    BATIRE_SITE_CT_DR => $con_type_array[BATIRE_SITE_CT_DR],
+    BATIRE_SITE_CT_LIVRE     => $con_type_array[BATIRE_SITE_CT_LIVRE],
+    BATIRE_SITE_CT_COMP_TECH => $con_type_array[BATIRE_SITE_CT_COMP_TECH],
+//  @todo enable Documents Pratiques in search ui
+//    BATIRE_SITE_CT_DOC_PRAT  => $con_type_array[BATIRE_SITE_CT_DOC_PRAT],
+    BATIRE_SITE_CT_ACTUALITE => $con_type_array[BATIRE_SITE_CT_ACTUALITE],
+  );
+  foreach ($default_array as $key => $value) {
+    if ($value) {
+      $source_array[$key] = $value;
+    }
+  }
+  return $source_array;
+}
+
+/**
+ * Handler for form of register documents
+ */
+function batire_search_ui_create_register_docs_js() {
+  global $user;
+
+  $message = array(
+    'status' => 0,
+    'message' => ''
+  );
+
+  try {
+    $fid = isset($_POST['fid']) ? batire_site_check_text($_POST['fid']) : 'root';
+    $ftype = isset($_POST['ftype']) ? batire_site_check_text($_POST['ftype']) : '';
+    $fname = isset($_POST['fname']) ? $_POST['fname'] : '';
+    $fshared = isset($_POST['fshared']) ? batire_site_check_text($_POST['fshared']) : '';
+    $storage = batire_search_get_storage_data();
+
+    if ($fname && $ftype == 'new_folder') {
+      if (!_batire_user_is_multipost($user) && $fshared) {
+        throw new Exception(t("Une erreur s'est produite: vous n'êtes pas autorisé"));
+      }
+      if ($fid != 'root') {
+        if (batire_user_docs_get_folder_depth($fid) >= 2) {
+          throw new Exception(t('Il ne peut y avoir plus de trois niveaux arborescents pour les sous-dossiers.'), BATIRE_SITE_ERROR_USER);
+        }
+
+        $p_node = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+
+        if (!isset($p_node->nid) || !$p_node->nid) {
+          throw new Exception(t('Folder is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+        }
+
+        if (($p_node->field_folder_shared[0]['value'] != 1) && ($fshared == 1)) {
+          throw new Exception(t('Un sous-dossier partagé ne peut appartenir à un dossier privé.'), BATIRE_SITE_ERROR_USER);
+        }
+
+        if ($p_node->uid != $user->uid) {
+          throw new Exception(t('Une erreur s\'est produite: impossible de créer ce dossier.
+            Nous vous invitons à nous signaler cette anomalie en !link.', array('!link' => batire_site_contact_link())
+          ), BATIRE_SITE_ERROR_SYSTEM);
+        }
+      }
+
+      if (empty($storage['documents'])) {
+        throw new Exception(t('Documents are not selected.'), BATIRE_SITE_ERROR_SITE);
+      }
+
+      $folder = new stdClass();
+      $folder->type = 'batire_user_folder';
+      $folder->status = 1;
+      $folder->uid = $user->uid;
+      $folder->title = $fname;
+
+      if ($fid != 'root') {
+        $folder->field_folder_parent = array(
+          array('nid' => $fid)
+        );
+      }
+
+      $folder->field_folder_shared = array(
+        array('value' => $fshared)
+      );
+
+      foreach ($storage['documents'] as $document) {
+        $folder->field_folder_documents[] = array(
+          'nid' => $document,
+          'added' => time(),
+          'owner' => $user->uid
+        );
+      }
+      node_save($folder);
+
+      if (!(isset($folder->nid) && $folder->nid)) {
+        throw new Exception(t('Veuillez sélectionner un dossier existant ou créer un nouveau dossier et le nommer pour enregistrer ce document.'), BATIRE_SITE_ERROR_USER);
+      }
+      $message['status'] = 1;
+    }
+    elseif ($fid && $ftype == 'exist_folder') {
+
+      $folder = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+
+      if (!isset($folder->nid) || !$folder->nid) {
+        throw new Exception(t('Folder node is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+      }
+
+      if ($folder->field_folder_shared[0]['value'] && !_batire_user_is_multipost($user)) {
+        throw new Exception(t("Une erreur s'est produite: vous n'êtes pas autorisé"));
+      }
+      // create list of documents in this folder
+      $docs = array();
+      foreach ($folder->field_folder_documents as $doc) {
+        $docs[] = $doc['nid'];
+      }
+      $count = 0;
+      $folders = array();
+      foreach ($storage['documents'] as $document) {
+        if (in_array($document, $docs)) {
+          $count++;
+        }
+        else {
+          $folder->field_folder_documents[] = array(
+            'nid' => $document,
+            'added' => time(),
+            'owner' => $user->uid
+          );
+        }
+      }
+      if ($count == count($storage['documents'])) {
+        throw new Exception(format_plural($count, 'Vous avez déjà enregistré ce document dans ce dossier.', 'Vous avez déjà enregistré ces documents dans ce dossier.'), BATIRE_SITE_ERROR_USER);
+      }
+      node_save($folder);
+
+      $message['status'] = 1;
+    }
+    else {
+      throw new Exception(t('Veuillez sélectionner un dossier existant ou créer un nouveau dossier et le nommer pour enregistrer ce document.'), BATIRE_SITE_ERROR_USER);
+    }
+    $folders = array();
+    if ($message['status']) {
+      foreach ($storage['documents'] as $document) {
+        $folders[$document] = batire_user_docs_get_shared_folder_icon($document);
+        $folders[$document] .= batire_user_docs_get_folders_tooltip($document, FALSE);
+      }
+    }
+    $message['folders'] = $folders;
+    _batire_search_ui_clean_search_cookies();
+    $message['message'] = t('Votre sélection a été enregistrée');
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Implementation of hook_user().
+ */
+function batire_search_ui_user($op, &$edit, &$account, $category = NULL) {
+  switch ($op) {
+    case 'logout':
+      foreach (batire_search_get_storage_data() as $key => $value) {
+        _batire_site_set_cookie($key);
+      }
+      _batire_search_ui_clean_search_cookies();
+      //_batire_site_set_session(BATIRE_SEARCH_UI_SESSION_NAMESPACE);
+      _batire_site_set_cookie('with_refs');
+      _batire_site_set_cookie('with_anno');
+      break;
+  }
+}
+
+/**
+ * Return criteries from default search
+ * @return Criteries if default search is active then FALSE
+ */
+function batire_search_ui_return_default_search() {
+  global $user;
+
+  $profile = batire_user_profile_load($user->uid);
+
+  if (!$profile) {
+    return FALSE;
+  }
+
+  if (!empty($profile->field_default_search[0]['nid'])) {
+    $criteries = array();
+    $search = node_load($profile->field_default_search[0]['nid']);
+    if (!empty($search->field_search_id[0]['value'])) {
+      $criteries = batire_search_load_search_criteries($search->field_search_id[0]['value']);
+      return $criteries;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Render array of source criteries
+ * @param $criteries Array of sources criteries
+ * @return $criteries
+ */
+function batire_search_ui_return_render_sources($criteries = array(), $extended = FALSE) {
+  $sources = array();
+  foreach ($criteries as $key => $value) {
+    if ($value) {
+      switch ($key) {
+        case 'batire_feuillet_mobile':
+          $sources += $extended ? batire_search_ui_search_options_sources($value) : array(BATIRE_SITE_TID_DOC_TYPE_FM => BATIRE_SITE_TID_DOC_TYPE_FM);
+          unset($criteries[$key]);
+          break;
+
+        case 'batire_codes':
+          $sources += $extended ? batire_search_ui_search_options_sources($value) : array(BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE);
+          unset($criteries[$key]);
+          break;
+
+        case 'batire_texte_officiel':
+          $sources += $extended ? batire_search_ui_search_options_sources($value) : array(BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL);
+          unset($criteries[$key]);
+          break;
+
+        case 'batire_livres':
+          $sources += $extended ? batire_search_ui_search_options_sources($value) : array(BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE);
+          unset($criteries[$key]);
+          break;
+
+        case 'batire_complement_technique':
+          $sources += $extended ? batire_search_ui_search_options_sources($value) : array(BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT);
+          unset($criteries[$key]);
+          break;
+        case 'batire_document_reference':
+          $sources += $extended ? batire_search_ui_search_options_sources($value) : array(BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE);
+          unset($criteries[$key]);
+          break;
+        default :
+          break;
+      }
+    }
+  }
+  unset($sources['tous']);
+
+  foreach ($sources as $key => $value) {
+    if ($value && $value != 'tous') {
+      $sources[$key] = $key;
+    }
+  }
+  $criteries += $sources;
+
+  return $criteries;
+}
+
+/**
+ * Transform rendered array of source criteries back
+ * @param $criteries Array of sources criteries
+ * @return $criteries
+ */
+function batire_search_ui_return_unrender_sources($criteries = array(), $unset = TRUE) {
+  $sources = array('batire_feuillet_mobile', 'batire_codes', 'batire_texte_officiel', 'batire_livres', 'batire_complement_technique');
+  foreach ($sources as $value) {
+    $source = batire_search_ui_search_options_sources($value);
+    unset($source['tous']);
+    $present = TRUE;
+    foreach ($source as $key => $item) {
+      if (isset($criteries['sources'][$key])) {
+        if ($unset) {
+          unset($criteries['sources'][$key]);
+        }
+      }
+      else {
+        $present = FALSE;
+        break;
+      }
+    }
+    if ($present) {
+      $criteries['sources'][$value] = $value;
+    }
+  }
+  if (isset($criteries['sources'])) {
+    foreach ($criteries['sources'] as $key => $value) {
+      switch ($key) {
+        case BATIRE_SITE_TID_DOC_TYPE_FM:
+          $criteries['sources'][BATIRE_SITE_CT_FM] = BATIRE_SITE_CT_FM;
+          unset($criteries['sources'][$key]);
+          break;
+        case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE:
+          $criteries['sources'][BATIRE_SITE_CT_CODE] = BATIRE_SITE_CT_CODE;
+          unset($criteries['sources'][$key]);
+          break;
+        case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL:
+          $criteries['sources'][BATIRE_SITE_CT_TO] = BATIRE_SITE_CT_TO;
+          unset($criteries['sources'][$key]);
+          break;
+        case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE:
+          $criteries['sources'][BATIRE_SITE_CT_LIVRE] = BATIRE_SITE_CT_LIVRE;
+          unset($criteries['sources'][$key]);
+          break;
+        case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT:
+          $criteries['sources'][BATIRE_SITE_CT_COMP_TECH] = BATIRE_SITE_CT_COMP_TECH;
+          unset($criteries['sources'][$key]);
+          break;
+      }
+    }
+  }
+  return $criteries;
+}
+
+/**
+ * Load criteries to search results from default search profile or create empty search
+ * @global $user
+ */
+function batire_search_ui_apply_criterias_in_results_page() {
+  global $user;
+  $args = arg();
+  $data = array();
+  switch ($args[1]) {
+    case 'profil-de-recherche-par-defaut':
+      $profile = batire_user_profile_load($user->uid);
+      if (!empty($profile->field_default_search[0]['nid'])) {
+        $search = node_load($profile->field_default_search[0]['nid']);
+        if (!empty($search->field_search_id[0]['value'])) {
+          $sid = batire_search_create_search_copy($search->field_search_id[0]['value']);
+          drupal_goto('recherche-avancee/resultats/' . $sid);
+        }
+      }
+      break;
+
+    case 'metier':
+      switch ($args[2]) {
+        case BATIRE_SITE_VID_BATIMENT:
+          $tree = taxonomy_get_tree(BATIRE_SITE_VID_BATIMENT, 0, -1);
+          foreach ($tree as $t_k => $child) {
+            if ($child->parents[0] == $args[3]) {
+              $child_array[$child->tid] = $child->tid;
+            }
+          }
+          $data_array = !empty($child_array) ? $child_array : array($args[3] => $args[3]);
+          $data = array('types' => $data_array, 'status' => TRUE);
+          break;
+
+        case BATIRE_SITE_VID_CORPS:
+          $tree = taxonomy_get_tree(BATIRE_SITE_VID_CORPS, 0, -1);
+          foreach ($tree as $t_k => $child) {
+            if ($child->parents[0] == $args[3]) {
+              $child_array[$child->tid] = $child->tid;
+            }
+          }
+          $data_array = !empty($child_array) ? $child_array : array($args[3] => $args[3]);
+          $data = array('trades' => $data_array, 'status' => TRUE);
+          break;
+
+        case BATIRE_SITE_VID_THEMES:
+          $data = array('themes' => array($args[3] => $args[3]), 'status' => TRUE);
+          break;
+      }
+      break;
+
+    case 'modifier-recherche':
+      batire_search_filter_sid($args[2]);
+      $data = array('search_depend' => $args[2]);
+      $s_data = batire_search_load_search_criteries($args[2]);
+      if (!empty($s_data['search_depend'])) {
+        drupal_goto('recherche-avancee/' . $args[2]);
+      }
+      else {
+        $sid = batire_search_create_search_copy($args[2], $data);
+        drupal_goto('recherche-avancee/' . $sid);
+      }
+      break;
+
+    case 'documents':
+      batire_search_filter_sid($args[2]);
+      $old_data = batire_search_load_search_criteries($args[2]);
+      $cpids = array();
+      switch ($args[3]) {
+        case 'new' :
+          foreach ($old_data['cpids']['new'] as $cpid) {
+            $cpids[] = '(id="' . $cpid . '")';
+          }
+          break;
+        case 'changed' :
+          foreach ($old_data['cpids']['changed'] as $cpid) {
+            $cpids[] = '(id="' . $cpid . '")';
+          }
+          break;
+      }
+      $data = array('custom_filter' => implode('or', $cpids));
+      break;
+
+    case 'nouveaux-documents':
+      $profile = batire_user_profile_load($user->uid);
+      $last_login_str = '"' . $args[2] . '"';
+
+      //Have default search profile
+      if (isset($profile->field_default_search[0]['nid']) && $profile->field_default_search[0]['nid']) {
+        $search = mongodb_search_get_search_data_by_nid($profile->field_default_search[0]['nid']);
+        $data = array('types' => $search['data']['types'], 'trades' => $search['data']['trades'], 'themes' => $search['data']['themes']);
+      }
+
+      $data['custom_filter'] = '(dateCreation>' . $last_login_str . ')or(dateMaj>' . $last_login_str . ')';
+      break;
+
+    case 'table-des-matieres':
+      $fid = $args[2];
+      _batire_site_set_cookie('summary_last_fid', $fid, time()+60*60*24);
+      batire_search_filter_sid($fid, FALSE);
+      $custom_filter = mongodb_site_get_filter_by_fid($fid, TRUE);
+      if (($custom_filter['type'] == 'batire_texte_normatifs')) {
+        $data['tn_only'] = TRUE;
+      }
+      $data['custom_filter'] = $custom_filter['filter'];
+      $new_search_id = batire_search_create_new_search(NULL, $data);
+      drupal_goto('recherche-avancee/resultats/' . $new_search_id, array('sort_by' => 'source' , 'sort_order' => 'DESC'));
+      break;
+
+    case 'feuillets-mobiles':
+      $types = array('Niveau', 'sousNiveau');
+      $type = batire_site_check_text($args[2]);
+      if (in_array($args[2], $types)) {
+        $current_book = (isset($args[4]) && is_numeric($args[4])) ? '/' . $args[4] : '';
+        $data['custom_filter'] = '(typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM . $current_book . '")and(' . $type . '="' . $args[3] . '")';
+      }
+      break;
+
+    case 'livres':
+      $types = array('Niveau', 'sousNiveau');
+      $type = batire_site_check_text($args[2]);
+      if (in_array($args[2], $types)) {
+        $data['custom_filter'] = '(typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE . '")and(' . $type . '="' . $args[3] . '")';
+      }
+      break;
+
+    case 'complement-technique':
+      $types = array('Niveau', 'sousNiveau');
+      $type = batire_site_check_text($args[2]);
+      if (in_array($args[2], $types)) {
+        $data['custom_filter'] = '(typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT . '")and(' . $type . '="' . $args[3] . '")';
+      }
+      break;
+
+    case 'texte-normatifs':
+      $super_bid = batire_hierarchy_get_parent_bid($args[2]);
+      $bids      = batire_hierarchy_get_children($super_bid);
+      $s_bids    = array();
+
+      foreach ($bids as $bid) {
+        $id_parts = explode('-', $bid->id);
+        if (!empty($id_parts[2]) && $id_parts[2] != 'SOMMAIRE') {
+          $s_bids[] = '(id="' . $bid->bid . '")';
+        }
+      }
+
+      if (count($s_bids)) {
+        $data = array('custom_filter' => implode('or', $s_bids));
+      }
+
+      $sid = isset($_GET['back_sid']) ? $_GET['back_sid'] : '';
+      $old_data = batire_search_load_search_criteries($sid);
+      $new_data = array_merge($data, $old_data);
+      $new_data['tn_only'] = TRUE;
+      $new_search_id = batire_search_create_new_search(NULL, $new_data);
+
+      if ($sid) {
+        drupal_goto('recherche-avancee/resultats/' . $new_search_id, array('back_sid' => $sid));
+      }
+      break;
+
+    case 'suggestion':
+      $sid = $args[2];
+      batire_search_filter_sid($sid);
+      $data = array();
+      if (isset($_GET['words'])) {
+        $data['search_word'] = batire_site_check_text($_GET['words']);
+      }
+      $new_search_id = batire_search_create_search_copy($sid, $data);
+      drupal_goto('recherche-avancee/resultats/' . $new_search_id);
+      break;
+
+    case 'limit-products':
+      $sid = $args[2];
+      batire_search_filter_sid($sid);
+      $old_data = batire_search_load_search_criteries($sid);
+      $data = array();
+      $data['access_products'] = isset($old_data['access_products']) && $old_data['access_products'] ? 0 : 1;
+      $new_search_id = batire_search_create_search_copy($sid, $data);
+      drupal_goto('recherche-avancee/resultats/' . $new_search_id);
+      break;
+  }
+
+  $new_search_id = batire_search_create_new_search(NULL, $data);
+  drupal_goto('recherche-avancee/resultats/' . $new_search_id);
+}
+
+/**
+ * Clear list criterias except terms for default profile
+ * @param
+ *  $criterias - array with criterias from database
+ * @param
+ *  $once_array - if TRUE, to return criterias in once array
+ * @return if $criterias isn't empty to return $new_criterias
+ */
+function batire_search_ui_clear_criteries_for_default_profile($criterias = array(), $once_array = FALSE) {
+  $new_criterias = array();
+
+  if (!empty($criterias)) {
+    if (!$once_array) {
+      foreach ($criterias as $key => $value) {
+        switch ($key) {
+          case 'sources':
+          case 'types':
+          case 'trades':
+          case 'themes':
+            $new_criterias[$key] = $criterias[$key];
+            break;
+        }
+      }
+      return $new_criterias;
+    }
+    else {
+      foreach ($criterias as $key => $terms) {
+        switch ($key) {
+          case 'sources':
+          case 'types':
+          case 'themes':
+          case 'trades':
+            foreach ($terms as $tid => $value) {
+              $new_criterias[$tid] = $tid;
+            }
+            break;
+        }
+      }
+      return $new_criterias;
+    }
+  }
+
+  return NULL;
+}
+
+/**
+ * Return id search alert for search
+ */
+function batire_search_ui_return_alert_for_search($sid) {
+  if (!empty($sid) && mongodb_search_find_search_id($sid)) {
+    $sql = "
+      SELECT node.`nid`, node.`title`, ctbusp.`field_alert_document_nid` FROM {node} node
+      LEFT JOIN {content_type_batire_user_search_profile} ctbusp ON ctbusp.`nid` = node.nid
+      WHERE node.`type` = 'batire_user_search_profile' AND ctbusp.`field_alert_document_nid` = '%d'";
+    $result = db_query($sql, $sid);
+    return db_fetch_array($result);
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ * Process with related search
+ */
+function _batire_search_ui_related_search_process($sid, $r_sid) {
+  if (!empty($r_sid)) {
+    $search = mongodb_search_get_search_data($sid);
+    // check if sid from session equal sid from url and it is not exist in db,
+    // for creating related search and save selected documents to db
+    $session_related_sid = _batire_site_get_var(BATIRE_SEARCH_UI_SESSION_NAMESPACE, 'related_search_id', batire_search_generate_id());
+    if ($session_related_sid == $r_sid && !mongodb_search_find_search_id($r_sid)) {
+      $storage = batire_search_get_storage_data();
+      if (count($storage['documents'])) {
+        $data = array();
+        $data['related_search'] = $sid;
+        $data['documents'] = $storage['documents'];
+        batire_search_create_new_search($r_sid, $data);
+        _batire_search_ui_clean_search_cookies();
+        drupal_static_reset('batire_search_get_storage_data');
+      }
+    }
+    // check if sid from session equal sid from url and it exist in db,
+    // for creating new correct sid
+    elseif ($session_related_sid == $r_sid && mongodb_search_find_search_id($r_sid)) {
+      $session_related_sid = batire_search_generate_id();
+      _batire_site_set_var(BATIRE_SEARCH_UI_SESSION_NAMESPACE, 'related_search_id', $session_related_sid);
+      drupal_goto('recherche-avancee/resultats/' . $sid . '/' . $session_related_sid);
+    }
+    // check if related search exist in db, for showing search created earlier
+    elseif (mongodb_search_find_search_id($r_sid)) {
+      $related_data = mongodb_search_get_search_data($r_sid);
+      if ($related_data['data']['related_search'] != $sid) {
+        $session_related_sid = batire_search_generate_id();
+        _batire_site_set_var(BATIRE_SEARCH_UI_SESSION_NAMESPACE, 'related_search_id', $session_related_sid);
+        drupal_goto('recherche-avancee/resultats/' . $sid . '/' . $session_related_sid);
+      }
+    }
+  }
+  // create related search id for aficher button
+  $new_related_search_id = batire_search_generate_id();
+  //_batire_site_set_var(BATIRE_SEARCH_UI_SESSION_NAMESPACE, 'related_search_id', $new_related_search_id);
+}
+
+function batire_search_ui_print_results($sid) {
+  $print['sendtoprinter'] = "<script type='text/javascript'>window.print();window.close();</script>";
+  $print['search_date']   = format_date(REQUEST_TIME, 'custom', 'd/m/Y');
+  $print['link']          = l(url('recherche-avancee/resultats/' . $sid, array('absolute' => TRUE)), 'recherche-avancee/resultats/' . $sid);
+  $print['copyright']     = SITE_NAME_FS . ' / ' . format_date(REQUEST_TIME, 'custom', 'Y');
+  $print['search_crit']   = batire_search_load_search_criteries($sid, TRUE);
+  $print['refine_crit']   = batire_search_load_refine_criteries_as_text($sid, TRUE);
+  $search_data            = mongodb_search_get_search_data($sid);
+  $criterias              = $search_data['data'];
+
+  $sort_by = (string) isset($_GET['sort_by']) ? $_GET['sort_by'] : 'relevant';
+  if ((!isset($criterias['search_word']) || empty($criterias['search_word'])) && ($sort_by == 'relevant')) {
+    $sort_by = 'source';
+  }
+
+  switch ($sort_by) {
+    case 'relevant':
+      $print['search_sort'] = t('Pertinence');
+      break;
+    case 'source':
+      $print['search_sort'] = t('Source');
+      break;
+    case 'date':
+      $print['search_sort'] = t('Date');
+      break;
+  }
+
+  $search = batire_search_run_search($sid, NULL, array(), 200);
+  $docs   = array();
+
+  foreach ($search->results as $doc) {
+    $nid = (int) $doc->node->nid;
+    if (!empty($nid) && is_numeric($nid)) {
+      $title = '';
+      $text = '';
+
+//get document title
+      $title_arr = array();
+      if (!empty($doc->title)) {
+        if (!empty($doc->node->numero_ref) && ($doc->node->type != BATIRE_SITE_CT_CODE) && ($doc->node->type != BATIRE_SITE_CT_LIVRE)) {
+          $title .= $doc->node->numero_ref . ' - ';
+        }
+        $title_part = '';
+        foreach ($doc->title as $part) {
+          if (!empty($part->{'afs:t'}) && $part->{'afs:t'} == 'KwicTruncate') {
+            if (!empty($title_part)) {
+              $title_arr[] = $title_part;
+              $title_part = '';
+            }
+            $title_arr[] = '<b>...</b>';
+          }
+
+          if (!empty($part->match)) {
+            $title_part .= $part->match;
+          }
+
+          if (!empty($part->text)) {
+            $title_part .= $part->text;
+          }
+        }
+
+        if (!empty($title_part)) {
+          $title_arr[] = $title_part;
+        }
+
+        $title .= implode('', $title_arr);
+      }
+
+//get document text
+      $text_arr = array();
+      if (!empty($doc->abstract)) {
+        $text_part = '';
+        foreach ($doc->abstract as $part) {
+          if (!empty($part->{'afs:t'}) && $part->{'afs:t'} == 'KwicTruncate') {
+            if (!empty($text_part)) {
+              $text_arr[] = $text_part;
+              $text_part = '';
+            }
+            $text_arr[] = '<b>...</b>';
+          }
+          if (!empty($part->match)) {
+            $text_part .= $part->match;
+          }
+          if (!empty($part->text)) {
+            $text_part .= $part->text;
+          }
+        }
+
+        if (!empty($text_part)) {
+          $text_arr[] = $text_part;
+        }
+      }
+
+      $text = implode('<br/>', $text_arr);
+
+      if ($doc->node->type == BATIRE_SITE_CT_TN) {
+
+        $title = '';
+        if (!empty($doc->node->numero_ref)) {
+          $title .= '<span class="h5">' . $doc->node->numero_ref . '</span>';
+        }
+        if (!empty($doc->node->field_classification_index)) {
+          $title .= ' <span style="font-size: 13px">(' . $doc->node->field_classification_index . ')</span>';
+        }
+        $html_title = $title . '<br />';
+      }
+      else {
+
+        $html_title = '<span class="h5">' . $title . '</span><br />';
+      }
+      $subttile = _batire_get_doc_search_sub_fields($doc->node);
+
+      if (!empty($subttile)) {
+        $html_title .= '<span class="sub-theme">' . $subttile . '</span>';
+      }
+
+      $doc_title = _batire_build_node_link_search($html_title, $nid, $sid);
+
+      $docs['document_' . $nid] = array(
+        'doc_title'  => $doc_title,
+        'doc_teaser' => $text,
+        'doc_type'   => $doc->node->read_type,
+        'nid'        => $nid,
+      );
+      if ($doc->node->type == BATIRE_SITE_CT_TO) {
+        if (!empty($doc->node->field_document_fundamental)) {
+          $docs['document_' . $nid]['fundamental'] = TRUE;
+          $docs['document_' . $nid]['item_class']  = 'item-important';
+        }
+      }
+      if ($doc->node->type == BATIRE_SITE_CT_TN) {
+        $docs['document_' . $nid]['notice'] = _batire_get_TN_notice($doc->node);
+      }
+    }
+  }
+  $print['documents'] = $docs;
+
+  $print['results_cnt'] = $search->count_all_results;
+
+  batire_user_statistics_action(4);
+
+  print theme('batire_search_ui_print_results', $print);
+  exit;
+}

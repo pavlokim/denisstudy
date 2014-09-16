@@ -1,0 +1,3580 @@
+<?php
+
+/**
+ * @file
+ *  batire_user_docs.module
+ * User documents related functionality
+ */
+module_load_include('inc', 'batire_user_docs', 'includes/views');
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_user_docs_init() {
+  drupal_add_js(
+  array(
+    'batire_user_docs' => array(
+      'classify_url' => url('js/batire_user_docs/classify'),
+      'remove_document_url' => url('js/batire_user_docs/remove-document'),
+      'my_account_create_folder_url' => url('js/batire_user_docs/mon_compte_create_folder'),
+      'my_account_move_rename_folder_url' => url('js/batire_user_docs/mon_compte_move_rename_folder'),
+      'my_account_remove_folder_url' => url('js/batire_user_docs/mon-compte-remove-folder'),
+      'my_account_share_folder_url' => url('js/batire_user_docs/mon-compte-share-folder'),
+      'my_account_move_document_url' => url('js/batire_user_docs/move-document'),
+      'infobar_url' => url('js/batire_user_docs/infobar'),
+      'my_account_folders_widget_url' => url('js/batire_user_docs/mon_compte_get_folders_widget'),
+      'download_pdf_url' => url('js/batire_user_docs/download_pdf'),
+      'print_document_url' => url('js/batire_user_docs/print_document'),
+      'document_get_list_childs' => url('js/batire_user_docs/get_list_childs')
+    )
+  ), 'setting'
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_user_docs_menu() {
+  $items = array();
+
+  $items['print-image/%'] = array(
+    'page callback' => 'batire_user_docs_print_image',
+    'page arguments' => array(1, 2),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'title' => 'Imprimer une image',
+  );
+
+  $items['download/%/%'] = array(
+    'page callback' => 'baitre_user_docs_file_download',
+    'page arguments' => array(1,2),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['js/batire_user_docs/annotation/%'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_annotation_js',
+    'page arguments' => array(3),
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/classify'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_classify_js',
+    'page arguments' => array(),
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/remove-document'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_remove_doc_js',
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/mon_compte_create_folder'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_mon_compte_create_folder_js',
+    'page arguments' => array(),
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/infobar'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_infobar_js',
+    'page arguments' => array(),
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/mon_compte_move_rename_folder'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_mon_compte_move_rename_folder_js',
+    'page arguments' => array(),
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/move-document'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_move_doc_js',
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/mon-compte-remove-folder'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_remove_folder_js',
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/mon-compte-share-folder'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_share_folder_js',
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/mon_compte_get_folders_widget/%'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_my_account_get_folders_widget_js',
+    'page arguments' => array(3, 4),
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['js/batire_user_docs/download_pdf'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_download_pdf_js',
+    'access arguments' => array('access user docs'),
+  );
+  $items['js/batire_user_docs/print_document'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_print_document_js',
+    'access arguments' => array('access content'),
+  );
+  $items['js/batire_user_docs/get_list_childs'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_get_list_childs_js',
+    'page arguments' => array(3, 4),
+    'access arguments' => array('access user docs'),
+  );
+
+  return $items;
+}
+
+/*
+ * Implementation of hook_menu_alter().
+ */
+function batire_user_docs_menu_alter(&$items) {
+  $items[PRINT_PATH]['access arguments'] = NULL;
+  $items[PRINT_PATH]['access callback'] = 'batire_user_docs_access';
+}
+
+/*
+ * Implementation of access callback function
+ */
+function batire_user_docs_access () {
+  global $user;
+  if (!$replace_user = batire_gc_ip_replace_user()) {
+    $replace_user = $user;
+  }
+
+  if (!user_access('access user docs', $replace_user)) {
+    return FALSE;
+  }
+  else {
+    return TRUE;
+  }
+
+}
+
+/**
+ * Implementation of hook_ctools_plugin_directory().
+ */
+function batire_user_docs_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'plugins/' . $plugin;
+  }
+  if ($module == 'panels' && $plugin == 'styles') {
+    return 'plugins/' . $plugin;
+  }
+
+  if ($module == 'panels' && $plugin == 'cache') {
+    return 'plugins/' . $plugin;
+  }
+}
+
+/**
+ * Implementation of hook_ctools_plugin_api().
+ */
+function batire_user_docs_ctools_plugin_api($owner, $api) {
+  if ($owner == 'panels' && $api == 'styles') {
+    return array('version' => 2.0);
+  }
+
+  if (module_exists('panels_everywhere') && $owner == 'page_manager' && $api == 'pages_default') {
+    return array('version' => 1);
+  }
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ * @param $node
+ * @param $op
+ * @param null $a3
+ * @param null $a4
+ */
+function batire_user_docs_nodeapi(&$node, $op) {
+  global $user;
+  switch ($node->type) {
+    case 'batire_user_folder' :
+      if ($node->field_folder_shared[0]['value']) {
+        /**
+         * When adding new folders, we need to clear cache;
+         */
+        cache_clear_all('batire_user_docs_shared_folder_list:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+      }
+      cache_clear_all('batire_user_docs_get_user_myfolders_cnt:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+      cache_clear_all('batire_user_docs_get_user_mydocs_cnt:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+
+      break;
+
+    case 'batire_user_annotation' :
+      cache_clear_all('batire_user_docs_get_user_myannos_cnt:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+      break;
+  }
+
+  /**
+   * Print option
+   */
+  switch ($op) {
+    case 'view':
+      $args = arg();
+      if ((($args[0] == PRINT_PATH || $args[0] == BATIRE_USER_DOCS_PDF_PRINT_PDF_URL) && _batire_site_is_document($node->type)) || (isset($node->pdf_load_additional) && $node->pdf_load_additional)) {
+        $node->build_mode = 'print';
+        $options = _batire_user_docs_get_options();
+        if ($options['an']) {
+          $node->annotations = batire_user_docs_print_annotation($node->nid, $options['user']);
+        }
+
+        if ($options['re']) {
+          $node->reference = batire_user_docs_print_reference($node);
+        }
+      }
+      break;
+  }
+}
+
+/*
+ * KheoxV2
+ * Download files
+ * @bid
+ * @file name
+ */
+function baitre_user_docs_file_download($bid, $filename) {
+  $data = mongodb_page_get_page_by_bid($bid);
+  switch ($data['type']) {
+    case BATIRE_SITE_CT_DR:
+      foreach ($data['liens']['lien_reference'] as $reference) {
+        $reference_data = mongodb_page_get_page_by_bid($reference['bid']);
+        foreach ($reference_data['attached'] as $attached) {
+          if ($attached['filename'] == $filename) {
+            $temp = explode('.', $filename);
+            $file_type = end($temp);
+            file_transfer($attached['filepath'], batire_site_get_file_headers($filename, $file_type));
+          }
+        }
+      }
+      break;
+    default:
+      return drupal_not_found();
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function batire_user_docs_theme() {
+  $items = array(
+    'batire_user_docs_annotations' => array(
+      'arguments' => array('total_cnt' => NULL, 'personel_list' => NULL, 'shared_list' => NULL, 'multipost' => FALSE),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_annotation_item' => array(
+      'arguments' => array('nid' => NULL, 'date' => NULL, 'text' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_popup_classify_content' => array(
+      'arguments' => array('form' => NULL, 'nids' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_popup_download' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_popup_show_pdf' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_popup_print' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_popup_create_folder' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_popup_remove_document' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_form_remove_document' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_infobar' => array(
+      'arguments' => array('shared' => NULL, 'folders' => NULL, 'anno_cnt' => NULL, 'alert' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_popup_move_rename_folder_content' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_popup_move_document' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_form_move_document' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_my_account_widget_folders' => array(
+      'arguments' => array('folders' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_widget_folders_item' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_register_document_form_content' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_folder_icon' => array(
+      'arguments' => array('folder_data' => NULL, 'folder_count' => NULL, 'text' => TRUE),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_form_download_pdf_doc' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_print_form_content' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_print_anno_list' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_print_annotation_render' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_print_references_render' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_print_image' => array(
+      'arguments' => array('print' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function batire_user_docs_perm() {
+  return array('access user docs');
+}
+
+/**
+ * Callback for classify js;
+ */
+function batire_user_docs_classify_js() {
+  global $user;
+
+  $result = array(
+    'error' => FALSE,
+    'data' => NULL,
+  );
+
+  try {
+    $fid = isset($_POST['fid']) ? batire_site_check_text($_POST['fid']) : 'root';
+    $did = isset($_POST['did']) ? batire_site_check_text($_POST['did']) : 0;
+    $ftype = isset($_POST['ftype']) ? batire_site_check_text($_POST['ftype']) : '';
+
+    if (!$did) {
+      throw new Exception(t('Document id is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    $fname = isset($_POST['fname']) ? $_POST['fname'] : '';
+
+    if ($fname && $ftype == 'new') {
+
+      $fshared = batire_site_check_text($_POST['fshared']);
+
+      if (!_batire_user_is_multipost($user) && $fshared) {
+        throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+      }
+      if ($fid != 'root') {
+        if (batire_user_docs_get_folder_depth($fid) >= 2) {
+          throw new Exception(t('Il ne peut y avoir plus de trois niveaux arborescents pour les sous-dossiers.'), BATIRE_SITE_ERROR_USER);
+        }
+
+        $p_node = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+
+        if (!isset($p_node->nid) || !$p_node->nid) {
+          throw new Exception(t('Folder is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+        }
+
+        if (($p_node->field_folder_shared[0]['value'] != 1) && ($fshared == 1)) {
+          throw new Exception(t('Un sous-dossier partagé ne peut appartenir à un dossier privé.'), BATIRE_SITE_ERROR_USER);
+        }
+
+        if ($p_node->uid != $user->uid) {
+          throw new Exception(t('Une erreur s\'est produite: impossible de créer ce dossier.
+                                Nous vous invitons à nous signaler cette anomalie en !link.', array('!link' => batire_site_contact_link())
+          )
+          , BATIRE_SITE_ERROR_SYSTEM);
+        }
+      }
+
+      $folder = new stdClass();
+      $folder->type = 'batire_user_folder';
+      $folder->status = 1;
+      $folder->uid = $user->uid;
+      $folder->title = $fname;
+
+      $folder->field_folder_shared = array(
+        array('value' => $fshared)
+      );
+
+      $folder->field_folder_documents = array(
+        array('nid' => $did, 'added' => time(), 'owner' => $user->uid)
+      );
+
+      if ($fid != 'root') {
+        $folder->field_folder_parent = array(
+          array('nid' => $fid)
+        );
+      }
+
+      node_save($folder);
+
+      if (!(isset($folder->nid) && $folder->nid)) {
+        throw new Exception(t('Veuillez sélectionner un dossier existant ou créer un nouveau dossier et le nommer pour enregistrer ce document.'), BATIRE_SITE_ERROR_USER);
+      }
+
+      $result['data'] = 'document has been added';
+    }
+    elseif ($fid && $ftype == 'exist') {
+
+      $folder = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+
+      if (!isset($folder->nid) || !$folder->nid) {
+        throw new Exception(t('Folder node is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+      }
+
+      if ($folder->field_folder_shared[0]['value'] && !_batire_user_is_multipost($user)) {
+        throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+      }
+      //Check if exist document in folder
+      $exist = FALSE;
+      foreach ($folder->field_folder_documents as $doc) {
+        if ($doc['nid'] == $did) {
+          $exist = TRUE;
+        }
+      }
+
+      if ($exist) {
+        throw new Exception(t('Vous avez déjà enregistré ce document dans ce dossier.'), BATIRE_SITE_ERROR_USER);
+      }
+
+      $folder->field_folder_documents[] = array('nid' => $did, 'added' => time(), 'owner' => $user->uid);
+
+      node_save($folder);
+
+      $result['data'] = 'document has been added';
+    }
+    else {
+      throw new Exception(t('Veuillez sélectionner un dossier existant ou créer un nouveau dossier et le nommer pour enregistrer ce document.'), BATIRE_SITE_ERROR_USER);
+    }
+  }
+  catch (Exception $e) {
+    $result['error'] = TRUE;
+    $result['data'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+
+  drupal_json($result);
+  return NULL;
+}
+
+/**
+ * Callback for infobar js;
+ */
+function batire_user_docs_infobar_js() {
+  $result = array(
+    'error' => FALSE,
+    'data' => NULL,
+  );
+
+  $did = isset($_GET['did']) ? $_GET['did'] : '';
+
+  $result['data'] = batire_user_docs_infobar($did);
+
+  drupal_json($result);
+  return NULL;
+}
+
+/**
+ * Callback for all recents js;
+ */
+function batire_user_docs_annotation_js($op) {
+  global $user;
+
+  $result = array(
+    'error' => FALSE,
+    'data' => NULL,
+    'type' => NULL,
+  );
+
+  switch ($op) {
+    case 'add' :
+      if (isset($_POST['text']) && $_POST['text'] && isset($_POST['type']) && $_POST['type'] && isset($_POST['did']) && $_POST['did']) {
+        $note_text = batire_site_check_text($_POST['text']);
+        $note_type = batire_site_check_text($_POST['type']);
+        $doc_id = batire_site_check_text($_POST['did']);
+
+        $private = TRUE;
+        if ($note_type == "shared") {
+          $private = FALSE;
+        }
+
+        //Check is user have any folder
+        $folders = batire_user_docs_get_folders();
+        if (count($folders) > 0) {
+          //Check is user have this doc in folder
+          $doc_folders = mongodb_docs_folders_list($user->uid, $doc_id);
+          if (count($doc_folders) > 0) {
+            $folder_s = FALSE;
+            $folder_p = FALSE;
+            $doc_folder_s = FALSE;
+            $doc_folder_p = FALSE;
+
+            foreach ($folders as $folder) {
+              if (mongodb_user_folder_shared($folder['nid'], $user->uid)) {
+                $folder_s = TRUE;
+              }
+              else {
+                $folder_p = TRUE;
+              }
+            }
+
+            foreach ($doc_folders as $doc_folder) {
+              if (mongodb_user_folder_shared($doc_folder['nid'], $user->uid)) {
+                $doc_folder_s = TRUE;
+              }
+              else {
+                $doc_folder_p = TRUE;
+              }
+            }
+
+            if ($private) {
+              if (!$doc_folder_p) {
+                $result['error'] = TRUE;
+                $result['data'] = $folder_p ? 'err3' : 'err1';
+              }
+            }
+            else {
+              if (!$doc_folder_s) {
+                $result['error'] = TRUE;
+                $result['data'] = $folder_s ? 'err4' : 'err2';
+              }
+            }
+          }
+          else {
+            $folder_s = FALSE;
+            $folder_p = FALSE;
+            foreach ($folders as $folder) {
+              if (mongodb_user_folder_shared($folder['nid'], $user->uid)) {
+                $folder_s = TRUE;
+              }
+              else {
+                $folder_p = TRUE;
+              }
+            }
+
+            if ($private) {
+              $result['error'] = TRUE;
+              $result['data'] = $folder_p ? 'err3' : 'err1';
+            }
+            else {
+              $result['error'] = TRUE;
+              $result['data'] = $folder_s ? 'err4' : 'err2';
+            }
+          }
+        }
+        else {
+          $result['error'] = TRUE;
+          $result['data'] = $private ? 'err1' : 'err2';
+        }
+
+        if (!$result['error']) {
+          $note = new stdClass();
+          $note->type = 'batire_user_annotation';
+          $note->status = 1;
+          $note->uid = $user->uid;
+          $note->title = sprintf('Annotation of %s - %s', $user->name, batire_site_truncate_utf8($note_text, 30, TRUE, TRUE));
+          $note->field_annotation_text = array(array('value' => $note_text));
+          $note->field_annotation_doc = array(array('nid' => $doc_id));
+          $note->field_annotation_shared = array(array('value' => (int) (!$private)));
+
+          node_save($note);
+
+          if (isset($note->nid) && $note->nid) {
+            if ($note_type == "shared") {
+              $full_name = mongodb_user_get_user_fullname($note->uid);
+              $result['data'] = theme('batire_user_docs_annotation_item', $note->nid, $full_name . ' ' . t('le') . ' ' . date('d/m/Y', $note->changed), $note_text);
+            }
+            else {
+              $result['data'] = theme('batire_user_docs_annotation_item', $note->nid, date('d/m/Y', $note->changed), $note_text);
+            }
+            $result['type'] = $note_type;
+          }
+          else {
+            $result['error'] = TRUE;
+          }
+        }
+      }
+      break;
+    case 'del' :
+      if (isset($_POST['nid']) && $_POST['nid']) {
+        $note_id = batire_site_check_text($_POST['nid']);
+        $note = node_load($note_id);
+        $result['data'] = '';
+
+        if ($user->uid == $note->uid) {
+          node_delete($note_id);
+          $shared = $note->field_annotation_shared[0]['value'] ? "shared" : "private";
+          drupal_get_messages();
+          if (node_load($note_id, NULL, TRUE)) {
+            $result['error'] = TRUE;
+            $result['data'] = 'Annotation not deleted';
+          }
+        }
+        else {
+          $result['error'] = TRUE;
+          $result['data'] = 'It\'s not your annotation';
+        }
+      }
+      break;
+    case 'modify' :
+      if (isset($_POST['text']) && $_POST['text'] && isset($_POST['nid']) && $_POST['nid']) {
+        $note_text = batire_site_check_text($_POST['text']);
+        $note_id = batire_site_check_text($_POST['nid']);
+
+        $note = node_load($note_id);
+        if ($user->uid == $note->uid) {
+          if ($note->field_annotation_shared[0]['value'] == 1) {
+            $note_type = 'shared';
+          }
+          $note->field_annotation_text = array(array('value' => $note_text));
+
+          node_save($note);
+          $shared = $note->field_annotation_shared[0]['value'] ? 'shared' : 'private';
+          mongodb_docs_edit_annotation($note->field_annotation_doc[0]['nid'], $shared, $note->nid, $note->changed, $note_text);
+
+          if (isset($note->nid) && $note->nid) {
+            if ($note_type == "shared") {
+              $full_name = mongodb_user_get_user_fullname($note->uid);
+              $result['data'] = theme('batire_user_docs_annotation_item', $note->nid, $full_name . ' ' . t('le') . ' ' . date('d/m/Y', $note->changed), $note_text);
+            }
+            else {
+              $result['data'] = theme('batire_user_docs_annotation_item', $note->nid, date('d/m/Y', $note->changed), $note_text);
+            }
+            $result['type'] = $note_type;
+          }
+          else {
+            $result['error'] = TRUE;
+            $result['data'] = 'Annotation doesn\'t changed';
+          }
+        }
+        else {
+          $result['error'] = TRUE;
+          $result['data'] = 'It\'s not your annotation';
+        }
+      }
+      break;
+  }
+
+  drupal_json($result);
+  return NULL;
+}
+
+/**
+ * Implementation of hook_batire_site_popups_info().
+ */
+function batire_user_docs_batire_site_popups_info($type) {
+  switch ($type) {
+    case 'classify':
+    case 'create-folder':
+    case 'remove-document':
+    case 'move-rename-folder':
+    case 'move-document':
+    case 'create-shared-folder':
+      return 'batire_user_docs';
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_batire_site_popups().
+ */
+function batire_user_docs_batire_site_popups($type, $nids) {
+  global $user;
+
+  $result = array(
+    'error' => FALSE,
+    'data' => ''
+  );
+
+  if (!user_access('access user docs')) {
+    $result['error'] = TRUE;
+    return $result;
+  }
+
+  switch ($type) {
+    case 'classify' :
+      $err = isset($_GET['err']) ? $_GET['err'] : '';
+      $params = array();
+      if (isset($err) && $err) {
+        switch ($err) {
+          case 'err1' :
+            $params['folders'] = 'p';
+            break;
+          case 'err2' :
+            $params['folders'] = 's';
+            break;
+          case 'err3' :
+            $params['folders'] = 'p';
+            break;
+          case 'err4' :
+            $params['folders'] = 's';
+            break;
+        }
+      }
+      $result['data'] = theme('batire_user_docs_popup_classify_content', drupal_get_form('batire_user_docs_register_document_form', $params), $nids);
+      break;
+    case 'create-folder' :
+      $result['data'] = theme('batire_user_docs_popup_create_folder', $nids);
+      break;
+    case 'move-rename-folder' :
+      $result['data'] = theme('batire_user_docs_popup_move_rename_folder_content', $nids);
+      break;
+    case 'remove-document':
+      $result['data'] = theme('batire_user_docs_popup_remove_document', $nids);
+      break;
+    case 'move-document':
+      $result['data'] = theme('batire_user_docs_popup_move_document', $nids);
+      break;
+    case 'create-shared-folder' :
+      $result['data'] = theme('batire_user_docs_popup_create_folder', $type);
+      break;
+  }
+
+  if (!$result['data']) {
+    return array();
+  }
+
+  return $result;
+}
+
+/**
+ * Get cached folders tree as array.
+ *
+ * @param string $type 'all' || 'p' || 's'
+ * @param int $uid User id
+ * @return array
+ */
+function batire_user_docs_get_folders($type = 'all', $uid = NULL) {
+  if (isset($uid) && $uid) {
+    $user = user_load($uid);
+  }
+  else {
+    global $user;
+  }
+
+  $data = batire_cache_get('batire_user_docs_folders:' . $type . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+  if (isset($data) && $data) {
+    return $data;
+  }
+  else {
+    $keys = array('data.uid' => (int) $user->uid);
+    $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+    if (is_array($data) && isset($data['folders'])) {
+      unset($data['folders']['stat']);
+      if ($type == 'p' || $type == 's') {
+        $data['folders'] = _batire_user_docs_filter_folder($data['folders'], $type);
+      }
+      if (isset($data['folders']) && $data['folders']) {
+        batire_cache_set('batire_user_docs_folders:' . $type . ':' . $user->uid, $data['folders'], BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+        return $data['folders'];
+      }
+      else {
+        return array();
+      }
+    }
+    else {
+      return array();
+    }
+  }
+}
+
+function batire_user_docs_get_myfolders($type = 'all', $uid = NULL) {
+  if (isset($uid) && $uid) {
+    $user = user_load($uid);
+  }
+  else {
+    global $user;
+  }
+  //@todo need reset chace key
+  //$data = batire_cache_get('batire_user_docs_myfolders:' . $type . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+  if (isset($data) && $data) {
+    return $data;
+  }
+  else {
+    $keys = array('data.uid' => (int) $user->uid);
+    $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+    if (is_array($data) && isset($data['folders'])) {
+      unset($data['folders']['stat']);
+      if ($type == 's') {
+        $data['folders'] = _batire_user_docs_filter_folder($data['folders'], 's');
+      }
+      if (isset($data['folders']) && $data['folders']) {
+        $data['folders'] = _batire_user_docs_filter_myfolder($data['folders'], $user->uid);
+        batire_cache_set('batire_user_docs_myfolders:' . $type . ':' . $user->uid, $data['folders'], BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+        return $data['folders'];
+      }
+      else {
+        return array();
+      }
+    }
+    else {
+      return array();
+    }
+  }
+}
+
+/**
+ * Get cached folder tree as array.
+ *
+ * @param type $nid
+ * @return array
+ */
+function batire_user_docs_get_folder_tree($nid, $reset = FALSE) {
+  global $user;
+
+  if ($reset) {
+    cache_clear_all('batire_user_docs_folder_tree:' . $user->uid . ':' . $nid, BATIRE_USER_CACHE_TABLE);
+  }
+
+  $data = batire_cache_get('batire_user_docs_folder_tree:' . $user->uid . ':' . $nid, BATIRE_USER_CACHE_TABLE);
+  if (isset($data) && $data) {
+    return $data;
+  }
+  else {
+    $tree = array();
+    $tmp_tree = array();
+
+    $keys = array('data.uid' => (int) $user->uid);
+    $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+    $path = _array_key_path('f' . $nid, $data);
+    for ($i = 1; $i <= count($path) / 2; $i++) {
+      $data_path = "";
+      for ($l = 0; $l < $i * 2; $l++) {
+        $part = $path[$l];
+        $data_path .= "['" . $part . "']";
+      }
+      eval("\$tree" . $data_path . " = \$data" . $data_path . ";");
+      eval("unset(\$tree" . $data_path . "['folders']);");
+    }
+    if (is_array($tree) && isset($tree['folders'])) {
+      batire_cache_set('batire_user_docs_folder_tree:' . $user->uid . ':' . $nid, $tree['folders'], BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+      return $tree['folders'];
+    }
+    else {
+      return array();
+    }
+  }
+}
+
+/**
+ * Folders count
+ */
+function batire_user_docs_get_folders_cnt() {
+  global $user;
+
+  $keys = array('data.uid' => (int) $user->uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+  if (isset($data['folders']) && is_array($data['folders'])) {
+    unset($data['folders']['stat']);
+    return count($data['folders']);
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Folder depth
+ */
+function batire_user_docs_get_folder_depth($nid) {
+  $cnt = 0;
+  $node = node_load(array('nid' => $nid, 'type' => 'batire_user_folder'));
+
+  while (isset($node->field_folder_parent[0]['nid']) && $node->field_folder_parent[0]['nid']) {
+    $cnt++;
+    $node = node_load(array('nid' => $node->field_folder_parent[0]['nid'], 'type' => 'batire_user_folder'));
+  }
+  return $cnt;
+}
+
+/**
+ * Builds the form to remove document from folders.
+ *
+ * @ingroup forms
+ */
+function batire_user_docs_create_form_remove_document(&$form_state, $nid) {
+  global $user;
+
+  $result = mongodb_docs_folders_list($user->uid, $nid);
+
+  $list_folders = array(
+    'all' => t('Tous')
+  );
+
+  foreach ($result as $value) {
+    $list_folders[$value['nid']] = $value['name'];
+  }
+
+  $form['field_list_folders'] = array(
+    '#type' => 'select',
+    '#options' => $list_folders,
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => !empty($nid) ? $nid : NULL
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+
+  $form['#theme'] = 'batire_user_docs_form_remove_document';
+
+  return $form;
+}
+
+/**
+ * Remove document from folder
+ */
+function batire_user_docs_remove_doc_js() {
+  global $user;
+
+  $message = array(
+    'status' => 0,
+    'message' => ''
+  );
+
+  try {
+    $did = (int) batire_site_check_text($_POST['nid']);
+    $fid = batire_site_check_text($_POST['field_list_folders']);
+
+    if (empty($did)) {
+      throw new Exception(t('Nid is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if (empty($fid)) {
+      throw new Exception(t('Folder nid is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    // load document
+    $document = node_load($did);
+    if (!isset($document->nid) || !$document->nid) {
+      throw new Exception(t("Document is not loaded."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if ($fid == 'all') {
+      $list_folders = mongodb_docs_folders_list($user->uid, $did);
+      foreach ($list_folders as $value) {
+        $docs_folder = node_load(array('nid' => $value['nid'], 'type' => 'batire_user_folder'));
+        if (isset($docs_folder->nid) && $docs_folder->nid && isset($docs_folder->field_folder_documents)) {
+          foreach ($docs_folder->field_folder_documents as $key => $field) {
+            if ($field['nid'] == $did && $docs_folder->uid == $user->uid) {
+              unset($docs_folder->field_folder_documents[$key]);
+            }
+          }
+        }
+        node_save($docs_folder);
+      }
+      $message['message'] = t("Votre document a été retiré de tous les dossiers.");
+    }
+    else {
+      // load folder
+      $folder = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+
+      if (!isset($folder->nid) && !$folder->nid) {
+        throw new Exception(t('Folder is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+      }
+
+      if ($user->uid != $folder->uid) {
+        throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+      }
+      $result = FALSE;
+      if (isset($folder->field_folder_documents)) {
+        foreach ($folder->field_folder_documents as $key => $value) {
+          if ($value['nid'] == $did && $folder->uid == $user->uid) {
+            unset($folder->field_folder_documents[$key]);
+            node_save($folder);
+            $result = TRUE;
+          }
+        }
+      }
+      if (!$result) {
+        throw new Exception(t("The folder have't document with id:" . $did), BATIRE_SITE_ERROR_SYSTEM);
+      }
+      $message['message'] = t("Votre document a été retiré du dossier.");
+    }
+    $message['status'] = 1;
+    $message['quantity'] = mongodb_user_count_docs($user->uid);
+
+    drupal_get_messages();
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Create folder from popup.
+ */
+function batire_user_docs_mon_compte_create_folder_js() {
+  global $user;
+
+  $result = array(
+    'error' => FALSE,
+    'data' => NULL,
+  );
+
+  try {
+    $fid = isset($_POST['fid']) ? batire_site_check_text($_POST['fid']) : 'root'; // root as default
+    $fname = isset($_POST['fname']) ? batire_site_check_text($_POST['fname']) : '';
+    $fshared = batire_site_check_text($_POST['fshared']);
+    $freturn = isset($_POST['freturn']) ? batire_site_check_text($_POST['freturn']) : '';
+
+    //if monopost user and shared checked
+    if ($fshared && !_batire_user_is_multipost($user)) {
+      throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+    }
+    // folder name is empty
+    if (!$fname) {
+      throw new Exception(t("Vous devez donner un nom à ce dossier pour l'enregistrer."), BATIRE_SITE_ERROR_USER);
+    }
+
+    if ($fid != 'root') {
+
+      if (batire_user_docs_get_folder_depth($fid) >= 2) {
+        throw new Exception(t("Il ne peut y avoir plus de trois niveaux arborescents pour les sous-dossiers."), BATIRE_SITE_ERROR_USER);
+      }
+      $p_node = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+      if (!isset($p_node->nid) || !$p_node->nid) {
+        throw new Exception(t('Folder is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+      }
+
+      if (($p_node->field_folder_shared[0]['value'] != 1) && ($fshared == 1)) {
+        throw new Exception(t("Un sous-dossier partagé ne peut appartenir à un dossier privé."), BATIRE_SITE_ERROR_USER);
+      }
+      if ($p_node->uid != $user->uid) {
+        throw new Exception(t("Vous ne pouvez pas créer un dossier dans le dossier partagé  d'un autre utilisateur."), BATIRE_SITE_ERROR_USER);
+      }
+    }
+
+    $folder = new stdClass();
+    $folder->type = 'batire_user_folder';
+    $folder->status = 1;
+    $folder->uid = $user->uid;
+    $folder->title = $fname;
+
+    $folder->field_folder_shared = array(
+      array(
+        'value' => $fshared
+      )
+    );
+    //@todo
+    //node_save($folder);
+    //drupal_static_reset('mongodb_user_nodeapibs');
+    if ($fid != 'root') {
+      $folder->field_folder_parent = array(
+        array(
+          'nid' => $fid
+        )
+      );
+    }
+    node_save($folder);
+
+    if (!(isset($folder->nid) && $folder->nid)) {
+      throw new Exception(t("Can't to save new folder."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if ($freturn) {
+      $result['redirect'] = url('mon-compte/mon-espace-partage/dossiers-partages/' . $folder->nid);
+    }
+    else {
+      $result['redirect'] = url('mon-compte/mes-dossiers/' . $folder->nid);
+    }
+
+    $result['data'] = t('Votre dossier a été enregistré');
+  }
+  catch (Exception $e) {
+    $result['error'] = TRUE;
+    $result['data'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($result);
+  return NULL;
+}
+
+/**
+ * Moves/renames folder from popup
+ */
+function batire_user_docs_mon_compte_move_rename_folder_js() {
+  global $user;
+
+  try {
+    $fid = isset($_POST['fid']) ? batire_site_check_text($_POST['fid']) : 'root'; // root as default
+    $cfid = isset($_POST['cfid']) ? batire_site_check_text($_POST['cfid']) : '';
+    $fname = isset($_POST['fname']) ? batire_site_check_text($_POST['fname']) : '';
+    $fshared = batire_site_check_text($_POST['fshared']);
+    $type = batire_site_check_text($_POST['type']);
+
+    //if user is monopost
+    if ($fshared && !_batire_user_is_multipost($user)) {
+      throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+    }
+
+    // folder name is empty
+    if (!$fname) {
+      throw new Exception(t("Vous devez donner un nom à ce dossier pour l'enregistrer."), BATIRE_SITE_ERROR_USER);
+    }
+
+    //Load current folder
+    $folder = node_load($cfid);
+    if (!isset($folder->nid) || !$folder->nid) {
+      throw new Exception(t("Une erreur s'est produite: impossible de déplacer ou de renommer ce dossier."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if ($folder->uid != $user->uid) {
+      throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+    }
+
+    if ($folder->field_folder_shared[0]['value']) {
+      $fshared = 1;
+    }
+
+    if (($cfid == $fid)) {
+      $cfolder_parent_id = $folder->field_folder_parent[0]['nid'];
+      if ($cfolder_parent_id) {
+        $cfolder_parent = node_load(array('nid' => $cfolder_parent_id, 'type' => 'batire_user_folder'));
+        if (!isset($cfolder_parent->nid) || !$cfolder_parent->nid) {
+          throw new Exception(t("Une erreur s'est produite: impossible de déplacer ou de renommer ce dossier"), BATIRE_SITE_ERROR_SYSTEM);
+        }
+
+        if (!$cfolder_parent->field_folder_shared[0]['value'] && $fshared) {
+          throw new Exception(t('Vous ne pouvez pas enregistrer un dossier partagé dans un dossier privé.'), BATIRE_SITE_ERROR_USER);
+        }
+      }
+    }
+
+    if (($cfid != $fid) && ($fid != 'root')) {
+      //Load folder to move the current folder
+      $new_folder = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+      if (!isset($new_folder->nid) || !$new_folder->nid) {
+        throw new Exception(t("Une erreur s'est produite: impossible de déplacer ou de renommer ce dossier"), BATIRE_SITE_ERROR_SYSTEM);
+      }
+      // chack if new folder is subfolder of current folder
+      if ($new_folder->field_folder_parent[0]['nid'] == $cfid) {
+        throw new Exception("Vous ne pouvez pas déplacer un dossier vers un de ses sous-dossiers.", BATIRE_SITE_ERROR_USER);
+      }
+
+      if ((batire_user_docs_get_folder_depth($fid) + mongodb_user_folder_tree_length($cfid)) >= 2) {
+        throw new Exception(t("Il ne peut y avoir plus de trois niveaux arborescents pour les sous-dossiers."), BATIRE_SITE_ERROR_USER);
+      }
+
+      if ($new_folder->uid != $user->uid) {
+        if ($fid != 'root') {
+          throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+        }
+      }
+      if (!$new_folder->field_folder_shared[0]['value'] && $fshared) {
+        throw new Exception(t('Vous ne pouvez pas enregistrer un dossier partagé dans un dossier privé.'), BATIRE_SITE_ERROR_USER);
+      }
+    }
+
+    if ($fid == 'root') {
+      $fid = 0;
+    }
+    //Change parents and name of folder
+    if ($cfid != $fid) {
+      $folder->field_folder_parent = array(array('nid' => $fid));
+    }
+    node_save($folder);
+    drupal_static_reset('mongodb_user_nodeapibs');
+    $folder->title = $fname;
+    $folder->field_folder_shared = array(
+      array(
+        'value' => $fshared
+      )
+    );
+
+    node_save($folder);
+
+    if (!(isset($folder->nid) && $folder->nid)) {
+      throw new Exception(t("Can't save new folder."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    $result['data'] = t('Votre dossier a été enregistré');
+    switch ($type) {
+      default:
+      case 'p':
+        $result['redirect'] = url('mon-compte/mes-dossiers/' . $cfid);
+        break;
+      case 's':
+        $result['redirect'] = url('mon-compte/mon-espace-partage/dossiers-partages/' . $cfid);
+        break;
+    }
+  }
+  catch (Exception $e) {
+    $result['error'] = TRUE;
+    $result['data'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($result);
+  return NULL;
+}
+
+/**
+ * Is the parent folder
+ *
+ * @param int $parent
+ *    Parent folder id
+ * @param int $children
+ *    Children folder id
+ * @return bool
+ */
+function _batire_is_parent_folder($parent, $children) {
+  $parents_array = array();
+  $folder_tree = batire_user_docs_get_folder_tree($children);
+  while (isset($folder_tree[key($folder_tree)]['folders'])) {
+    $parents_array[] = key($folder_tree);
+    $folder_tree = $folder_tree[key($folder_tree)]['folders'];
+  }
+  return in_array($parent, $parents_array) ? TRUE : FALSE;
+}
+
+/**
+ * Removes folder
+ */
+function batire_user_docs_remove_folder_js() {
+  global $user;
+  $message = array(
+    'status' => 0,
+    'message' => '',
+  );
+  try {
+    $fid = (int) batire_site_check_text($_POST['fid']);
+    $type = batire_site_check_text($_POST['type']);
+    // load folder
+    $folder = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+    if (!isset($folder->nid) || !$folder->nid) {
+      throw new Exception(t('Folder is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if ($folder->uid != $user->uid) {
+      throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+    }
+
+    node_delete($fid);
+    drupal_get_messages();
+    $message['status'] = 1;
+    // @todo need to get url with first folder id in hierarchy
+    switch ($type) {
+      default:
+      case 'p':
+        $message['redirect'] = url('mon-compte/mes-dossiers');
+        break;
+      case 's':
+        $message['redirect'] = url('mon-compte/mon-espace-partage/dossiers-partages');
+        break;
+    }
+    $message['message'] = t(' Votre dossier sélectionné a été supprimé');
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Builds the form for moving documents to another folders.
+ *
+ * @ingroup forms
+ */
+function batire_user_docs_create_form_move_document(&$form_state, $nid) {
+  global $user;
+
+  $result = mongodb_docs_folders_list($user->uid, $nid);
+
+  $list_folders = array();
+  foreach ($result as $value) {
+    $list_folders[$value['nid']] = drupal_html_to_text($value['name']);
+  }
+
+  $form['from_list_folders'] = array(
+    '#type' => 'select',
+    '#options' => $list_folders,
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => !empty($nid) ? $nid : NULL
+  );
+  $form['to_folder'] = array(
+    '#type' => 'hidden',
+    '#value' => '',
+    '#attributes' => array('class' => 'doc-to-folder')
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+
+  $form['#theme'] = 'batire_user_docs_form_move_document';
+
+  return $form;
+}
+
+/**
+ * Moves documents to another folder
+ * @return type
+ */
+function batire_user_docs_move_doc_js() {
+  global $user;
+
+  $message = array(
+    'status' => 0,
+    'message' => ''
+  );
+
+  try {
+    $did = (int) batire_site_check_text($_POST['did']);
+    $fid_from = (int) batire_site_check_text($_POST['fid_from']);
+    $fid_to = (int) batire_site_check_text($_POST['fid_to']);
+
+    // load document
+    $document = node_load($did);
+    if (!isset($document->nid) || !$document->nid) {
+      throw new Exception(t("Document is not loaded."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if (empty($fid_from)) {
+      throw new Exception(t('Folder id "from" is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    if (empty($fid_to)) {
+      throw new Exception(t('Folder id "to" is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    if ($fid_from == $fid_to) {
+      throw new Exception(t('Vous ne pouvez pas déplacer un document vers le dossier dans lequel il se trouve déjà.'), BATIRE_SITE_ERROR_USER);
+    }
+
+    $from = node_load(array('nid' => $fid_from, 'type' => 'batire_user_folder'), NULL, TRUE);
+
+    if (!isset($from->nid) || !$from->nid) {
+      throw new Exception(t('Node folder "From" is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if ($from->uid != $user->uid) {
+      throw new Exception(t('Vous ne pouvez pas déplacer ce document car le dossier d\'origine ne vous appartient pas.'), BATIRE_SITE_ERROR_USER);
+    }
+
+    $to = node_load(array('nid' => $fid_to, 'type' => 'batire_user_folder'), NULL, TRUE);
+    if (!isset($to->nid) || !$to->nid) {
+      throw new Exception(t('Node folder "To" is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if ($to->uid != $user->uid) {
+      throw new Exception(t('Vous ne pouvez pas déplacer ce document vers un dossier qui ne vous appartient pas.'), BATIRE_SITE_ERROR_USER);
+    }
+
+    foreach ($to->field_folder_documents as $_doc) {
+      if ($_doc['nid'] == $did) {
+        throw new Exception(t('Ce document existe déjà dans le dossier de destination.'), BATIRE_SITE_ERROR_USER);
+      }
+    }
+
+    foreach ($from->field_folder_documents as $key => $docs) {
+      if ($docs['nid'] == $did) {
+        unset($from->field_folder_documents[$key]);
+        break;
+      }
+    }
+    node_save($from);
+    $to->field_folder_documents[] = array(
+      'nid' => $did,
+      'added' => time(),
+      'owner' => $user->uid
+    );
+    drupal_static_reset('mongodb_user_nodeapi');
+    node_save($to);
+    drupal_get_messages();
+    $message['status'] = 1;
+    $message['message'] = t('Votre document a été déplacé');
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+function batire_user_docs_infobar($did, $uid = NULL) {
+  if ($uid) {
+    $user = user_load($uid);
+  }
+  else {
+    global $user;
+  }
+
+  $infobar = batire_cache_get('batire_user_docs_infobar:' . $did . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+  if (isset($infobar) && $infobar) {
+    return $infobar;
+  }
+  else {
+    $shared = FALSE;
+    $anno_cnt = mongodb_docs_count_annotations($user->uid, $did);
+    $alert = batire_user_searches_is_has_alert($did, $user->uid);
+    $folders = array();
+    $fldrs = mongodb_docs_folders_list($user->uid, $did);
+
+    if (isset($fldrs) && $fldrs) {
+
+      foreach ($fldrs as $fldr) {
+        if ($fldr['shared']) {
+          $folders[] = l($fldr['name'], 'mon-compte/mon-espace-partage/dossiers-partages/' . $fldr['nid'], array('html' => TRUE));
+          $shared = TRUE;
+        }
+        else {
+          $folders[] = l($fldr['name'], 'mon-compte/mes-dossiers/' . $fldr['nid'], array('html' => TRUE));
+        }
+      }
+    }
+    $infobar = theme('batire_user_docs_infobar', $shared, $folders, $anno_cnt, $alert);
+    batire_cache_set('batire_user_docs_infobar:' . $did . ':' . $user->uid, $infobar, BATIRE_USER_CACHE_TABLE, BATIRE_USER_INFOBAR_CACHE_LIFETIME);
+    return $infobar;
+  }
+}
+
+function _batire_user_docs_filter_folder($data, $type) {
+  $shared = ($type == 'p') ? 0 : 1;
+  foreach ($data as $fid => $folder) {
+    if ($folder['shared'] == $shared) {
+      if (isset($data[$fid]['folders']) && $data[$fid]['folders']) {
+        $data[$fid]['folders'] = _batire_user_docs_filter_folder($data[$fid]['folders'], $type);
+        if (!(isset($data[$fid]['folders']) && $data[$fid]['folders'])) {
+          unset($data[$fid]['folders']);
+        }
+      }
+    }
+    else {
+      unset($data[$fid]);
+    }
+  }
+  return $data;
+}
+
+function _batire_user_docs_filter_myfolder($data, $uid) {
+  foreach ($data as $fid => $folder) {
+    if (!isset($folder['owner']['uid']) || $folder['owner']['uid'] == $uid) {
+      if (isset($data[$fid]['folders']) && $data[$fid]['folders']) {
+        $data[$fid]['folders'] = _batire_user_docs_filter_myfolder($data[$fid]['folders'], $uid);
+        if (!(isset($data[$fid]['folders']) && $data[$fid]['folders'])) {
+          unset($data[$fid]['folders']);
+        }
+      }
+    }
+    else {
+      unset($data[$fid]);
+    }
+  }
+  return $data;
+}
+
+/**
+ * Shares folder
+ */
+function batire_user_docs_share_folder_js() {
+  global $user;
+  $message = array(
+    'status' => 0,
+    'message' => '',
+  );
+  try {
+    //if user is monopost
+    if (!_batire_user_is_multipost($user)) {
+      throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+    }
+    //Get folder id
+    $fid = (int) batire_site_check_text($_POST['fid']);
+
+    $folder = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+    if (!isset($folder->nid) || !$folder->nid) {
+      throw new Exception(t('Folder id is not valid.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if ($folder->uid != $user->uid) {
+      throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+    }
+    if ($folder->field_folder_parent[0]['nid']) {
+      throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+    }
+
+    $folder->field_folder_shared = array(
+      array(
+        'value' => 1
+      )
+    );
+    node_save($folder);
+
+    drupal_get_messages();
+    $message['status'] = 1;
+    $message['redirect'] = url('mon-compte/mes-dossiers/' . $folder->nid);
+    $message['message'] = t('Votre dossier sélectionné a été partage');
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Create folders widget for pages "My folders and Shared folders".
+ */
+function batire_user_docs_my_account_get_folders_widget_js($type, $current_folder = NULL) {
+  global $user;
+  $message = array(
+    'status' => 0,
+    'data' => ''
+  );
+  try {
+    switch ($type) {
+      case 'all':
+        $url = 'mon-compte/mes-dossiers';
+        $folders = batire_user_docs_get_myfolders($type, $user->uid);
+        break;
+      case 's':
+        $url = 'mon-compte/mon-espace-partage/dossiers-partages';
+        $folders = batire_user_docs_get_folders($type, $user->uid);
+        break;
+    }
+    $keys = array_keys($folders);
+    array_multisort($keys, $folders);
+    $folders_output = _batire_user_docs_render_widget_folders($folders, $url, $current_folder);
+    $message['data'] = theme('batire_user_docs_my_account_widget_folders', $folders_output);
+    $message['status'] = 1;
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message(t('Widget "Folders" is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Render folders for widget
+ * @param $folders Array of folders
+ * @param $url Url for link on the folder
+ * @param $current_folder Id of current oppened folder
+ * @param $return_array Needs for recursive call
+ * @return Html for widget
+ */
+function _batire_user_docs_render_widget_folders($folders, $url, $current_folder, $return_array = FALSE, $parent = TRUE) {
+  $output = '';
+  if (is_array($folders)) {
+    $i = 1;
+    $parent_open = FALSE;
+    foreach ($folders as $folder) {
+      $list_classes = array();
+      $link_classes = array();
+      $data = array(
+        'folder_name' => $folder['name'],
+        'folder_shared' => $folder['shared'] ? TRUE : FALSE,
+        'folder_id' => 'widget-folders-folder-' . $folder['nid'],
+        'd_cnt' => $folder['d_cnt'],
+        'url' => $url . '/' . $folder['nid'],
+        'child_open' => FALSE,
+        'parent' => $parent
+      );
+      if ($i == 1) {
+        $link_classes[] = 'first';
+        $list_classes[] = 'first';
+      }
+      if ($i == count($folders)) {
+        $link_classes[] = 'last';
+        $list_classes[] = 'last';
+      }
+      if ($folder['shared']) {
+        $link_classes[] = 'shared';
+      }
+
+      if ($current_folder == $folder['nid']) {
+        $link_classes[] = 'active';
+        $parent_open = TRUE;
+        if (isset($folder['folders']) && $folder['folders']) {
+          $data['child_open'] = TRUE;
+          $link_classes[] = 'open';
+        }
+      }
+
+      if (isset($folder['folders']) && $folder['folders']) {
+        $link_classes[] = 'action';
+        $result = _batire_user_docs_render_widget_folders($folder['folders'], $url, $current_folder, TRUE, FALSE);
+        if ($result['open']) {
+          $link_classes[] = 'open';
+          $data['child_open'] = $result['open'];
+          $parent_open = TRUE;
+        }
+        $data['childs'] = $result['output'];
+      }
+
+      $data['link_classes'] = implode(' ', $link_classes);
+      $data['list_classes'] = implode(' ', $list_classes);
+      $output .= theme('batire_user_docs_widget_folders_item', $data);
+      $i++;
+    }
+  }
+  if ($return_array) {
+    return array('output' => $output, 'open' => $parent_open);
+  }
+  return $output;
+}
+
+/**
+ * Render informations of document
+ * Classe, shared, annotations icons
+ * @param int $did
+ * @param int $uid
+ * @return type
+ */
+function batire_user_docs_document_information($did, $uid = NULL, $reset = FALSE) {
+  if ($uid) {
+    $user = user_load($uid);
+  }
+  else {
+    global $user;
+  }
+  if (!$reset) {
+    $doc_info = batire_cache_get('batire_user_docs_document_information:' . $did . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+    if (isset($doc_info) && $doc_info) {
+      return $doc_info;
+    }
+  }
+
+  $shared = FALSE;
+
+  $fldrs = mongodb_docs_folders_list($user->uid, $did);
+  $folders = array();
+  if (isset($fldrs) && $fldrs) {
+    foreach ($fldrs as $fldr) {
+      if ($fldr['shared']) {
+        $folders[] = l($fldr['name'], 'mon-compte/mon-espace-partage/dossiers-partages/' . $fldr['nid'], array('html' => TRUE));
+        $shared = TRUE;
+      }
+      else {
+        $folders[] = l($fldr['name'], 'mon-compte/mes-dossiers/' . $fldr['nid'], array('html' => TRUE));
+      }
+    }
+  }
+  $doc_info = array(
+    'shared' => $shared,
+    'folders' => $folders
+  );
+
+  batire_cache_set('batire_user_docs_document_information:' . $did . ':' . $user->uid, $doc_info, BATIRE_USER_CACHE_TABLE, BATIRE_USER_INFOBAR_CACHE_LIFETIME);
+  return $doc_info;
+}
+
+/**
+ * Returns list of user shared folders from mysql
+ * @param $uid
+ */
+function batire_user_docs_get_user_shared_folders_list($uid) {
+  $cid = 'batire_user_docs_shared_folder_list:' . $uid;
+
+  $data = batire_cache_get($cid, BATIRE_USER_CACHE_TABLE);
+  if (isset($data) && $data) {
+    return $data;
+  }
+
+  $sql = "SELECT n.nid, title
+          FROM {node} n
+          LEFT JOIN {content_field_folder_shared} USING (vid)
+          WHERE type = '%s' AND field_folder_shared_value = 1 AND uid = %d AND status = 1";
+
+  $res = db_query($sql, 'batire_user_folder', $uid);
+
+  $result = array();
+
+  while ($folder = db_fetch_object($res)) {
+    $result[] = $folder;
+  }
+
+  batire_cache_set($cid, $result, BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+
+  return $result;
+}
+
+/**
+ * Returns count of user folders from mysql
+ * @param $uid
+ */
+function batire_user_docs_get_user_myfolders_cnt($uid) {
+  $cid = 'batire_user_docs_get_user_myfolders_cnt:' . $uid;
+  $data = batire_cache_get($cid, BATIRE_USER_CACHE_TABLE);
+  if (isset($data) && $data) {
+    return $data;
+  }
+
+  $sql = "SELECT COUNT(uid)
+          FROM {node}
+          LEFT JOIN {content_field_folder_shared} USING (vid)
+          WHERE type = '%s' AND uid = %d AND status = 1";
+
+  $cnt_q = db_query($sql, 'batire_user_folder', $uid);
+
+  $cnt = db_result($cnt_q);
+
+  if (is_numeric($cnt) && $cnt) {
+    batire_cache_set($cid, $cnt, BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+    return $cnt;
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Returns count of user docs from mysql
+ * @param $uid
+ */
+function batire_user_docs_get_user_mydocs_cnt($uid, $key = 'all') {
+  $cid = 'batire_user_docs_get_user_mydocs_cnt:' . $uid;
+  //$data = batire_cache_get($cid, BATIRE_USER_CACHE_TABLE);
+  if (isset($data) && $data) {
+    return $data;
+  }
+
+
+  $sql = "SELECT COUNT(DISTINCT cffd.field_folder_documents_nid)
+          FROM {content_field_folder_documents} cffd
+          LEFT JOIN {node} n1 ON cffd.vid = n1.vid
+          LEFT JOIN {node} n2 ON n2.nid = cffd.field_folder_documents_nid ";
+  if ($key == 's') {
+    $sql .= " LEFT JOIN {content_field_folder_shared} ON content_field_folder_shared.vid = n1.vid
+              WHERE field_folder_shared_value = 1 AND ";
+  }
+  else {
+    $sql .= " WHERE ";
+  }
+  $sql .= " n2.status = 1 AND n1.uid = %d";
+
+  $cnt = db_result(db_query($sql, $uid));
+
+  if (is_numeric($cnt) && $cnt) {
+//    batire_cache_set($cid, $cnt, BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+    return $cnt;
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Returns count of user annotations from mysql
+ * @param $uid
+ */
+function batire_user_docs_get_user_myannos_cnt($uid) {
+  $cid = 'batire_user_docs_get_user_myannos_cnt:' . $uid;
+  //$data = batire_cache_get($cid, BATIRE_USER_CACHE_TABLE);
+  if (!empty($data)) {
+    return $data;
+  }
+  $sql = "SELECT COUNT(node.nid)
+          FROM node node
+          LEFT JOIN content_type_batire_user_annotation ctbua ON ctbua.vid = node.vid
+	        LEFT JOIN node n1 ON n1.nid = ctbua.field_annotation_doc_nid
+          LEFT JOIN content_field_annotation_shared cfas ON cfas.vid = node.vid
+          WHERE node.type = 'batire_user_annotation'
+          AND n1.status = 1 AND node.uid = %d";
+
+
+  $cnt_q = db_query($sql, $uid);
+
+  $cnt = db_result($cnt_q);
+
+  if (is_numeric($cnt) && $cnt) {
+    batire_cache_set($cid, $cnt, BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+    return $cnt;
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Get folder list of user @todo Need rewrite on mongodb
+ * @param int $uid
+ *    User id (folders owner)
+ * @param string $type
+ *    'all' | 'p' | 's'
+ * @return array
+ */
+function batire_user_docs_get_folders_list($uid, $type = 'all') {
+  $sql = "SELECT node.title, node.nid
+    FROM {node} node ";
+  if ($type == 's') {
+    $sql .= "LEFT JOIN {content_field_folder_shared} AS cffs ON cffs.vid = node.vid
+     WHERE cffs.field_folder_shared_value = 1 AND ";
+  }
+  else {
+    $sql .= " WHERE ";
+  }
+  $sql .= " node.type = 'batire_user_folder' AND node.uid = %d AND node.status = 1";
+
+  $folders_list = db_query($sql, $uid);
+  $folders = array();
+  while ($folder = db_fetch_object($folders_list)) {
+    $folders[] = l($folder->title, 'mon-compte/mon-espace-partage/dossiers-partages/' . $folder->nid, array('html' => TRUE));
+  }
+  return $folders;
+}
+
+/**
+ * Get count docs in folder
+ * @param Integer $fid Folder id
+ */
+function batire_user_docs_get_count_folder_docs($fid) {
+  $sql = 'SELECT COUNT(field_folder_documents_nid)
+    FROM {content_field_folder_documents}
+    WHERE vid = %d';
+
+  $result = db_query($sql, $fid);
+  return db_result($result);
+}
+
+/**
+ * Returns count of user alerts from mysql
+ * @param $uid
+ */
+function batire_user_docs_get_user_myalert_cnt($uid) {
+  $sql = "SELECT COUNT(node.nid)
+ FROM {node} node
+ LEFT JOIN {content_type_batire_user_sent_alert} node2 ON node.nid = node2.field_sent_alert_alert_nid
+ LEFT JOIN {node} node_node ON node2.nid = node_node.nid
+ INNER JOIN {users} users ON node.uid = users.uid
+ INNER JOIN {content_type_batire_user_search_profile} node_data_field_profile_type ON node.vid = node_data_field_profile_type.vid
+ LEFT JOIN {content_type_batire_user_search_profile} node_data_field_search_total ON node.vid = node_data_field_search_total.vid
+ WHERE (node.status = 1) AND (node_node.type in ('batire_user_sent_alert')) AND (users.uid = %d) AND (node_data_field_profile_type.field_profile_type_value IN (1, 2))";
+
+  $cnt_q = db_query($sql, $uid);
+
+  $cnt = db_result($cnt_q);
+
+  if (is_numeric($cnt) && $cnt) {
+    return $cnt;
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Returns count of user searches from mysql
+ * @param $uid
+ */
+function batire_user_docs_get_user_searches_cnt($uid, $type = 1) {
+  if ($type == 0) {
+    $sql = "
+      SELECT COUNT(node.vid)
+      FROM {node} node
+      LEFT JOIN {content_type_batire_user_search_profile} AS ctbusp ON ctbusp.vid = node.vid
+      WHERE type = 'batire_user_search_profile' AND status = 1 AND uid = %d AND field_profile_type_value = 0";
+  }
+  else {
+    $sql = "
+      SELECT COUNT(node.vid)
+      FROM {node} node
+      WHERE type = 'batire_user_search_profile' AND uid = %d AND status = 1";
+  }
+
+  $cnt_q = db_query($sql, $uid);
+
+  $cnt = db_result($cnt_q);
+
+  if (is_numeric($cnt) && $cnt) {
+    return $cnt;
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Returns list of alert titles from mysql
+ * @param $uid
+ */
+function batire_user_docs_get_alert_titles($uid) {
+  $cid = 'batire_user_docs_get_alert_titles:' . $uid;
+  $data = batire_cache_get($cid, BATIRE_USER_CACHE_TABLE);
+  if (isset($data) && $data) {
+    return $data;
+  }
+
+  $sql = "SELECT node.title, ctbusa.nid
+  FROM {node} AS node
+  LEFT JOIN {content_type_batire_user_sent_alert} AS ctbusa ON ctbusa.field_sent_alert_alert_nid = node.nid
+  WHERE node.type = 'batire_user_search_profile' AND node.uid = %d AND node.status = 1 AND node.nid = ctbusa.field_sent_alert_alert_nid
+  ORDER BY node.created DESC";
+
+  $cnt_q = db_query($sql, $uid);
+  $list = array();
+  while ($title = db_fetch_object($cnt_q)) {
+    $list[$title->nid] = $title->title;
+  }
+  if ($list) {
+    batire_cache_set($cid, $list, BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+    return $list;
+  }
+  else {
+    return NULL;
+  }
+}
+
+function batire_user_docs_get_associated_alert_titles($uid) {
+  $cid = 'batire_user_docs_get_associated_alert_titles:' . $uid;
+  $data = batire_cache_get($cid, BATIRE_USER_CACHE_TABLE);
+  if (isset($data) && $data) {
+    return $data;
+  }
+
+  $sql = "SELECT DISTINCT node.title, node.nid
+  FROM {node} AS node
+  LEFT JOIN {content_type_batire_user_sent_alert} AS ctbusa ON ctbusa.field_sent_alert_alert_nid = node.nid
+  WHERE node.type = 'batire_user_search_profile' AND node.uid = %d AND node.status = 1 AND node.nid = ctbusa.field_sent_alert_alert_nid
+  ORDER BY node.title ASC";
+
+  $cnt_q = db_query($sql, $uid);
+  $list = array();
+  while ($title = db_fetch_object($cnt_q)) {
+    $list[$title->nid] = $title->title;
+  }
+  if ($list) {
+    batire_cache_set($cid, $list, BATIRE_USER_CACHE_TABLE, BATIRE_USER_FOLDERS_CACHE_LIFETIME);
+    return $list;
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ *  Return document annotations of current user
+ *  @param $did
+ *  @param $uid
+ */
+function batire_user_docs_get_user_my_doc_anno($did, $uid) {
+  $sql = "SELECT ctbua.field_annotation_text_value, node.uid,
+          node.created, cfas.field_annotation_shared_value, node.nid
+          FROM {node} node
+          LEFT JOIN {content_type_batire_user_annotation} ctbua ON ctbua.vid = node.vid
+          LEFT JOIN {content_field_annotation_shared} cfas ON cfas.vid = node.vid
+          WHERE node.type = 'batire_user_annotation' AND
+          ctbua.field_annotation_doc_nid =  %d AND status = 1 AND uid = %d";
+
+  $anno_q = db_query($sql, $did, $uid);
+
+  $annotations = array();
+  while ($anno = db_fetch_object($anno_q)) {
+    $annotations[$anno->nid] = array(
+      'date' => $anno->created,
+      'text' => $anno->field_annotation_text_value,
+      'owner' => $anno->field_annotation_shared_value,
+    );
+  }
+  if ($annotations) {
+    return $annotations;
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ *  Return count of current document annotations of current user
+ *  @param $did
+ *  @param $uid
+ */
+function batire_user_docs_get_user_my_doc_anno_cnt($did, $uid) {
+  $sql = "SELECT COUNT(node.nid)
+          FROM {node} node
+          LEFT JOIN {content_type_batire_user_annotation} ctbua ON ctbua.vid = node.vid
+          LEFT JOIN {content_field_annotation_shared} cfas ON cfas.vid = node.vid
+          WHERE node.type = 'batire_user_annotation' AND
+          ctbua.field_annotation_doc_nid =  %d AND status = 1 AND uid = %d";
+
+  $anno_cnt = db_result(db_query($sql, $did, $uid));
+
+  if (is_numeric($anno_cnt) && $anno_cnt) {
+    return $anno_cnt;
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Form for classify popup
+ *
+ * @ingroup forms
+ */
+function batire_user_docs_register_document_form(&$form_state) {
+  global $user;
+  $form = array();
+  $form['folder_type'] = array(
+    '#type' => 'radios',
+    '#title' => t('Vous souhaitez les enregistrer dans'),
+    '#options' => array(
+      'exist_folder' => t('un dossier existant'),
+      'new_folder' => t('un nouveau dossier')
+    ),
+    '#default_value' => 'exist_folder'
+  );
+  $form['folder_name'] = array(
+    '#type' => 'textfield',
+    '#title' => NULL,
+    '#maxlength' => BATIRE_SITE_MAX_NAME_LENGTH,
+    '#attributes' => array('title' => t('Nom du nouveau dossier'))
+  );
+
+  $partage_text = '<span id="partage-text">' . t('Partager ce dossier') . '</span>';
+  if (array_key_exists(BATIRE_USER_MULTIADMIN, $user->roles) || array_key_exists(BATIRE_USER_SUBACCOUNT, $user->roles)) {
+    $form['folder_partage'] = array(
+      '#type' => 'checkbox',
+      '#title' => $partage_text
+    );
+  }
+  else {
+    $form['folder_partage'] = array(
+      '#type' => 'hidden',
+      '#value' => $partage_text
+    );
+  }
+  $form['folder_partage']['#attributes'] = array('class' => 'batire-classify-form-folder-shared');
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+  $form['#theme'] = 'batire_user_docs_register_document_form_content';
+  return $form;
+}
+
+/**
+ * Get folder tooltip for node
+ * @param $nid Node nid
+ * @return HTml of tooltip
+ */
+function batire_user_docs_get_folders_tooltip($nid, $text = TRUE) {
+  global $user;
+  $output = '';
+  $doc_info = batire_user_docs_document_information($nid, $user->uid, TRUE);
+  if (isset($doc_info['folders'][0]) && $doc_info['folders'][0]) {
+    $folders_data = theme('item_list', $doc_info['folders']);
+    $folders_count = count($doc_info['folders']);
+    $output = theme('batire_user_docs_folder_icon', $folders_data, $folders_count, $text);
+  }
+  return $output;
+}
+
+/**
+ * Get shared icon for node
+ * @param $nid Node nid
+ * @return HTml of icon
+ */
+function batire_user_docs_get_shared_folder_icon($nid) {
+  global $user;
+  $output = '';
+  $doc_info = batire_user_docs_document_information($nid, $user->uid, TRUE);
+  if (isset($doc_info['shared']) && $doc_info['shared']) {
+    $output = theme('batire_shared_icon', $doc_info['shared']);
+  }
+
+  return $output;
+}
+
+/**
+ * Altering register doc popup for detect is user have folders
+ *
+ * @param $form
+ * @param $form_state
+ */
+function batire_user_docs_form_batire_user_docs_register_document_form_alter(&$form, $form_state) {
+  global $user;
+  if (!mongodb_user_count_folders($user->uid)) {
+    $form['no_folders'] = array('#type' => 'hidden', '#value' => 1);
+  }
+  else {
+    $form['no_folders'] = array('#type' => 'hidden', '#value' => 0);
+  }
+}
+
+/**
+ * Check print and pdf settings.
+ * @param $settings List of settings
+ * @param $key key of seetings
+ * @return Bool TRUE|FALSE
+ */
+function _batire_user_docs_print_check_settings($settings, $key = NULL) {
+  if (!empty($key) && !empty($settings)) {
+    if (isset($settings[$key])) {
+      if ($settings[$key] === TRUE || $settings[$key] == 'true' || $settings[$key] == 1) {
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Form for print popup
+ *
+ * @ingroup forms
+ */
+function batire_user_docs_print_document_form(&$form_state, $nid = FALSE) {
+  global $user;
+  $form = array();
+  $settings = batire_user_docs_get_settings_print_download_pdf();
+  $form['with_links'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Avec les références associées (autour de ce texte)'),
+    '#default_value' => _batire_user_docs_print_check_settings($settings, 'wrefs'),
+  );
+
+  $form['with_anno'] = array(
+    '#type' => 'checkbox',
+    '#title' => _batire_user_is_multipost($user) ? t('Avec les annotations personnelles et partagées') : t('Avec les annotations'),
+    '#default_value' => _batire_user_docs_print_check_settings($settings, 'wanno'),
+  );
+
+  $form['save_settings'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Ne plus me demander'),
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => $nid ? $nid : '',
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Imprimer'),
+  );
+  $form['#theme'] = 'batire_user_docs_print_form_content';
+
+  return $form;
+}
+
+/**
+ * Form for download popup
+ *
+ * @ingroup forms
+ */
+function batire_user_docs_create_form_download_pdf_doc(&$form_state, $nid) {
+  $form = array();
+  global $user;
+
+  $form['with_links'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Avec les références associées (autour de ce texte)')
+  );
+  $form['with_anno'] = array(
+    '#type' => 'checkbox',
+    '#title' => _batire_user_is_multipost($user) ? t('Avec les annotations personnelles et partagées') : t('Avec les annotations')
+  );
+  $form['save_settings'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Conserver ces paramètres')
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => $nid ? $nid : '',
+    '#attributes' => array('class' => 'batire-download-pdf-nid')
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Télécharger (pdf)')
+  );
+  $form['#theme'] = 'batire_user_docs_form_download_pdf_doc';
+
+  return $form;
+}
+
+/**
+ * Download document
+ */
+function batire_user_docs_download_pdf_js() {
+
+  $message = array(
+    'status' => 0,
+    'message' => '',
+    'wait' => 0
+  );
+  global $user;
+
+  try {
+    $did = (int) batire_site_check_text($_POST['did']);
+
+    if (substr(php_uname(), 0, 7) == "Windows") {
+      throw new Exception(t('Windows is not supported'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if (!module_exists('print_pdf')) {
+      throw new Exception(t('Module print_pdf should be enabled.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if (!$did) {
+      throw new Exception(t('Document id is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    $node = node_load($did);
+    if (!isset($node->nid) || !$node->nid) {
+      throw new Exception(t("Document is not loaded."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    if ($node->type == BATIRE_SITE_CT_TN) {
+      throw new Exception(t("Someone tried generate pdf for TN - node/!nid.", array('!nid' => $node->nid)), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    $data = array(
+      'wrefs' => _batire_user_docs_print_check_settings($_POST, 'wrefs'),
+      'wanno' => _batire_user_docs_print_check_settings($_POST, 'wanno'),
+    );
+    if (_batire_user_docs_print_check_settings($_POST, 'save')) {
+      batire_user_docs_save_settings_print_download_pdf($data);
+    }
+    $options = array(
+      'an' => $data['wanno'],
+      're' => $data['wrefs'],
+      'user' => $user->uid
+    );
+    if (!function_exists('_batire_user_docs_pdf_get_file_path')) {
+      throw new Exception(t("Function _batire_user_docs_pdf_get_file_path is not exist."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    else {
+      $pdf_filepath = _batire_user_docs_pdf_get_file_path($node, TRUE, $options);
+      $pdf_directory = _batire_user_docs_pdf_get_directory($node);
+      $filename = _batire_user_docs_pdf_get_tmp_file_name($node, $options);
+      $lock_file = $pdf_directory . '/' . $filename . '.lock';
+      $error_file = $pdf_directory . '/' . $filename . '.error';
+      if (file_exists($error_file)) {
+        throw new Exception(t("Error has occured. Please investigate error file. Path is @path", array('@path' => $error_file)), BATIRE_SITE_ERROR_SYSTEM);
+      }
+      if (!file_exists($lock_file) && file_exists($pdf_filepath)) {
+        // Update statistics - download action
+        batire_user_statistics_action(1);
+        $path = _batire_user_docs_pdf_get_url($node);
+        if (!empty($path)) {
+          $query = array();
+          isset($_POST['wanno']) ? $query[] = 'an=' . $_POST['wanno'] : '';
+          isset($_POST['wrefs']) ? $query[] = 're=' . $_POST['wrefs'] : '';
+          $query[] = 'user=' . $user->uid;
+          $message['url'] = url($path, array('absolute' => TRUE, 'query' => implode('&', $query)));
+        }
+      }
+      else {
+        if (batire_user_docs_pdf_start_generating($node, $options)) {
+          $message['wait'] = 1;
+          $message['message'] = t('Attendez pendant la génération du PDF');
+        }
+        else {
+          throw new Exception(t("Can't generate pdf file."), BATIRE_SITE_ERROR_SYSTEM);
+        }
+      }
+      $message['status'] = 1;
+    }
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Printing document
+ */
+function batire_user_docs_print_document_js() {
+
+  $result = array(
+    'status' => 0,
+    'message' => '',
+    'data' => array()
+  );
+  global $user;
+  if (!$replace_user = batire_gc_ip_replace_user()) {
+    $replace_user = $user;
+  }
+
+  if (!user_access('access user docs', $replace_user)) {
+    $result['message'] = 'Permission denied';
+  }
+  else {
+    try {
+      $did = isset($_POST['did']) ? (int) batire_site_check_text($_POST['did']) : '';
+
+      if (!$did) {
+        throw new Exception(t('Document id is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+      }
+
+      $node = node_load($did);
+      if (!isset($node->nid) || !$node->nid) {
+        throw new Exception(t("Document is not loaded."), BATIRE_SITE_ERROR_SYSTEM);
+      }
+      $data = array(
+        'wrefs' => _batire_user_docs_print_check_settings($_POST, 'wrefs'),
+        'wanno' => _batire_user_docs_print_check_settings($_POST, 'wanno'),
+      );
+      if (_batire_user_docs_print_check_settings($_POST, 'save')) {
+        batire_user_docs_save_settings_print_download_pdf($data);
+      }
+      $query = array(
+        'an' => $data['wanno'],
+        're' => $data['wrefs']
+      );
+      $path = PRINT_PATH . '/' . $node->nid;
+
+      $result['data']['link'] = url($path, array(
+        'absolute' => TRUE,
+        'query' => $query
+      ));
+
+      $result['status'] = 1;
+      if (module_exists('batire_user_statistics')) {
+        batire_user_statistics_action(0);
+      }
+    }
+    catch (Exception $e) {
+      $result['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+    }
+  }
+  drupal_json($result);
+  return NULL;
+}
+
+/**
+ * Save settings print and download forms in mongo
+ */
+function batire_user_docs_save_settings_print_download_pdf($data = array()) {
+  global $user;
+
+  $keys = array('data.uid' => (int) $user->uid);
+  $user_data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+  $user_data['data'] = array_merge($user_data['data'], $data);
+
+  //mongodb_update(MONGODB_USER_COLLECTION, $keys, $user_data);
+  mongodb_user_update($keys, $user_data, __FUNCTION__);
+}
+
+/**
+ * Get saver print and download pdf settings from mongo
+ * @global type $user
+ * @return
+ */
+function batire_user_docs_get_settings_print_download_pdf() {
+  global $user;
+  $keys = array('data.uid' => (int) $user->uid);
+  $user_data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+  return array(
+    'wrefs' => isset($user_data['data']['wrefs']) ? $user_data['data']['wrefs'] : TRUE,
+    'wanno' => isset($user_data['data']['wanno']) ? $user_data['data']['wanno'] : TRUE
+  );
+}
+
+/**
+ * Print annotations
+ *
+ * @global $user
+ * @param  $nid
+ * @return html
+ */
+function batire_user_docs_print_annotation($nid, $uid) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+  else {
+    $user = user_load($uid);
+  }
+  $annotations = mongodb_docs_get_user_annotations($nid, 'p', 0, SORT_DESC, $uid);
+  $print_annotations = array();
+  if (!empty($annotations)) {
+    $result = array();
+
+    if (!is_array($annotations)) {
+      $annotations = array($annotations);
+    }
+
+    foreach ($annotations as $annotation) {
+      $result[] = theme('batire_user_docs_print_anno_list', $annotation);
+    }
+
+    if (!empty($result)) {
+      $my_annotations['anno'] = theme('item_list', $result);
+      $my_annotations['count'] = count($result);
+      $print_annotations['my_annotations'] = $my_annotations;
+    }
+  }
+  if (_batire_user_is_multipost($user)) {
+    $shared_annotations = mongodb_docs_get_user_annotations($nid, 's', 0, SORT_DESC, $uid);
+
+    if (!empty($shared_annotations)) {
+      $s_result = array();
+      if (!is_array($shared_annotations)) {
+        $shared_annotations = array($shared_annotations);
+      }
+
+      foreach ($shared_annotations as $s_annotation) {
+        $s_result[] = theme('batire_user_docs_print_anno_list', $s_annotation);
+      }
+
+      if (!empty($s_result)) {
+        $shared_annotations['anno'] = theme('item_list', $s_result);
+        $shared_annotations['count'] = count($s_result);
+        $print_annotations['shared_annotations'] = $shared_annotations;
+      }
+    }
+  }
+  return theme('batire_user_print_annotation_render', array('print_annotations' => $print_annotations));
+}
+
+/**
+ * Print reference
+ * @param Node(document)
+ * @return html
+ */
+function batire_user_docs_print_reference($node) {
+  $data = array();
+  $data['sources_officielles'] = _batire_user_docs_get_block_sources_officielles($node, FALSE);
+  $data['texte_normatifs'] = _batire_user_docs_get_block_texte_normatifs($node, FALSE);
+  $data['analysis'] = _batire_user_docs_get_block_analysis($node, FALSE);
+  $data['versions'] = _batire_user_docs_get_block_versions($node, FALSE, TRUE);
+  foreach ($data as $key => $item) {
+    if (!count($item)) {
+      unset($data[$key]);
+    }
+    elseif (isset($item['content']['tabs'])) { // for prin page need to show only first tab
+      unset($data[$key]['content']['tabs']);
+      unset($data[$key]['content']['status']);
+      $data[$key]['content']['data'] = $item['content']['data'][0];
+    }
+  }
+  if (!empty($data)) {
+    return theme('batire_user_docs_print_references_render', $data);
+  }
+  else {
+    return '';
+  }
+}
+
+/**
+ * Get back search query for links
+ */
+function batire_user_docs_get_back_search_query() {
+  $query = '';
+  if (!empty($_GET['sl'])) {
+    $sid = explode('-', $_GET['sl']);
+    if (mongodb_search_find_search_id($sid[0])) {
+      $query .= 'sl=' . $sid[0];
+    }
+    if (!empty($sid[1]) && mongodb_search_find_search_id($sid[1])) {
+      $query .= '-' . $sid[1];
+    }
+  }
+  return $query;
+}
+
+/**
+ * Get document occurances
+ * @param $node Node(document)
+ * @return Array List of data for block
+ */
+function _batire_user_docs_get_block_occurances($node) {
+  $oc_data = array();
+  if ($node->type == BATIRE_SITE_CT_TN) {
+    $data = batire_hierarchy_get_hierarchy($node->page_data['bid']);
+    if (!empty($data) && is_array($data)) {
+      _batire_user_docs_remove_normes_from_list($data, $node->page_data['super_bid']);
+      $oc_data['content']['count'] = count($data);
+      $content = _batire_user_docs_render_block_tree_content($data, $node->page_data['bid']);
+      if (!empty($content)) {
+        $oc_data['content']['data'] = $content;
+      }
+    }
+    $oc_data['content']['block_title'] = format_plural($oc_data['content']['count'], '@count document trouvé', '@count documents trouvés');
+  }
+  return $oc_data;
+}
+
+/**
+ * Get additional data for tn from mongo
+ * @param $data List
+ */
+function _batire_user_docs_remove_normes_from_list(&$data, $super_bid = '') {
+  $types = array('h0', 'h1', 'annexes');
+  if (count($data)) {
+    foreach ($data as $key => $item) {
+      if (isset($item->link_type) && $item->link_type == 'inner') { // @todo temp solution
+        unset($data[$key]->children);
+      }
+      if (isset($item->sub_type)) {
+        $sub_type = strtolower($item->sub_type);
+        if (!in_array($sub_type, $types) && !is_numeric(strrpos($sub_type, 'annex'))) {
+          unset($data[$key]);
+        }
+      }
+      if (isset($item->children)) {
+        _batire_user_docs_remove_normes_from_list($item->children);
+      }
+    }
+
+    if ($super_bid) {
+      $sid = $_GET['sl'];
+      batire_search_filter_sid($sid);
+
+      if (!empty($sid)) {
+        $cid = 'batire_user_docs_normes_filter:' . $sid;
+        $result_nids = batire_cache_get($cid, BATIRE_USER_CACHE_TABLE);
+        if (!count($result_nids)) {
+          $bids   = batire_hierarchy_get_children($super_bid);
+          $s_bids = array();
+
+          foreach ($bids as $bid) {
+            $id_parts = explode('-', $bid->id);
+            if (!empty($id_parts[2]) && $id_parts[2] != 'SOMMAIRE') {
+              $s_bids[] = '(id="' . $bid->bid . '")';
+            }
+          }
+
+          if (count($s_bids)) {
+            $s_data = array('custom_filter' => implode('or', $s_bids));
+          }
+
+          $old_data = batire_search_load_search_criteries($sid);
+          $new_data = array_merge($s_data, $old_data);
+          $request = batire_search_map_request($new_data, array(), 'relevant', 'DESC', 10000);
+          $antidot_result = batire_antidot_search_run($request, 0);
+
+          //Get nid list
+          if (isset($antidot_result->content) && is_array($antidot_result->content) && count($antidot_result->content)) {
+            foreach ($antidot_result->content as $result) {
+              $result_nids[] = $result->node->id;
+            }
+          }
+
+          batire_cache_set($cid, $result_nids, BATIRE_USER_CACHE_TABLE, 3600);
+        }
+
+        //Filter out nodes from hierarchy
+        foreach ($data as $key => $value) {
+          if (!in_array($value->bid, $result_nids)) {
+            unset($data[$key]);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Get SO document summary
+ * @param $node Node(document)
+ * @return Array List of data for block
+ */
+function _batire_user_docs_get_block_so_summary($node) {
+  $sum_data = array();
+  $versions_types = array(
+    BATIRE_SITE_CT_TO,
+    BATIRE_SITE_CT_CODE,
+    BATIRE_SITE_CT_FM,
+    BATIRE_SITE_CT_TN,
+    BATIRE_SITE_CT_LIVRE,
+    BATIRE_SITE_CT_ACTUALITE,
+    BATIRE_SITE_CT_COMP_TECH,
+    BATIRE_SITE_CT_DOC_PRAT
+  );
+  $types_with_inner_structure = array(
+    BATIRE_SITE_CT_FM,
+    //BATIRE_SITE_CT_TN,
+    BATIRE_SITE_CT_COMP_TECH
+  );
+  if (in_array($node->type, $versions_types)) {
+    if (in_array($node->type, $types_with_inner_structure)) {
+      $result = _batire_user_docs_get_document_inner_structure($node->page_data['bid']);
+      $sum_data['content']['empty_inner_structure'] = !isset($result[0]->children);
+    }
+    else {
+      $data = batire_hierarchy_get_hierarchy($node->page_data['bid']);
+      $result = _batire_user_docs_get_block_so_summary_inner_structure($data, batire_user_docs_get_bids($node->page_data['bid']), batire_hierarchy_get_parent_bid($node->page_data['bid']));
+    }
+
+    if (!empty($result) && is_array($result)) {
+      _batire_user_docs_add_so_summary_marks($result, $node->nid);
+      $content = _batire_user_docs_render_block_tree_content($result, $node->page_data['bid'], FALSE);
+      if (!empty($content)) {
+        $sum_data['content']['data'] = $content;
+      }
+    }
+    $sum_data['content']['block_title'] = t('Sommaire');
+  }
+  if (isset($node->page_data['jorf_summary']) && $node->page_data['jorf_summary'] === TRUE) {
+    $sum_data['content']['empty_inner_structure'] = TRUE;
+  }
+  else {
+    $sum_data['content']['empty_inner_structure'] = FALSE;
+  }
+  return $sum_data;
+}
+
+/**
+ * Add inner structure
+ * @param $data List of data
+ */
+function _batire_user_docs_get_block_so_summary_inner_structure(&$data, $bids, $p_bid) {
+  foreach ($data as &$item) {
+    if (isset($item->bid) && !empty($item->bid) && (in_array($item->bid, $bids) || $item->parent_bid == $p_bid || in_array($item->parent_bid, $bids))) {
+      $page_data = mongodb_page_get_page_by_bid($item->bid);
+      $item->is_empty_body = (isset($page_data['is_empty_body'])) ? $page_data['is_empty_body'] : FALSE;
+      $item->is_chapter    = (isset($page_data['is_chapter'])) ? $page_data['is_chapter'] : FALSE;
+      if (isset($page_data['inner_structure'])) {
+        $structure = array_shift($page_data['inner_structure']); // get only first item
+        if (isset($structure['content']) && count($structure['content'])) {
+          $item->link_type = 'inner';
+          $inner_list = _batire_user_docs_get_render_inner_structure($structure['content'], $item);
+          if (isset($item->children) && count($item->children)) {
+            $tmp = $item->children;
+            $item->children = array_merge($inner_list, $tmp);
+          }
+          else {
+            $item->children = $inner_list;
+          }
+        }
+      } else {
+        if (!empty($item->children)) {
+          $item->children = _batire_user_docs_get_block_so_summary_inner_structure($item->children, $bids, $p_bid);
+        }
+      }
+    }
+  }
+  return $data;
+}
+
+/**
+ * Get inner structure of one document
+ * @param $bid string Document bid
+ * @return array
+ */
+function _batire_user_docs_get_document_inner_structure($bid) {
+  $data = batire_hierarchy_get_by_bid($bid);
+  $data->active = TRUE;
+  $data->link_type = 'inner';
+
+  $page_data = mongodb_page_get_page_by_bid($bid);
+  $page_reference = isset($page_data['doc_numero']) ? $page_data['doc_numero'] : '';
+
+  $numbering = FALSE;
+  if (($page_data['type'] == BATIRE_SITE_CT_FM &&
+       $page_data['sub_type'] != 'FICHESYNT' &&
+       $page_data['sub_type'] != 'FICHE-OFF' &&
+       $page_data['sub_type'] != 'FICHEOFF' &&
+       $page_data['sub_type'] != 'FICHEART') || $page_data['type'] == BATIRE_SITE_CT_COMP_TECH) {
+    $numbering = TRUE;
+  }
+
+  if (isset($page_data['inner_structure'])) {
+    $structure = array_shift($page_data['inner_structure']);
+    if (isset($structure['content']) && count($structure['content'])) {
+      $data->children = _batire_user_docs_get_render_inner_structure($structure['content'], $data, $numbering, $page_reference);
+    }
+  }
+
+  return array($data);
+}
+
+/**
+ * Render inner list before full render
+ * @param $data
+ *    List of not ready for render items
+ * @param $link
+ *    Parent item
+ * @param $parent_reference_number
+ *    Parent document reference number
+ * @result List of ready items
+ */
+function _batire_user_docs_get_render_inner_structure($data, $link = FALSE, $numbering = FALSE, $parent_reference_number = '') {
+  $result = array();
+  if (count($data)) {
+    foreach ($data as $item) {
+      $elm = new stdClass();
+
+      if ($numbering && !empty($parent_reference_number)) {
+        $title_chunk = str_split(end(explode('N', $item['id'])), 2);
+        if (count($title_chunk) > 1) {
+          $title_prefix = (int)end($title_chunk) . '.';
+        }
+        else {
+          $title_prefix = $parent_reference_number . '.' . (int)end($title_chunk);
+        }
+        $elm->title = $title_prefix . ' ' . $item['title'];
+      }
+      else if ($numbering) { // for documents like BATIRE_SITE_CT_COMP_TECH (numbering by NIVx ID attribute)
+        $title_chunk = str_split(end(explode('N', $item['id'])), 2);
+        if (count($title_chunk) > 1) {
+          $title_prefix = '';
+          for ($i = 0; $i < count($title_chunk) && $i < 3; $i++) { //@todo recheck numbering depth (COMP_TECH standart depth now)
+            ($i != count($title_chunk) - 1) ? $title_prefix .= (int)$title_chunk[$i] . '.' : $title_prefix .= (int)$title_chunk[$i];
+          }
+        }
+        else {
+          $title_prefix = (int)end($title_chunk) . '.';
+        }
+        $elm->title = empty($title_prefix) ? $item['title'] : $title_prefix . ' ' . $item['title'];
+      }
+      else {
+        $elm->title = $item['title'];
+      }
+
+      $elm->link_type = 'inner';
+      $elm->link_id = $item['id'];
+      if (!empty($link)) {
+        $elm->active = $link->active;
+        $elm->nid = $link->nid;
+      }
+      $elm->children = array();
+      if (isset($item['content'])) {
+        $elm->children = _batire_user_docs_get_render_inner_structure($item['content'], $link, $numbering, $parent_reference_number);
+      }
+      $result[] = $elm;
+    }
+  }
+  return $result;
+}
+
+/**
+ * Get list of links
+ * @param $data List of links
+ * @param $doc_bid Document bid
+ * @param Bool $tree Render tree or not
+ * @param Bool $show_subtree Render sub tree or not
+ * @param Bool $show_inner Render inner tree or not
+ * @return array List of links and sublinks
+ */
+function _batire_user_docs_render_block_tree_content($data, $doc_bid, $tree = TRUE, $show_subtree = TRUE, $show_inner = TRUE, &$sommaire_navigation = 1) {
+  $nid = arg(1);
+  $content = array();
+  $query = batire_user_docs_get_back_search_query();
+  foreach ($data as $item) {
+    if (!empty($item->bid) || !empty($item->link_type)) {
+      $active = FALSE;
+      $options = array(
+        'html' => TRUE,
+        'query' => $query
+      );
+      if (isset($item->link_type) && $item->link_type == 'inner') {
+        $active = $item->active;
+        $options['fragment'] = isset($item->link_id) ? $item->link_id : NULL;
+
+        if (!empty($item->title)) {
+          $title = $item->title;
+        }
+        else {
+          $title = t('Title');
+        }
+        // url
+        if (isset($item->nid) && is_numeric($item->nid)) {
+          $url = 'node/' . $item->nid;
+          if (!empty($nid) && $nid == $item->nid) {
+            $options['attributes']['id'] = 'scrollToActive';
+          }
+        }
+        else {
+          $url = '#';
+        }
+        
+        if($url != '#' && !$options['fragment']) {
+          $options['attributes']['sommaire_navigation'] = $sommaire_navigation;
+          $sommaire_navigation++;
+        }
+      
+        $sub_content = array();
+        if (isset($item->children) && count($item->children) && $show_inner) {
+          $sub_content = _batire_user_docs_render_block_tree_content($item->children, $doc_bid, TRUE, TRUE, TRUE, $sommaire_navigation);
+          $options['attributes']['class'] = 'not-close action';
+        }
+      }
+      else {
+        $options['attributes'] = array(
+          'class' => '',
+          'data-doc-bid' => $doc_bid,
+          'data-bid' => $item->bid,
+        );
+
+        // url
+        if (isset($item->nid) && is_numeric($item->nid)) {
+          if ($item->is_chapter && $item->is_empty_body) {
+            $options['part-query'] = TRUE;
+            // task #76183;
+            $options['attributes']['class'] .= ' not-close';
+//            $options['attributes']['class'] .= ' full-plus';
+            $url = '#';
+          }
+          else {
+            $url = 'node/' . $item->nid;
+            if (!empty($nid) && $nid == $item->nid) {
+              $active = TRUE;
+              $options['attributes']['id'] = 'scrollToActive';
+            }
+          }
+        }
+        else {
+          $options['part-query'] = TRUE;
+          // task #76183;
+          $options['attributes']['class'] .= ' not-close';
+//          $options['attributes']['class'] .= ' full-plus';
+          $url = '#';
+        }
+        
+        if($url != '#') {
+          $options['attributes']['sommaire_navigation'] = $sommaire_navigation;
+          $sommaire_navigation++;
+        }
+        
+        // title
+        if (!empty($item->title)) {
+          $title = $item->title;
+        }
+        else {
+          $title = t('Title');
+        }
+        if (isset($item->mark) && $item->mark) {
+          $options['attributes']['class'] .= ' nowOverflowMark';
+          $title .= ' <span class="mark">*</span>';
+        }
+
+        $sub_content = NULL;
+        if (!empty($item->children) && is_array($item->children)) {
+          if ($tree) {
+            $sub_content = _batire_user_docs_render_block_tree_content($item->children, $doc_bid, $tree, TRUE, TRUE, $sommaire_navigation);
+          }
+          else {
+            if (isset($item->active) && $item->active && $show_subtree) {
+              _batire_user_docs_summary_block_add_markers($item->children);
+              $sub_content = _batire_user_docs_render_block_tree_content($item->children, $doc_bid, $tree, TRUE, TRUE, $sommaire_navigation);
+              $active = TRUE;
+            }
+            else {
+              // task #76183;
+              _batire_user_docs_summary_block_add_markers($item->children);
+              $sub_content = _batire_user_docs_render_block_tree_content($item->children, $doc_bid, $tree, TRUE, TRUE, $sommaire_navigation);
+             // $sub_content = TRUE;
+            }
+          }
+          $options['attributes']['class'] .= ' action';
+        }
+      }
+      if ($url == '#' && !count($sub_content)) {
+        continue;
+      }
+      if (isset($item->bid) && $doc_bid == $item->bid && !$tree && !$show_subtree) {
+        $options['attributes']['class'] .= ' active';
+      }
+      $content[] = array(
+        'data' => array(theme('batire_link', $title, $url, $options), $active),
+        'children' => $sub_content
+      );
+    }
+  }
+  return $content;
+}
+
+/**
+ * Get document versions
+ * @param $node Node(document)
+ * @param bool $link Return result as link or not
+ * @param $remove_cur Remove current version
+ * @return Array List of data for block
+ */
+function _batire_user_docs_get_block_versions($node, $link = TRUE, $remove_cur = FALSE) {
+  // versions can be at Article de TO, Article de Code, FM
+  $versions_types = array(
+    BATIRE_SITE_CT_TO,
+    BATIRE_SITE_CT_CODE,
+    BATIRE_SITE_CT_FM,
+  );
+  $ver_data = array();
+  if (in_array($node->type, $versions_types)) {
+    $query = batire_user_docs_get_back_search_query();
+    $data = batire_hierarchy_get_versions($node->page_data['id'], $node->page_data['doc_type']);
+    //if less then 2 versions, then no versions :)
+    if (count($data) < 2) {
+      return $ver_data;
+    }
+//    $data = array_reverse($data); //@todo need to investigate
+    foreach ($data as $item) {
+      if (!empty($item->nid) && is_numeric($item->nid) && !empty($item->bid)) {
+        $page_data = mongodb_page_get_page_by_bid($item->bid);
+        $item->version = $page_data['date_document'];
+        if (!empty($item->version)) {
+          if ($remove_cur && $item->nid == $node->nid) {
+            continue;
+          }
+          $title = _batire_site_get_date_in_format($item->version, 'd F Y');
+//          $title .= ' <span>*</span>'; @todo not defined yet
+          if ($link) {
+            if (is_numeric($item->nid)) {
+              $url = 'node/' . $item->nid;
+            }
+            else {
+              $url = '#';
+            }
+            $ver_data['content']['data'][] = theme('batire_link', $title, $url, array('html' => TRUE, 'query' => $query));
+          }
+          else {
+            $ver_data['content']['data'][] = $title;
+          }
+        }
+      }
+    }
+    if (count($ver_data['content']['data'])) {
+      $ver_data['content']['block_title'] = t('Versions');
+    }
+  }
+  return $ver_data;
+}
+
+/**
+ * Get document sources officielles
+ * @param $node Node(document)
+ * @return Array List of data for block
+ */
+function _batire_user_docs_get_block_sources_officielles($node, $link = TRUE) {
+  $versions_types = array(
+    BATIRE_SITE_CT_TO,
+    BATIRE_SITE_CT_CODE,
+  );
+  $so_data = array();
+  if (in_array($node->type, $versions_types)) {
+    $links = batire_hierarchy_get_links_by_bid($node->page_data['bid']);
+    $data = _batire_user_docs_render_block_links($links, $link);
+    if (!empty($data['data'])) {
+      $so_data['content']['data'] = $data['data'];
+      $so_data['content']['status'] = $data['status'];
+      $so_data['content']['tabs'] = $data['tabs'];
+      $so_data['content']['block_title'] = t('Documents liés');
+    }
+  }
+  return $so_data;
+}
+
+/**
+ * Get document search on page form
+ * @param $node Node(document)
+ * @return Array List of data for block
+ */
+function _batire_user_docs_get_block_search_on_page($node) {
+  if (_batire_site_is_document($node->type)) {
+    $path = drupal_get_path('module', 'batire_user_docs') . '/';
+    drupal_add_js($path . 'scripts/batire_highlight.js');
+    $so_data['content']['data'] = drupal_get_form('batire_user_docs_search_on_page_form');
+    $so_data['content']['block_title'] = t('Rechercher dans la page');
+  }
+  return $so_data;
+}
+
+function batire_user_docs_search_on_page_form() {
+  $form['page_search'] = array(
+    '#type' => 'textfield',
+    '#attributes' => array(
+      'title' => '',
+    ),
+    '#prefix' => '<a class="search-on-page-prev" href="#"></a>',
+    '#suffix' => '<a class="search-on-page-next" href="#"></a>',
+  );
+  
+  return $form;
+}
+
+/**
+ * Render block links
+ * @param $links List of links
+ */
+function _batire_user_docs_render_block_links($links, $link) {
+  $data = array();
+  $options = array(
+    'html' => TRUE,
+  );
+  $active = TRUE;
+  $opt = array(
+    'query' => batire_user_docs_get_back_search_query(),
+    'attributes' => array('class' => 'nowOverflow'),
+  );
+  // back referens
+  if (count($links['backrefs'])) {
+    $data['status'][] = $active;
+    if ($active) {
+      $active = FALSE;
+      $options['attributes']['class'] = 'active citant';
+    }
+    else {
+      $active = TRUE;
+      $options['attributes']['class'] = 'citant';
+    }
+    $options['attributes']['title'] = t('Tous les documents de la base citant le document affiché ci-contre');
+    $data['tabs'][] = theme('batire_link', '<span>' . t('Citant') . '</span>', '#', $options);
+    $list = array();
+    foreach ($links['backrefs'] as $item) {
+      if ($item->nid) {
+        $url = 'node/' . $item->nid;
+        $document = node_load($item->nid);
+        $title = _batire_user_docs_get_document_title($document);
+        if ($link) {
+          $list[] = theme('batire_link', $title, $url, $opt);
+        }
+        else {
+          $list[] = $title;
+        }
+      }
+    }
+    $data['data'][] = $list;
+  }
+
+  // references
+  if (count($links['refs'])) {
+    $data['status'][] = $active;
+    if ($active) {
+      $active = FALSE;
+      $options['attributes']['class'] = 'active cites';
+    }
+    else {
+      $active = TRUE;
+      $options['attributes']['class'] = 'cites';
+    }
+    $options['attributes']['title'] = t('Tous les documents de la base cités dans le document affiché ci-contre');
+    $data['tabs'][] = theme('batire_link', '<span>' . t('Cités') . '</span>', '#', $options);
+    unset($options['attributes']['class']);
+    $list = array();
+    foreach ($links['refs'] as $item) {
+      if ($item->nid) {
+        $url = 'node/' . $item->nid;
+        $document = node_load($item->nid);
+        $title = _batire_user_docs_get_document_title($document);
+        if ($link) {
+          $list[] = theme('batire_link', $title, $url, $opt);
+        }
+        else {
+          $list[] = $title;
+        }
+      }
+    }
+    $data['data'][] = $list;
+  }
+  return $data;
+}
+
+/**
+ * Get document title including additional info
+ * @param $node
+ * @return string
+ */
+function _batire_user_docs_get_document_title($node) {
+  $title = array();
+  switch ($node->type) {
+    case BATIRE_SITE_CT_CODE:
+      if (!empty($node->title)) {
+        $title[] = $node->title;
+      }
+      if (!empty($node->page_data['codes_de_textes'])) {
+        $title[] = $node->page_data['codes_de_textes'];
+      }
+      if (!empty($node->field_juri_date[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_juri_date[0]['value'], 'd/m/Y');
+        $title[] = $date;
+      }
+      break;
+
+    case BATIRE_SITE_CT_TO:
+      if (isset($node->page_data['persistent']['super_bid'])) {
+        $super_node = node_load(batire_hierarchy_get_by_bid($node->page_data['persistent']['super_bid'], 'nid'));
+        $title[] = $super_node->title;
+      }
+      else {
+        if (!empty($node->title)) {
+          $title[] = $node->title;
+        }
+      }
+      $article_of_toc = isset($node->page_data['persistent']['super_bid']);
+      if (!empty($node->page_data['etat'])) {
+        $date_text = _batire_site_prepare_consolidation_date(
+          $node->field_juri_date[0]['value'],
+          $node,
+          $node->page_data['etat'],
+          $article_of_toc
+        );
+        if (!empty($date_text)) {
+          $title[] = $date_text;
+        }
+      }
+      break;
+
+    case BATIRE_SITE_CT_TN:
+      if (!empty($node->field_doc_number[0]['value'])) {
+        $title[] = $node->field_doc_number[0]['value'];
+      }
+      if (!empty($node->title)) {
+        $title[] = $node->title;
+      }
+      if (!empty($node->field_tn_date_pub[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_tn_date_pub[0]['value'], 'd/m/Y');
+        $title[] = $date;
+      }
+      break;
+
+    case BATIRE_SITE_CT_FM:
+      if (!empty($node->field_doc_number[0]['value'])) {
+        $title[] = $node->field_doc_number[0]['value'];
+        if (!empty($node->title)) {
+          $title[] = $node->title;
+        }
+      }
+
+      if (!empty($node->field_subtitle[0]['value'])) {
+        $title[] = $node->field_subtitle[0]['value'];
+      }
+
+      if (!empty($node->taxonomy)) {
+        foreach ($node->taxonomy as $term) {
+          if ($term->vid == BATIRE_SITE_VID_FM) {
+            $title[] = $term->name;
+          }
+        }
+      }
+
+      if (!empty($node->field_date_update[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_date_update[0]['value'], 'F Y');
+        $title[] = $date;
+      }
+      break;
+
+    case BATIRE_SITE_CT_LIVRE:
+      if (!empty($node->title)) {
+        $title[] = $node->title;
+      }
+      if (!empty($node->taxonomy)) {
+        foreach ($node->taxonomy as $term) {
+          if ($term->vid == BATIRE_SITE_VID_LIVRES) {
+            $title[] = $term->name;
+          }
+        }
+      }
+      if (!empty($node->field_date_pub[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_date_pub[0]['value'], 'F Y');
+        $title[] = $date;
+      }
+      break;
+
+    case BATIRE_SITE_CT_COMP_TECH:
+      if (!empty($node->title)) {
+        $title[] = $node->title;
+      }
+      if (!empty($node->field_release_date[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_release_date[0]['value'], 'F Y');
+        $title[] = $date;
+      }
+      break;
+
+    case BATIRE_SITE_CT_ACTUALITE:
+      if (!empty($node->field_surtitle[0]['value'])) {
+        $title[] = $node->field_surtitle[0]['value'];
+      }
+      if (!empty($node->title)) {
+        $title[] = $node->title;
+      }
+      if (!empty($node->page_data['chapo'])) {
+        $title[] = $node->page_data['chapo'];
+      }
+      if (!empty($node->field_subtitle[0]['value'])) {
+        $title[] = $node->field_subtitle[0]['value'];
+      }
+      if (!empty($node->field_release_date[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_release_date[0]['value'], $date_format);
+        $title[] = $date;
+      }
+      break;
+
+    case BATIRE_SITE_CT_DOC_PRAT:
+      if (!empty($node->title)) {
+        $title[] = $node->title;
+      }
+      if (!empty($node->field_dp_date_pub[0]['value'])) {
+        $date = _batire_site_get_date_in_format($node->field_dp_date_pub[0]['value'], 'Y');
+        $title[] = $date;
+      }
+      break;
+  }
+  return implode(' - ', $title);
+}
+
+/**
+ * Get document textes normatifs
+ * @param $node Node(document)
+ * @return Array List of data for block
+ */
+function _batire_user_docs_get_block_texte_normatifs($node, $link = TRUE) {
+  $tn_data = array();
+  if ($node->type == BATIRE_SITE_CT_TN) {
+    $links = batire_hierarchy_get_links_by_bid($node->page_data['bid']);
+    $data = _batire_user_docs_render_block_links($links, $link);
+    if (!empty($data['data'])) {
+      $tn_data['content']['data'] = $data['data'];
+      $tn_data['content']['status'] = $data['status'];
+      $tn_data['content']['tabs'] = $data['tabs'];
+      $tn_data['content']['block_title'] = t('Documents liés');
+    }
+  }
+  return $tn_data;
+}
+
+/**
+ * Get document Analyses
+ * @param $node Node(document)
+ * @return Array List of data for block
+ */
+function _batire_user_docs_get_block_analysis($node, $link = TRUE) {
+  $versions_types = array(
+    BATIRE_SITE_CT_LIVRE,
+    BATIRE_SITE_CT_FM,
+    BATIRE_SITE_CT_ACTUALITE,
+    BATIRE_SITE_CT_DOC_PRAT,
+    BATIRE_SITE_CT_COMP_TECH
+  );
+  $ann_data = array();
+  if (in_array($node->type, $versions_types)) {
+    $links = batire_hierarchy_get_links_by_bid($node->page_data['bid']);
+    $data = _batire_user_docs_render_block_links($links, $link);
+    if (!empty($data['data'])) {
+      $ann_data['content']['data'] = $data['data'];
+      $ann_data['content']['status'] = $data['status'];
+      $ann_data['content']['tabs'] = $data['tabs'];
+      $ann_data['content']['block_title'] = t('Documents liés');
+    }
+  }
+  return $ann_data;
+}
+
+/**
+ * Get options for print and pdf
+ */
+function _batire_user_docs_get_options() {
+  global $user;
+  $options = array(
+    'an' => _batire_user_docs_print_check_settings($_GET, 'an'),
+    're' => _batire_user_docs_print_check_settings($_GET, 're'),
+    'user' => isset($_GET['user']) ? $_GET['user'] : $user->uid
+  );
+  return $options;
+}
+
+/**
+ * Get sub lists for list pf links
+ */
+function batire_user_docs_get_list_childs_js($doc_bid, $bid) {
+  $result = array(
+    'status' => FALSE,
+    'message' => ''
+  );
+  try {
+    if (!empty($doc_bid) && !empty($bid)) {
+      $data = batire_hierarchy_get_hierarchy($doc_bid);
+      if (!empty($data)) {
+        $list = batire_user_docs_get_sublist($data, $doc_bid, $bid);
+        if ($list) {
+          $result['message'] = $list;
+          $result['status'] = TRUE;
+        }
+        else {
+          throw(new Exception(t("Sublist is empty."), BATIRE_SITE_ERROR_SYSTEM));
+        }
+      }
+      else {
+        throw(new Exception(t("Can't find sublist."), BATIRE_SITE_ERROR_SYSTEM));
+      }
+    }
+    else {
+      throw(new Exception(t('Params are empty'), BATIRE_SITE_ERROR_SYSTEM));
+    }
+  }
+  catch (Exception $e) {
+    $result['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($result);
+  return NULL;
+}
+
+/**
+ * Get sublist of list
+ * @param $data List of elements
+ * @param $doc_bid Document bid
+ * @param $bid Bid of parent element
+ */
+function batire_user_docs_get_sublist($data, $doc_bid, $bid) {
+  foreach ($data as $item) {
+    if ($item->bid == $bid) {
+      _batire_user_docs_get_block_so_summary_inner_structure($item->children, batire_user_docs_get_bids($bid), $bid);
+      _batire_user_docs_summary_block_add_markers($item->children, 'sublist');
+      $content = _batire_user_docs_render_block_tree_content($item->children, $doc_bid, FALSE, FALSE);
+      if (!empty($content)) {
+        return theme('batire_item_list', $content, NULL, FALSE);
+      }
+    }
+    else {
+      if (isset($item->children) && count($item->children)) {
+        $content = batire_user_docs_get_sublist($item->children, $doc_bid, $bid);
+        if ($content) {
+          return $content;
+        }
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Add martks to summary list only for first level
+ * @param $data List of items
+ * @param $nid Current document nid
+ */
+function _batire_user_docs_add_so_summary_marks($data, $nid) {
+  foreach ($data as $item) {
+    if (isset($item->nid) && $item->nid == $nid) {
+      _batire_user_docs_summary_block_add_markers($data);
+      break;
+    }
+  }
+}
+
+function _batire_user_docs_get_summary_marks_antidot_request($data, $type = 'summary') {
+  $antidot_result = FALSE;
+  if (!empty($_GET['sl'])) {
+    if($type == 'summary') {
+      $cid = 'summary:' . arg(1) . '-' . $_GET['sl'];
+    }
+    else {
+      $cid = 'summary:' . arg(3) . '-' . arg(4) . '-' . $_GET['sl'];
+    }
+    $cache = cache_get($cid, 'cache');
+    if ($cache && $cache->expire > REQUEST_TIME) {
+      $antidot_result = $cache->data;
+    }
+    else {
+      $sid = explode('-', $_GET['sl']);
+      $search_data = mongodb_search_get_search_data($sid[0]);
+      if (!empty($search_data['data']['search_word'])) {
+        $selected_documents = _batire_user_docs_summary_get_nodes($data);
+        if (count($selected_documents)) {
+          $criterias = array(
+            'custom_filter' => 'vfts("contenu","' . $search_data['data']['search_word'] . '")',
+          );
+          $request = batire_search_map_request($criterias, $selected_documents, 'relevant', 'DESC', NULL);
+          unset($request['afs:cluster']);
+          $antidot_result = batire_antidot_search_run($request, 0);
+          cache_set($cid, $antidot_result, 'cache', REQUEST_TIME + 3600);
+        }
+      }
+    }
+  }
+  return $antidot_result;
+}
+
+function _batire_user_docs_summary_get_nodes($items) {
+  $selected_documents = array();
+  foreach ($items as $el) {
+    if (!empty($el->nid)) {
+      $selected_documents[] = $el->nid;
+      if (!empty($el->children) && is_array($el->children)) {
+        $selected_documents = array_merge($selected_documents, _batire_user_docs_summary_get_nodes($el->children));
+      }
+    }
+  }
+  return $selected_documents;
+}
+
+/**
+ * Add stars to summary links
+ */
+function _batire_user_docs_summary_block_add_markers(&$items, $type = 'summary') {
+  if (!empty($_GET['sl'])) {
+    $search = TRUE;
+    if(arg(0) == 'node') {
+      $node = node_load(arg(1));
+      if(!$node || $node->type == "batire_texte_officiel") {
+        $search = FALSE;
+      }
+    }
+    if($search) {
+      $antidot_result = _batire_user_docs_get_summary_marks_antidot_request($items, $type);
+      if ($antidot_result->total_cnt > 0) {
+        foreach ($antidot_result->content as $cont) {
+          if (!empty($cont->node->id)) {
+            foreach ($items as &$link) {
+              if ($link->bid == $cont->node->id) {
+                $link->mark = TRUE;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Get first or list of pdf files from document
+ * @param $node Node(document)
+ * @param Bool $array Return list of all pdf files from document
+ * @param Bool $full_data Return full data or only filepath
+ */
+function batire_user_docs_get_document_attached_pdf($node, $array = FALSE, $full_data = FALSE) {
+  if (count($node->page_data['attached'])) {
+    $list = array();
+    foreach ($node->page_data['attached'] as $file) {
+      if ($file['filemime'] == 'application/pdf') {
+        if ($array) {
+          $list[] = $full_data ? $file : $file['filepath'];
+        }
+        else {
+          return $full_data ? $file : $file['filepath'];
+        }
+      }
+    }
+    if ($array && count($list)) {
+      return $list;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Get remplace nid for document by remplace part
+ * @param $par Remplace part
+ * @return Nid of document
+ */
+function batire_user_docs_get_remplace_par_document($par) {
+  $result = db_query('
+    SELECT nid
+    FROM {content_field_doc_number} cfdn
+    WHERE field_doc_number_value = "%s"', array($par));
+  $nids = array();
+  while ($row = db_fetch_object($result)) {
+    $nids[] = $row->nid;
+  }
+  if (count($nids)) {
+    return array_shift($nids);
+  }
+  return NULL;
+}
+
+/**
+ * Get array of parent bids
+ *
+ * @param $bid
+ * @return array
+ */
+function batire_user_docs_get_bids($bid) {
+  $bids     = array($bid);
+  $last_bid = batire_hierarchy_get_parent_bid($bid);
+
+  while ($last_bid != $bid) {
+    $bids[]   = $last_bid;
+    $bid      = $last_bid;
+    $last_bid = batire_hierarchy_get_parent_bid($bid);
+  }
+
+  return $bids;
+}
+
+function batire_user_docs_print_image($nid, $img) {
+  $node = node_load($nid);
+  if (!_batire_site_is_document($node->type)) {
+    drupal_access_denied();
+  }
+  //@todo Check Normes for free users
+
+  $print['sendtoprinter'] = "<script type='text/javascript'>window.print();window.close();</script>";
+  $print['search_date']   = format_date(REQUEST_TIME, 'custom', 'd/m/Y');
+  $print['link']          = l(url('document/' . $node->page_data['bid'], array('absolute' => TRUE)), 'document/' . $node->page_data['bid']);
+  $print['copyright']     = SITE_NAME_FS . ' / ' . format_date(REQUEST_TIME, 'custom', 'Y');
+
+  $node->build_mode       = 'print';
+  $dom = new DOMDocument();
+  $dom->encoding = 'UTF-8';
+
+  $content = '<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /></head><body>' . $node->page_data['content']['content'] . '</body></html>';
+  if ($dom->loadHTML($content)) {
+    $node->page_data['content']['content'] = batire_user_docs_separate_image($dom, $img);
+  }
+  else {
+    shodie("oops");
+    unset($node->page_data['content']);
+  }
+  $print['node'] = $node;
+  $print['content'] = $node->page_data['content']['content'];
+  //$print['content'] = node_view($node);
+
+  print theme('batire_user_docs_print_image', $print);
+  exit;
+}
+
+function batire_user_docs_separate_image($dom, $img) {
+  $finder    = new DomXPath($dom);
+  $classname = "image-block";
+  $images    = $finder->query("//*[contains(@class, '$classname')]");
+
+  foreach ($images as $image) {
+    $links = $image->getElementsByTagName('a');
+    foreach ($links as $link) {
+      $attr = $link->attributes->getNamedItem('name');
+      if ($attr->nodeValue == $img) {
+        return batire_user_docs_innerHTML($image);
+      }
+    }
+  }
+  return '';
+}
+
+function batire_user_docs_innerHTML($element)
+{
+  $innerHTML = "";
+  $children = $element->childNodes;
+  foreach ($children as $child)
+  {
+    $tmp_dom = new DOMDocument();
+    $tmp_dom->appendChild($tmp_dom->importNode($child, true));
+    $innerHTML.=trim($tmp_dom->saveHTML());
+  }
+  return $innerHTML;
+}

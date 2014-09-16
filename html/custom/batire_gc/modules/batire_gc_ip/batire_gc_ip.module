@@ -1,0 +1,485 @@
+<?php
+
+define('BATIRE_GC_IP_BATCH_LIMIT', 100);
+
+define('BATIRE_GC_IP_PATH', file_directory_path() . '/ip');
+
+define('BATIRE_GC_IP_LOGO_PATH', file_directory_path() . '/ip/logo');
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_gc_ip_menu() {
+  $items = array();
+
+  $items['admin/batire-site/gc/gc-users/ip/upload/%'] = array(
+    'title' => t('IP import'),
+    'access callback' => 'batire_gc_commercial_is_gc_commercial',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_gc_ip_upload_form', 6),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/batire-site/gc/gc-users/ip/settings/%'] = array(
+    'title' => t('IP settings form'),
+    'access callback' => 'batire_gc_commercial_is_gc_commercial',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_gc_ip_settings_form', 6),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
+ * IP settings form definition.
+ */
+function batire_gc_ip_settings_form(&$form_state, $uid) {
+  $user_data = unserialize(user_load($uid)->data);
+  $form['#attributes'] = array('enctype' => 'multipart/form-data');
+  $form['access_settings'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Access settings'),
+  );
+
+  $form['access_settings']['deny_access_outside_ip_range'] = array(
+    '#type' => 'radios',
+    '#options' => array(0 => 'Default', 1 => 'Lock if outside IP range'),
+    '#default_value' => ($user_data['deny_access_outside_ip_range'] == 1) ? 1 : 0,
+  );
+
+  $form['dynamic_header'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Dynamic message and logo'),
+  );
+
+  $form['dynamic_header']['message'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Message'),
+    '#default_value' => $user_data['message'],
+  );
+
+  $form['dynamic_header']['logo'] = array(
+    '#type' => 'file',
+    '#title' => t('Logo'),
+    '#description' => t('Text file containing IP addresses list'),
+  );
+
+  $form['#uid'] = $uid;
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+
+  return $form;
+}
+
+/**
+ * IP settings form handler.
+ */
+function batire_gc_ip_settings_form_submit($form, &$form_state) {
+  /*
+   * Filling additional data
+   */
+  if (isset($form_state['values']['deny_access_outside_ip_range'])) {
+    $uid = $form['#uid'];
+    $user = user_load($uid);
+    //set header message
+    if (!empty($form_state['values']['message'])) {
+      $additional_data = array('message' => $form_state['values']['message']);
+    }
+    $additional_data['deny_access_outside_ip_range'] = $form_state['values']['deny_access_outside_ip_range'];
+  }
+  /*
+   * Upload logo
+   */
+  $path = BATIRE_GC_IP_LOGO_PATH;
+  if (!file_check_directory($path, FILE_CREATE_DIRECTORY)) {
+    drupal_set_message(t('Could not create IP files directory'), 'error');
+    return;
+  }
+  $extensions = 'jpeg jpg gif tiff png';
+  $validators = array(
+    '_batire_gc_ip_file_validate_extensions' => array($extensions),
+  );
+  if ($file = file_save_upload('logo', $validators, $path, FILE_EXISTS_RENAME)) {
+    $additional_data['logo'] = $file->filepath;
+  }
+  /*
+   * Save additional data to serialized array user->data
+   */
+  user_save($user, $additional_data);
+  drupal_set_message(t('Parameters of IP settings was saved'));
+}
+
+/**
+ * Upload form definition.
+ */
+function batire_gc_ip_upload_form(&$form_state, $uid) {
+  $form['#attributes'] = array('enctype' => 'multipart/form-data');
+  if ($ip_download = batire_gc_ip_get_file($uid)) {
+    $form['stats_file'] = array(
+      '#value' => '<p>' . t('Current IP addresses file is available !link.', array('!link' => l('here', $ip_download, array('attributes' => array('target' => '_blank'))))) . '</p>',
+      '#type' => 'markup',
+    );
+  }
+  $form['ip_file'] = array(
+    '#type' => 'file',
+    '#title' => t('IP file'),
+    '#description' => t('Text file containing IP addresses list'),
+  );
+  $form['#uid'] = $uid;
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Import'),
+  );
+  return $form;
+}
+
+/**
+ * Import form submit handler.
+ */
+function batire_gc_ip_upload_form_submit($form, &$form_state) {
+  $uid = $form['#uid'];
+  $limits = array(
+    'extensions' => 'txt',
+  );
+  $validators = array(
+    '_batire_gc_ip_file_validate_extensions' => array($limits['extensions']),
+  );
+  $path = BATIRE_GC_IP_PATH;
+  if (!file_check_directory($path, FILE_CREATE_DIRECTORY)) {
+    drupal_set_message(t('Could not create IP files directory'), 'error');
+    return;
+  }
+  if ($file = file_save_upload('ip_file', $validators, file_directory_path(), FILE_EXISTS_RENAME)) {
+    $rows = file($file->filepath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+    $line = 1;
+    $error = FALSE;
+    $log_file = fopen($path . "/$uid.log", 'w');
+    $time = date('Y-m-d H:i:s');
+    fwrite($log_file, "$time: Starting IP file validation\n");
+    foreach ($rows as $ip) {
+      $validate = _batire_gc_ip_validate_ip($ip);
+      if ($validate === TRUE) {
+        $time = date('Y-m-d H:i:s');
+        fwrite($log_file, "$time: OK: $ip on line $line.\n");
+      }
+      else {
+        $time = date('Y-m-d H:i:s');
+        fwrite($log_file, "$time: ERROR: $validate on line $line.\n");;
+        $error = TRUE;
+      }
+      $line++;
+    }
+    if ($error) {
+      db_query('DELETE FROM {files} WHERE fid = %d', $file->fid);
+      file_delete($file->filepath);
+
+      drupal_set_message(t('Import log file is avilable !link.', array('!link' => l('here', BATIRE_GC_IP_PATH . "/$uid.log"))));
+      drupal_set_message(t('IP addresses file contains errors. Please check log file for more info.'), 'error');
+      return;
+    }
+    $delete_rows = array();
+    if ($existing_ip = batire_gc_ip_get_file($uid)) {
+      $existing_rows = file($existing_ip, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+      foreach ($existing_rows as $existing_row) {
+        $delete_rows = array_merge($delete_rows, _batire_gc_ip_extract_range($existing_row));
+      }
+    }
+    $import_rows = array();
+    foreach ($rows as $row) {
+      $import_rows = array_merge($import_rows, _batire_gc_ip_extract_range($row));
+    }
+    file_move($file, $path . "/$uid.txt", FILE_EXISTS_REPLACE);
+    file_set_status($file, FILE_STATUS_PERMANENT);
+
+    $user = user_load($uid);
+    // Turn off SVC debug as it may cause memory errors
+    $svc_debug_state = variable_get('batire_svc_debug', 0);
+    variable_set('batire_svc_debug', 0);
+    batire_gc_ip_batch($import_rows, $delete_rows, $user->name);
+    variable_set('batire_svc_debug', $svc_debug_state);
+  }
+}
+
+
+/**
+ * Batch process description and initalization.
+ */
+function batire_gc_ip_batch($import_rows, $delete_rows, $svc_id) {
+  $batch = array(
+    'operations' => array(
+      array('batire_gc_ip_batch_delete_process', array($delete_rows)),
+      array('batire_gc_ip_batch_import_process', array($import_rows, $svc_id)),
+    ),
+    'finished' => 'batire_gc_ip_batch_finished',
+    'title' => t('Importing IPs'),
+    'init_message' => t('Starting to import.'),
+    'progress_message' => t('Processed @current out of @total.'),
+    'error_message' => t('Import process has encountered an error.'),
+  );
+  batch_set($batch);
+  $old_theme = variable_get('maintenance_theme', 'batire_admin');
+  variable_set('maintenance_theme', 'batire');
+  batch_process();
+  variable_set('maintenance_theme', $old_theme);
+}
+
+
+/**
+ * Import batch processing function callback.
+ */
+function batire_gc_ip_batch_import_process($rows, $svc_id, &$context) {
+  global $user;
+  $max = count($rows);
+  $log_file = fopen(BATIRE_GC_IP_PATH . '/' . $user->uid . '_batch.log', 'a');
+  if (!isset($context['sandbox']['progress'])) {
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['current_number'] = 0;
+    $context['sandbox']['max'] = $max;
+
+    $time = date('Y-m-d H:i:s');
+    fwrite($log_file, "$time: Starting new import\n");
+  }
+  $begin = $context['sandbox']['current_number'];
+  for ($i = $begin; (($i < $begin + BATIRE_GC_IP_BATCH_LIMIT) && ($i < $max)); $i++) {
+    $message = batire_gc_ip_add_single($rows[$i], $svc_id);
+    if (!empty($message)) {
+      $time = date('Y-m-d H:i:s');
+      fwrite($log_file, "$time: $message\n");
+      $context['results']['items'][] = $i;
+    }
+
+    $context['sandbox']['progress']++;
+    $context['sandbox']['current_number'] = $i;
+    $context['message'] = t('Now processing %number of %max', array('%number' => $i, '%max' => $max));
+  }
+  $context['sandbox']['current_number'] = $begin + BATIRE_GC_IP_BATCH_LIMIT;
+
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+
+  fclose($log_file);
+}
+
+/**
+ * Delete batch processing function callback.
+ */
+function batire_gc_ip_batch_delete_process($rows, &$context) {
+  global $user;
+  $max = count($rows);
+  $log_file = fopen(BATIRE_GC_IP_PATH . '/' . $user->uid . '_batch.log', 'a');
+  if (!isset($context['sandbox']['progress'])) {
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['current_number'] = 0;
+    $context['sandbox']['max'] = $max;
+
+    $time = date('Y-m-d H:i:s');
+    fwrite($log_file, "$time: Starting IP removal\n");
+  }
+  $begin = $context['sandbox']['current_number'];
+  for ($i = $begin; (($i < $begin + BATIRE_GC_IP_BATCH_LIMIT) && ($i < $max)); $i++) {
+    $message = batire_gc_ip_delete_single($rows[$i]);
+    if (!empty($message)) {
+      $time = date('Y-m-d H:i:s');
+      fwrite($log_file, "$time: $message\n");
+      $context['results']['items'][] = $i;
+    }
+
+    $context['sandbox']['progress']++;
+    $context['sandbox']['current_number'] = $i;
+    $context['message'] = t('Now processing %number of %max', array('%number' => $i, '%max' => $max));
+  }
+  $context['sandbox']['current_number'] = $begin + BATIRE_GC_IP_BATCH_LIMIT;
+
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+
+  fclose($log_file);
+}
+
+/**
+ * Batch 'finished' callback.
+ */
+function batire_gc_ip_batch_finished($success, $results, $operations) {
+  if ($success) {
+    $message = count($results['items']) .' processed.';
+    drupal_set_message($message);
+  }
+  else {
+    $error_operation = reset($operations);
+    $message = t('An error occurred while processing %error_operation with arguments: @arguments', array('%error_operation' => $error_operation[0], '@arguments' => print_r($error_operation[1], TRUE)));
+    drupal_set_message($message);
+  }
+}
+
+/**
+ * Add single IP mapping to SVC.
+ */
+function batire_gc_ip_add_single($ip, $svc_id) {
+  $m = batire_svc_insert_mapping(BATIRE_SVC_APPELANT_ID, $ip, $svc_id);
+  if ($m['error']) {
+    return "$ip import error: " . $m['error'];
+  }
+  return "$ip import OK";
+}
+
+/**
+ * Remove single IP mapping from SVC.
+ */
+function batire_gc_ip_delete_single($ip) {
+  $m = batire_svc_delete_mapping(BATIRE_SVC_APPELANT_ID, $ip);
+  if ($m['error']) {
+    return "$ip removal error: " . $m['error'];
+  }
+  return "$ip removal OK";
+}
+
+/**
+ * Return user which should be used as base to take access rights for
+ * anonymous user who came from certain IP address.
+ */
+function batire_gc_ip_replace_user() {
+  global $user;
+  // only replace for anonymous
+  if ($user->uid > 0) {
+    return FALSE;
+  }
+
+  $user_ip = ip_address();
+  // logging
+  $server_ip = $_SERVER['REMOTE_ADDR'];
+  $proxy_ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+  $time = date('Y-m-d H:i:s');
+  $file = fopen(BATIRE_GC_IP_PATH . '/general.log', 'a');
+  fwrite($file, "$time: ip_address() $user_ip | REMOTE_ADDR $server_ip | FORWARDED $proxy_ip\n");
+  fclose($file);
+  // logging
+  $svc_id = batire_svc_get_svc_id_by_mapping(BATIRE_SVC_APPELANT_ID, $user_ip);
+
+  if (!$svc_id['error']) {
+    $replace_user = user_load(array('name' => $svc_id['svc_id']));
+    if ($replace_user) {
+      return $replace_user;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Check that the filename ends with an allowed extension. This check is also
+ * enforced for the user #1.
+ *
+ * @param $file
+ *   A Drupal file object.
+ * @param $extensions
+ *   A string with a space separated
+ * @return
+ *   An array. If the file extension is not allowed, it will contain an error message.
+ */
+function _batire_gc_ip_file_validate_extensions($file, $extensions) {
+  global $user;
+
+  $errors = array();
+
+  $regex = '/\.('. ereg_replace(' +', '|', preg_quote($extensions)) .')$/i';
+  if (!preg_match($regex, $file->filename)) {
+    $errors[] = t('Only files with the following extensions are allowed: %files-allowed.', array('%files-allowed' => $extensions));
+  }
+
+  return $errors;
+}
+
+/**
+ * Validate IP string (including ranges).
+ */
+function _batire_gc_ip_validate_ip($ip) {
+  $octets = explode('.', $ip);
+  if (count($octets) == 4) {
+    foreach ($octets as $octet) {
+      $range = explode('-', $octet);
+      if (count($range) > 0 && count($range) <= 2) {
+        $previous = -1;
+        foreach ($range as $boundary) {
+          if (is_numeric($boundary) && strcmp(intval($boundary), $boundary) == 0 && $boundary >= 0 && $boundary <= 255 && $boundary > $previous) {
+            $previous = $boundary;
+          }
+          else {
+            return t('Wrong octet "@octet" in IP @ip', array('@octet' => $octet, '@ip' => $ip));
+          }
+        }
+      }
+      else {
+        return t('Wrong octet "@octet" in IP @ip', array('@octet' => $octet, '@ip' => $ip));
+      }
+    }
+  }
+  else {
+    return t('Wrong octets count in IP @ip', array('@ip' => $ip));
+  }
+  return TRUE;
+}
+
+/**
+ * Explode given range into bunch of IP addresses
+ *
+ * @param type $ip IP address with ranges specified (ex. 10.10-15.0.0-5)
+ * @return array of separate ip extracted from given range
+ */
+function _batire_gc_ip_extract_range($ip) {
+  $ranges = array();
+  $extracted = array();
+  $octet_num = 1;
+
+  $octets = explode('.', $ip);
+  foreach ($octets as $octet) {
+    $range = explode('-', $octet);
+    if (count($range) > 1) {
+      $ranges[$octet_num]['start'] = array_shift($range);
+      $ranges[$octet_num]['end'] = array_shift($range);
+    }
+    else {
+      $ranges[$octet_num]['start'] = $ranges[$octet_num]['end'] = array_shift($range);
+    }
+    $octet_num++;
+  }
+
+  for ($octet1 = $ranges[1]['start']; $octet1 <= $ranges[1]['end']; $octet1++) {
+    for ($octet2 = $ranges[2]['start']; $octet2 <= $ranges[2]['end']; $octet2++) {
+      for ($octet3 = $ranges[3]['start']; $octet3 <= $ranges[3]['end']; $octet3++) {
+        for ($octet4 = $ranges[4]['start']; $octet4 <= $ranges[4]['end']; $octet4++) {
+          $extracted[] = "$octet1.$octet2.$octet3.$octet4";
+        }
+      }
+    }
+  }
+
+  return $extracted;
+}
+
+/**
+ * Get path to IP addresses file for specified user.
+ */
+function batire_gc_ip_get_file($uid) {
+  if (file_exists(BATIRE_GC_IP_PATH . "/$uid.txt")) {
+    return BATIRE_GC_IP_PATH . "/$uid.txt";
+  }
+  return FALSE;;
+}
+
+/*
+ * Get GC admin id
+ */
+function batire_gc_ip_get_gc_admin_id($uid) {
+  $user = mongodb_user_get_user($uid);
+  if (in_array(BATIRE_USER_ROLES_MULTI, $user['roles']) && in_array(BATIRE_GC_GC_USER_ROLE_ID, $user['roles'])) {
+    return mongodb_user_get_admin($uid);
+  }
+  elseif (in_array(BATIRE_USER_ROLES_MONO, $user['roles']) && in_array(BATIRE_GC_GC_USER_ROLE_ID, $user['roles'])) {
+    return $uid;
+  }
+}

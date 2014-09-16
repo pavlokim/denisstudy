@@ -1,0 +1,3 @@
+<?php
+
+include_once('batire_user_settings.features.inc');

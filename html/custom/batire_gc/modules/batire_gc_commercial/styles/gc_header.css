@@ -1,0 +1,40 @@
+/*
+    Document   : gc_header
+    Created on : Oct 10, 2013, 6:24:39 PM
+    Author     : pavel
+    Description:
+        Purpose of the stylesheet follows.
+*/
+
+.dynamic-header {
+  width: 350px;
+  text-align: center;
+}
+.dynamic-message {
+  margin: -7px 24px 22px 147px;
+  position: absolute;
+  width: 270px;
+}
+.dynamic-logo {
+  width: 145px;
+  height: 75px;
+  float: left;
+}
+.logo-block {
+  margin-top: -5px;
+  position: absolute;
+}
+
+.gc-dynamic-login-link {
+    /*color: #0F9CDD;*/
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 11px;
+    position: absolute;
+    margin: 61px 14px 30px 35px;
+    width: 190px;
+    /*font-weight: bold;*/
+}
+.gc-dynamic-login-link:hover {
+    text-decoration: underline;
+}

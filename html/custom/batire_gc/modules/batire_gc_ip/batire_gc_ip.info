@@ -1,0 +1,6 @@
+; $Id: batire_gc_ip.info
+name = Batire GC - IP Management
+description = "Batire Grand Comptes IP access management."
+package = Batire GC
+core = 6.x
+dependencies[] = batire_gc

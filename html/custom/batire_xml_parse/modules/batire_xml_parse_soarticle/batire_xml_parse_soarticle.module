@@ -1,0 +1,936 @@
+<?php
+
+/**
+ * Implementation of hook_batire_xml_parseapi()
+ *
+ * @param $op
+ *   Operation
+ * @param array &$data
+ *   Result of parse process, if already processed
+ * @param DOMDocument &$dom
+ *   DOM object parsed from XML
+ * @return
+ *   Result of parse process, if already processed
+ */
+function batire_xml_parse_soarticle_batire_xml_parseapi($op, &$data, $dom = NULL) {
+  switch ($op) {
+    case 'suggest types':
+      $xpath = batire_xml_get_xpath($dom);
+      $product = strtoupper(batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/ns0:type-doc"));
+      if ($product == 'SO') {
+          if (batire_xml_node_value_get($xpath, '/qc:doc-root/qc:doc-meta/ns0:natureTexte') == 'CODE') {
+            return 'CODE';
+          }
+          return 'TO';
+      }
+      break;
+    case 'process':
+      if ($data['type'] == 'CODE' || $data['type'] == 'TO') {
+        _batire_xml_parse_soarticle_parse($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process $data[type]:");
+          drush_print_r($data);
+        }
+      }
+      break;
+    case 'postprocess':
+      if ($data['type'] == 'CODE' || $data['type'] == 'TO') {
+          _batire_xml_parse_soarticle_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      }
+
+      break;
+    case 'postgeneration':
+      $args = func_get_args();
+      $nid = $args[2];
+      $generation_data = $args[3];
+      $page_data = mongodb_page_get_node_page($nid);
+
+      if ($page_data && $page_data['doc_type'] == BATIRE_HIERARCHY_DT_TEXTE_OFFICIEL) {
+        if ((isset($page_data['content']['visas']) && !empty($page_data['content']['visas'])) || (isset($page_data['content']['signatures']) && !empty($page_data['content']['signatures']))) {
+          $node = node_load($nid);
+          if (!empty($page_data['content']['visas'])) {
+            $node->field_visas = array(array('value' => $page_data['content']['visas']));
+            unset($page_data['content']['visas']);
+          } else {
+            unset($node->field_visas);
+          }
+          if (!empty($page_data['content']['signatures'])) {
+            $node->field_signatures = array(array('value' => $page_data['content']['signatures']));
+            unset($page_data['content']['signatures']);
+          } else {
+            unset($node->field_signatures);
+          }
+
+          node_save($node);
+          mongodb_page_save($page_data);
+        }
+
+        if ($page_data && !empty($page_data['summary'])) {
+          $children_content = array();
+          if (!empty($page_data['tree'])) {
+            foreach ($page_data['tree'] as $item) {
+              if(!empty($item['etat']) && $item['etat'] != 'VIGUEUR' && !empty($item['tag_name']) && $item['tag_name'] == 'section_ta'){
+                continue;
+              }
+              $text = implode('<br />', _batire_xml_parse_soarticle_get_bodies_recursive($item, TRUE, $page_data['etat']));
+              if ($text) {
+                $children_content[] = $text;
+              }
+            }
+          }
+          if ($children_content) {
+            if (!empty( $page_data['content']['consolidation'])) {
+              unset($page_data['content']['consolidation']);
+            }
+            $page_data['content']['children'] = implode('<br />', $children_content);
+          } else {
+              $versions = batire_hierarchy_get_versions($page_data['id'], $page_data['doc_type']);
+              $last = array_shift($versions);
+              if ($last && $last->bid != $page_data['bid']) {
+                //consolidated document link must be here
+                $page_data['content']['consolidation'] = l(t("Afficher le texte consolidé"), 'node/' . $last->nid);
+              }
+              if (!empty( $page_data['content']['children'])) {
+                unset($page_data['content']['children']);
+              }
+          }
+          mongodb_page_save($page_data);
+        } else {
+          $page_data['content'] = array_merge($page_data['content'], _batire_xml_parse_soarticle_get_to_links($page_data));
+          mongodb_page_save($page_data);
+          //try to queue complete
+          if (!empty($page_data['persistent']) && !empty($page_data['persistent']['super_bid'])) {
+            $super_page_data = mongodb_page_get_page_by_bid($page_data['persistent']['super_bid']);
+            if ($super_page_data && !empty($super_page_data['nid'])) {
+              batire_xml_parse_queue_content($super_page_data['nid']);
+            }
+          }
+        }
+
+        if(isset($page_data['attached']) && $page_data['attached'] && !empty($page_data['tree'])) {
+          $descriptions = array();
+          foreach ($page_data['tree'] as $item) {
+            $descriptions = array_merge($descriptions, _batire_xml_parse_soarticle_get_pdf_description_recursive($item, $page_data['etat']));
+          }
+
+          if($descriptions) {
+            foreach ($page_data['attached'] as &$file) {
+              if(isset($descriptions[$file['filename']])) {
+                $file['description'] = $descriptions[$file['filename']];
+              }
+            }
+            mongodb_page_save($page_data);
+          }
+        }
+      }
+  }
+}
+
+
+/**
+ * Parse elementnorme document
+ *
+ * @param DOMDocument $dom
+ * @param array $data
+ */
+function _batire_xml_parse_soarticle_parse(&$data, $dom) {
+  $data['doc_type'] = $data['type'] == 'CODE' ? BATIRE_HIERARCHY_DT_CODE : BATIRE_HIERARCHY_DT_TEXTE_OFFICIEL;
+  $doc_type = batire_hierarchy_get_doc_type($data['doc_type']);
+
+  $xpath = batire_xml_get_xpath($dom);
+
+  // '*' is articleglm or texteglm tag
+  $parsed = batire_xml_multiple_node_value_get($xpath, array(
+    'etat' => '/qc:doc-root/qc:doc-meta/ns0:etatLegi',
+    'type_du_document' => '/qc:doc-root/qc:doc-meta/ns0:natureTexteN',
+    'is_single' => '/qc:doc-root/qc:doc-meta/xms:product',
+    'sir_id' => '/qc:doc-root/qc:doc-meta/ns0:idSir',
+    'legi_id' => '/qc:doc-root/qc:doc-meta/ns0:idLegi',
+    'nature' => '/qc:doc-root/qc:doc-meta/ns0:natureN',
+    'num_art' => '/qc:doc-root/qc:doc-meta/ns0:numArt',
+    'codes_de_textes' => '/qc:doc-root/qc:doc-meta/ns0:titreTexteN',
+    'cidtexte' => '/qc:doc-root/qc:doc-meta/ns0:cidTexte',
+    'updateExistOnLegifrance' => '/qc:doc-root/qc:doc-meta/ns0:updateExistOnLegifrance',
+    'num_texte' => '/qc:doc-root/qc:doc-meta/ns0:numTexte',
+    'natureTexte' => '/qc:doc-root/qc:doc-meta/ns0:naturetexte',
+    'xms_title' => '/qc:doc-root/qc:doc-meta/xms:title',
+    'coquillevide' => '/qc:doc-root/qc:doc-meta/ns0:coquillevide',
+    'etat_texte' => '/qc:doc-root/qc:doc-meta/ns0:etatLegiTexte',
+    'origine' => '/qc:doc-root/qc:doc-meta/ns0:origine',
+    'date_texte' => '/qc:doc-root/qc:doc-meta/ns0:dateTexte',
+    'date_publi' => '/qc:doc-root/qc:doc-meta/ns0:datePubli',
+    'date_document' => '/qc:doc-root/qc:doc-meta/ns0:date-document',
+    'date_editoriale' => '/qc:doc-root/qc:doc-meta/ns0:date-editoriale',
+    'date_debut' => '/qc:doc-root/qc:doc-meta/ns0:dateDebut',
+    'date_fin' => '/qc:doc-root/qc:doc-meta/ns0:dateFin',
+    'date_debut_art' => '/qc:doc-root/qc:doc-meta/ns0:dateDebutArt',
+    'date_fin_art' => '/qc:doc-root/qc:doc-meta/ns0:dateFinArt',
+    'date_decision' => '/qc:doc-root/qc:doc-meta/ns0:dateDecision',
+    'num_sequence' => '/qc:doc-root/qc:doc-content/*/meta_texte_chronicle/num_seuence',
+    'nor' => '/qc:doc-root/qc:doc-meta/ns0:nor',
+    'origine_publi' => '/qc:doc-root/qc:doc-content/*/meta_texte_chronicle/origine_publi',
+    'page_deb_publi' => '/qc:doc-root/qc:doc-content/*/meta_texte_chronicle/page_deb_publi',
+    'page_fin_publi' => '/qc:doc-root/qc:doc-content/*/meta_texte_chronicle/page_fin_publi',
+    'titrecourt' => '/qc:doc-root/qc:doc-content/*/meta_texte_version/titrecourt',
+    'titre' => '/qc:doc-root/qc:doc-content/*/meta_texte_version/titrefull',
+    'metatitre' => '/qc:doc-root/qc:doc-content/*/article/meta_article/titre',
+    'hierarchy' => '/qc:doc-root/qc:doc-content/*/article/contexte',
+    'nombre_mots' => '/qc:doc-root/qc:doc-meta/ns0:taille',
+    'texte_fondamental' => '/qc:doc-root/qc:doc-meta/ns0:texteFondamental'
+    )
+  );
+  $parsed['super_id'] = $parsed['cidtexte'];
+
+  if (array_key_exists('is_single', $parsed) && !empty($parsed['is_single'])) {
+    $parsed['is_single'] = ($parsed['is_single'] == 'SO_ARTICLE' ? TRUE : FALSE);
+  } else {
+    $parsed['is_single'] = FALSE;
+  }
+  $data = array_merge($data, $parsed);
+  $data['id'] = $data['legi_id'] ? $data['legi_id'] : $data['sir_id'];
+
+  if ($parsed['origine'] == 'JORF') {
+    $data['jorf'] = batire_xml_multiple_node_value_get($xpath, array(
+      'num_sequence' => '/qc:doc-root/qc:doc-content/*/meta_texte_chronicle/num_sequence',
+      'origine_publi' => '/qc:doc-root/qc:doc-content/*/meta_texte_chronicle/origine_publi',
+      'page_deb_publi' => '/qc:doc-root/qc:doc-content/*/meta_texte_chronicle/page_deb_publi',
+      'page_fin_publi' => '/qc:doc-root/qc:doc-content/*/meta_texte_chronicle/page_fin_publi',
+      )
+    );
+  }
+
+  $data['taxonomy'] = batire_xml_get_taxonomy($xpath);
+
+  $file_nodes = $xpath->query('//xms:attached-to');
+  if (is_object($file_nodes) && $file_nodes->length > 0) {
+    foreach ($file_nodes as $file_node) {
+      $data['attached'][] = $file_node->nodeValue;
+    }
+  }
+
+  $links = $xpath->query('/qc:doc-root/qc:doc-content//meta/liens/lien[(not(@coquillevide) or @coquillevide="false")]');
+  if (is_object($links) && $links->length > 0) {
+    foreach ($links as $link) {
+      $link_arr = batire_xml_multiple_node_value_get($xpath, array(
+        'id' => '@id',
+        'title' => '.',
+        'type' => '@typelien',
+        'sens' => '@sens',
+        ), $link);
+      if (!$link_arr['id']) {
+        $link_arr['id'] = '000000';
+      }
+      $link_arr['bid'] = batire_hierarchy_get_document_bid($link_arr['id'], $doc_type['name']);
+      _batire_xml_parse_soarticle_normalize_link_type($link_arr);
+      $data['links'][] = $link_arr;
+    }
+  }
+
+  $content_node = $xpath->query('/qc:doc-root/qc:doc-content/*')->item(0);
+  switch (strtoupper($content_node->tagName)) {
+    case 'JURIGLM':
+      //@TODO: implement next part
+      /**
+      $return['taxonomy']['juridiction_1'] = cp_xml_parse_get_meta_data($xpath, 'ns0', 'typeDecision', $filename);
+      $return['taxonomy']['juridiction_2'] = cp_xml_parse_get_meta_data($xpath, 'ns0', 'juridictionN', $filename);
+      $return['taxonomy']['juridiction_3'] = cp_xml_parse_get_meta_data($xpath, 'ns0', 'siege', $filename);
+      **/
+      $parties = batire_xml_xpath_run_query($xpath, '//meta_juri/parties/partie');
+      if ($parties) {
+        $data['parties'] = array();
+        foreach ($parties as $party_node) {
+          $data['parties'][] = batire_xml_node_value_get($xpath, ".", $party_node);
+        }
+      }
+      $data['date_document'] = $parsed['date_decision'];
+      $data['formation'] = batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/ns0:formation");
+      $data['num_dec'] = batire_xml_node_value_get($xpath, "//meta_juri/numero");
+      $data['form_dec_att'] = batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/ns0:decisionAtt");
+      $data['date_dec_att'] = batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/ns0:dateDecisionAtt");
+      $data['solution'] = batire_xml_node_value_get($xpath, "//meta_juri/solution");
+      $data['body'] = array(
+        'content' => batire_xml_node_xml_get($xpath, '//texte/contenu'),
+        'summary' => batire_xml_node_xml_get($xpath, '//texte/sommaire')
+      );
+      $data['title'] = $data['titre'];
+      break;
+
+    case 'TEXTEGLM':
+    // Process dateFin and dateDebut cases for TOcompletes
+      if (in_array($data['etat'], array('VIGUEUR_DIFF', 'DISJOINT', 'SUBSTITUE', 'MODIFIE'))) {
+        $data['date_document'] = $data['date_debut'];
+      }
+      if (in_array($data['etat'], array('ABROGE_DIFF', 'ABROGE', 'ANNULE', 'PERIME', 'TRANSFERE'))) {
+        $data['date_document'] = $data['date_fin'];
+      }
+      $data['body'] = array(
+        'visas' => batire_xml_node_xml_get($xpath, 'visas', $content_node),
+        'signatures' => batire_xml_node_xml_get($xpath, 'signataires', $content_node),
+        'nota' => batire_xml_node_xml_get($xpath, 'nota', $content_node),
+        'tp' => batire_xml_node_xml_get($xpath, 'tp', $content_node)
+      );
+      $data['summary'] = FALSE;
+      if (drupal_strtoupper($data['type_du_document']) == 'CODE' && drupal_strtoupper($data['codes_de_textes']) == drupal_strtoupper($data['titre'])) {
+        $data['summary_codes'] = TRUE;
+      } elseif ($xpath->evaluate('count(//texteglm/section_ta[child::section_ta or lien_art])')) {
+        $data['summary'] = TRUE;
+      } elseif ($xpath->evaluate('count(//texteglm/section_ta)')){
+        $data['summary'] = TRUE;
+        $data['empty_summary'] = TRUE;
+      }
+      if ($data['summary'] && $data['cidtexte'] == $data['id'] && $data['origine'] == 'JORF') {
+        $data['jorf_summary'] = TRUE;
+      }
+      $data['title'] = $data['titre'];
+      break;
+    case 'ARTICLEGLM':
+      $data['date_document'] = $data['date_debut_art'];
+      if ($data['type'] == 'CODE') {
+        // Process dateFinArt cases for Code articles
+        if (in_array($data['etat_texte'], array('ABROGE', 'VIGUEUR')) && in_array($data['etat'], array('ABROGE_DIFF', 'ABROGE', 'TRANSFERE', 'MODIFIE_MORT_NE'))) {
+          $data['date_document'] = $data['date_fin_art'];
+        }
+      } else {
+        // Process dateFinArt cases for articles TO
+        if (in_array($data['etat'], array('ABROGE_DIFF', 'ABROGE', 'TRANSFERE', 'MODIFIE_MORT_NE'))) {
+          $data['date_document'] = $data['date_fin_art'];
+        }
+      }
+      $data['body'] = array(
+        'content' => batire_xml_node_xml_get($xpath, 'article/contenu', $content_node),
+        'nota' => batire_xml_node_xml_get($xpath, 'article/nota', $content_node)
+      );
+
+      $attachment_description = $xpath->query('/qc:doc-root/qc:doc-content/articleglm/article/contenu//a');
+      if (is_object($attachment_description) && $attachment_description->length > 0) {
+        $data['attachment_description'] = array();
+        foreach ($attachment_description as $description) {
+          $item = batire_xml_multiple_node_value_get($xpath, array(
+            'pdf' => '@href',
+            'desc' => '@title',
+          ), $description);
+
+          $data['attachment_description'][$item['pdf']] = $item['desc'];
+        }
+      }
+
+      $versions = $xpath->query('/qc:doc-root/qc:doc-content/articleglm//versions_art/lien_art');
+      if (is_object($versions) && $versions->length > 0) {
+        foreach ($versions as $version) {
+          $item = batire_xml_multiple_node_value_get($xpath, array(
+            'id' => '@id | @idsir',
+            'etat' => '@etat',
+            'date_debut' => '@debut',
+            'date_fin' => '@fin',
+            'num' => '@num'
+          ), $version);
+          if ($date = batire_xml_parse_convert_date($item['date_debut'])) {
+            $item['date_debut'] = $date;
+          }
+          if ($date = batire_xml_parse_convert_date($item['date_fin'])) {
+            $item['date_fin'] = $date;
+          }
+          $data['versions'][] = $item;
+        }
+        //sort by dates, newest - first
+        usort($data['versions'], '_batire_xml_parse_soarticle_sort_versions');
+      }
+      if (!empty($parsed['num_art'])) {
+        $data['title'] = (stripos($parsed['num_art'], 'annexe') === FALSE) ? 'Article ' .$parsed['num_art'] : $parsed['num_art'];
+      } else {
+        $data['title'] = $data['titre'];
+      }
+
+      break;
+    default:
+      $data['errors'][] = 'Unknown content type for SO: ' . $content_node->tagName;
+      break;
+  }
+  foreach ($data as $name => $value) {
+    if (substr($name, 0, 5) == 'date_') {
+      $date = batire_xml_parse_convert_date($value);
+      if ($date) {
+        if (strlen((string) $date) > 9 && $date < 0) {//task #64266, date in timestamp wich have more than 9 bits and < 0 save like string
+          $data[$name] = (string) $date;
+        } else {
+          $data[$name] = $date;
+        }
+      }
+    }
+  }
+
+//  if ($data['summary']) {
+//    $data['id'] = $data['super_id'];
+//  }
+
+
+  $data['vide'] = is_numeric($data['date_document']) ? 0 : 1;
+  $data['page_version'] =  is_int($data['date_document']) ? $data['date_document'] : (is_int($data['date_publi']) ? $data['date_publi'] : $data['date_debut']); //@TODO: make versioning better
+  $data['bid'] = batire_hierarchy_get_document_bid($data['id'], $data['doc_type']);
+  $data['super_bid'] = batire_hierarchy_get_document_bid($parsed['super_id'],  $data['doc_type']);
+
+  //Hierarchy
+  $dom_nodes = batire_xml_xpath_run_query($xpath, "//texteglm/section_ta[child::section_ta or lien_art]");
+  if ($dom_nodes && $dom_nodes->length) {
+    $data['to_complete'] = TRUE;
+    $data['tree'] = _batire_xml_parse_soarticle_summary_parse_recursive($dom_nodes->item(0), $xpath, $doc_type['name'], $data['id'], $data['bid']);
+  }
+
+  if ((!empty($data['summary'])) || !empty($data['to_complete'])) {
+    $data['parent_id'] = $data['super_id'];
+    $data['parent_bid'] = $data['super_bid'];
+  }
+
+  // links
+  $data['links'] = batire_xml_get_links($xpath, $data['doc_type']);
+}
+
+function _batire_xml_parse_soarticle_summary_parse_recursive($dom_node, $xpath, $data_type, $parent_id, $parent_bid) {
+
+  $documentNodeList = $xpath->query('section_ta | lien_art', $dom_node);
+  $data = array();
+  if (is_object($documentNodeList) && $documentNodeList->length > 0) {
+    $count = 0;
+    foreach ($documentNodeList as $documentNode) {
+      $count++;
+      // <lien_art debut="2011-06-01" etat="VIGUEUR" fin="2999-01-01" id="LEGIARTI000023985176" idsir="15219916" num="L100-1" origine="LEGI"/>
+      $page = batire_xml_multiple_node_value_get($xpath, array(
+        'id' => './@id',
+        'title' => './titre_ta',
+        'debut' => './@debut',
+        'fin' => './@fin',
+        'cid' => './@cid',
+        'etat' => './@etat',
+        'niv' => './@niv',
+        'idsir' => './@idsir',
+        'num' => './@num',
+        'origine' => './@origin'
+        ), $documentNode);
+      $page['tag_name'] = $documentNode->nodeName;
+      $page['type'] = $data_type;
+      $page['bid'] = batire_hierarchy_get_document_bid($page['id'], $data_type);
+      $page['parent_id'] = $parent_id;
+      $page['parent_bid'] = $parent_bid;
+      $page['position'] = $count;
+      if ($documentNode->nodeName == 'section_ta'){
+        $page['tree'] = _batire_xml_parse_soarticle_summary_parse_recursive($documentNode, $xpath, $data_type, $page['id'], $page['bid'] );
+      }
+      $data[] = $page;
+    }
+  }
+
+  return $data;
+}
+
+
+/**
+ * Save stored data
+ *
+ * @param array &$data
+ * @param DOMDocument $dom
+ */
+function _batire_xml_parse_soarticle_store(&$data, $dom) {
+  $doc_type = batire_hierarchy_get_doc_type($data['doc_type']);
+
+ //Check if document already exists
+  $hierarchy = batire_hierarchy_get_by_bid($data['bid']);
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+  } else {
+    //create new document
+    $node = new stdClass();
+    $node->type = $doc_type['content_type'];
+    $node->uid = 1; //@TODO: use some user from settings
+  }
+
+  /*
+   * Verification for ALERTS
+   * see #58006
+   */
+  $hierarchy_type = array('batire_codes' => BATIRE_HIERARCHY_DT_CODE, 'batire_texte_officiel' => BATIRE_HIERARCHY_DT_TEXTE_OFFICIEL);
+  $versions = batire_hierarchy_get_versions($data['id'], $hierarchy_type[$node->type]);
+  $data['alerted'] = 1;
+  if (!empty($versions)) {
+    $last_existing_version = node_load($versions[0]->nid); //take last version without one which is importing
+    if ($last_existing_version->page_data['date_document'] < $data['date_document']) {
+      $data['alerted'] = 0;
+    }
+    elseif (isset($last_existing_version->page_data['date_editoriale']) && isset($data['date_editoriale'])) {
+      if ($last_existing_version->page_data['date_editoriale'] < $data['date_editoriale']) {
+        $data['alerted'] = 0;
+      }
+      elseif (($last_existing_version->page_data['date_editoriale'] == $data['date_editoriale']) || ($last_existing_version->page_data['date_document'] == $data['date_document'])) { //re-import (same document)
+        $data['alerted'] = $last_existing_version->page_data['alerted'];
+      }
+    }
+    elseif (!isset($last_existing_version->page_data['date_editoriale']) && isset($data['date_editoriale'])) {
+      $data['alerted'] = 0;
+    }
+  }
+  /*
+   * date_editoriale always needs to present
+   */
+  if (!isset($data['date_editoriale']) || empty($data['date_editoriale'])) {//if we haven't date_editoriale in xml
+    if (!isset($node->page_data['date_editoriale'])) {//if node already exist and haven't date_editorial
+      $data['date_editoriale'] = $node->created;//then set to date_created
+    }
+    else {
+      $data['date_editoriale'] = time();
+    }
+  }
+  //Article hors numerotation becomes Article
+  if (strrpos($data['title'], 'hors numerotation') !== FALSE) {
+    $data['title'] = 'Article';
+  }
+  $node->title = $data['title'];
+
+  $taxonomy = array();
+  $taxonomy[] = $doc_type['tid'];
+  if ($data['type'] == 'TO') {
+    $node->field_document_fundamental = array(array('value' => (strtolower($data['texte_fondamental'])=='true' ? 1 : 0 )  ) );
+    $term = batire_xml_parse_search_term($data['nature'], BATIRE_SITE_VID_TO, NULL, 'description');
+    if ($term) {
+      $taxonomy[] = $term['tid'];
+    } else {
+      $term = batire_xml_parse_search_term('AUTRE_TYPE_DE_TO', BATIRE_SITE_VID_TO, NULL, 'description');
+      $taxonomy[] = $term['tid'];
+    }
+  } else {
+    $term = batire_xml_parse_search_term($data['codes_de_textes'], BATIRE_SITE_VID_CODES, NULL);
+    if ($term) {
+      $taxonomy[] = $term['tid'];
+    }
+  }
+  //  Hard code
+      if ($data['etat_texte'] == 'VIGUEUR') {
+        $data['etat_texte'] = 'EN VIGUEUR';
+      }
+  //
+
+
+  $data_map = array(
+    'date_debut' => 'field_date_initial',
+    'date_document' => 'field_juri_date',
+    'vide' => 'field_date_vide',
+    'nor' => 'field_number_nor',
+    'num_art' => 'field_code_number',
+    'etat_texte' => 'field_juri_status'
+  );
+  foreach ($data_map as $from => $to) {
+    if (is_numeric($from)) {
+      $from = $to;
+      $to = 'field_' . $to;
+    }
+    if (isset($data[$from]) && !is_null($data[$from])) {
+      $node->{$to} = array(array('value' => $data[$from]));
+    } elseif (isset($node->{$to})) {
+      unset($node->{$to});
+    }
+  }
+
+  $node->language = 'fr';
+  $node->parsed_data = $data;
+  if (isset($data['jorf'])) {
+    $node->field_jorf = array(array('value' => serialize($data['jorf'])));
+  }
+  $taxonomy = array_merge($taxonomy, $data['taxonomy']);
+  $node->taxonomy = array_unique($taxonomy);
+
+  $node->field_import_date = array(array('value' => time()));
+
+  $node->parsed_data = $data;
+  node_save($node);
+
+  $data['node'] = $node;
+  $data['op'] = $node->is_new ? 'add' : 'edit';
+
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+  if (isset($data['tree']) && !empty($data['tree'])) {
+    $result = _batire_xml_parse_soarticle_summary_store_tree_recursive($data['tree'], $data['bid'] , $data['bid'], array($hierarchy));
+    batire_hierarchy_cache_clear(TRUE);
+  } else {
+    $page_data = mongodb_page_get_page_by_bid($data['bid']);
+    if (!empty($page_data['persistent']) && !empty($page_data['persistent']['super_bid'])) {
+      $super_page_data = mongodb_page_get_page_by_bid($page_data['persistent']['super_bid']);
+      if ($super_page_data && !empty($super_page_data['nid'])) {
+        batire_xml_parse_queue_content($super_page_data['nid']);
+      }
+    }
+  }
+  // links
+  batire_store_links($data['bid'], $data['id'], $data['links']);
+
+  $cites = batire_antidot_export_get_cites($data['bid']);
+  $node->field_cites = array();
+  foreach ($cites as $cite) {
+    $node->field_cites[]['value'] = $cite;
+  }
+  if (isset($data['attached']) && !empty($data['attached'])) {
+    $node->parsed_data['attached'] = $data['attached'];//override variable, after nodeapi hooks it has incorrect structure
+  }
+
+  node_save($node);
+}
+
+function _batire_xml_parse_soarticle_summary_store_tree_recursive($children, $parent_bid, $super_bid, $trail) {
+
+  //$doc_type = batire_hierarchy_get_doc_type($childre);
+
+  $result = TRUE;
+  foreach ($children as $position => $child) {
+    if (!$child['title']) {
+        unset($child['title']);
+    }
+
+//    $child_row->type = batire_hierarchy_get_doc_type($child['type']);
+//    $child_row->type = $child_row->type['content_type'];
+//    batire_hierarchy_update_smart($child_row);
+//    batire_hierarchy_attach_children($parent_bid, $child_row->bid, $position, $parent_id);
+    if (isset($child['tree']) && !empty($child['tree'])) {
+      $hierarchy = batire_hierarchy_get_by_bid($child['bid']);
+      if (!$hierarchy) {
+        $hierarchy = $child;
+        unset($hierarchy['tree']);
+      }
+      $result = _batire_xml_parse_soarticle_summary_store_tree_recursive($child['tree'], $child['bid'], $super_bid, array_merge($trail, array($hierarchy))) && $result;
+    }
+    $data = mongodb_page_get_page_by_bid($child['bid']);
+    if ($data) {
+      $persistent = array(
+        'super_bid' => $super_bid,
+        'parent_bid' => $parent_bid,
+        'trail' => $trail
+      );
+      /*
+       * Codes trail table
+       */
+      foreach ($trail as $value) {
+        $value = (object) $value;
+        if ($data['type'] == 'batire_codes') {
+          $sql = 'SELECT * FROM {batire_codes_trail} WHERE bid ="%s" LIMIT 1';
+          if (!db_result(db_query($sql, $value->bid))) {
+            db_query('INSERT INTO {batire_codes_trail} SET bid = "%s", parent_bid = "%s",title = "%s"', $value->bid, $super_bid, $value->title);
+          }
+        }
+      }
+      //small optimisation, resave doc only when need this because saving is too long
+      if (empty($data['persistent'])) {
+        $data['persistent'] = $persistent;
+        mongodb_page_save($data);
+      } elseif (serialize($persistent) != serialize($data['persistent'])) {
+        $data['persistent'] = array_merge($data['persistent'], $persistent);
+        mongodb_page_save($data);
+      }
+    }
+  }
+  return $result;
+}
+
+//function _batire_xml_parse_soarticle_set_superbid($children, $super_bid, $original_super_bid) {
+//    if ($children->nid) {
+//      $data = mongodb_page_get_node_page($children->nid);
+//      $data['original_super_bid'] = $original_super_bid;
+//      $data['super_bid'] = $super_bid;
+//      $collection = mongodb_page_get_collection();
+//      $keys = array('nid' => $data['nid'], 'bid' => $data['bid']);
+//      mongodb_update(MONGODB_PAGE_COLLECTION, $keys, $data);
+//  }
+//  if ($children->chidlren) {
+//    foreach ($children->children as $child) {
+//      _batire_xml_parse_soarticle_set_superbid($child, $super_bid, $original_super_bid);
+//    }
+//  }
+//}
+
+
+/*
+ * Normalize links types
+ *
+ * @param $data
+ *  Parsed data
+ *
+ * @return $title
+ *  Processed title
+ */
+function _batire_xml_parse_soarticle_normalize_link_type(&$link) {
+  // Normalize links type
+
+  // First table
+  if ((drupal_strtoupper($link['type']) == 'ABROGE' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'ABROGATION' && $link['sens'] == 'source')) {
+    $link['type'] = 'ABROGATION';
+  } elseif ((drupal_strtoupper($link['type']) == 'CREE' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'CREATION' && $link['sens'] == 'source')) {
+    $link['type'] = 'CREATION';
+  } elseif ((drupal_strtoupper($link['type']) == 'MODIFIE' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'MODIFICATION' && $link['sens'] == 'source')) {
+    $link['type'] = 'MODIFICATION';
+  } elseif ((drupal_strtoupper($link['type']) == 'TRANSFERE' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'TRANSFERT' && $link['sens'] == 'source')) {
+    $link['type'] = 'TRANSFERT';
+  } elseif ((drupal_strtoupper($link['type']) == 'PERIME' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'PEREMPTION' && $link['sens'] == 'source')) {
+    $link['type'] = 'PEREMPTION';
+  } elseif ((drupal_strtoupper($link['type']) == 'DISJOINT' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'DISJONCTION' && $link['sens'] == 'source')) {
+    $link['type'] = 'DISJONCTION';
+  } elseif ((drupal_strtoupper($link['type']) == 'ANNULE' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'ANNULATION' && $link['sens'] == 'source')) {
+    $link['type'] = 'ANNULATION';
+  } elseif (drupal_strtoupper($link['type']) == 'CITATION' && $link['sens'] == 'cible') {
+    $link['type'] = 'CITE';
+  }
+  // Second table
+  elseif ((drupal_strtoupper($link['type']) == 'ABROGATION' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'ABROGE' && $link['sens'] == 'source')) {
+    $link['type'] = 'ABROGE';
+  } elseif ((drupal_strtoupper($link['type']) == 'CREATION' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'CREE' && $link['sens'] == 'source')) {
+    $link['type'] = 'CREE';
+  } elseif ((drupal_strtoupper($link['type']) == 'MODIFICATION' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'MODIFIE' && $link['sens'] == 'source')) {
+    $link['type'] = 'MODIFIE';
+  } elseif ((drupal_strtoupper($link['type']) == 'TRANSFERT' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'TRANSFERE' && $link['sens'] == 'source')) {
+    $link['type'] = 'TRANSFERE';
+  } elseif ((drupal_strtoupper($link['type']) == 'PEREMPTION' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'PERIME' && $link['sens'] == 'source')) {
+    $link['type'] = 'PERIME';
+  } elseif ((drupal_strtoupper($link['type']) == 'DISJONCTION' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'DISJOINT' && $link['sens'] == 'source')) {
+    $link['type'] = 'DISJOINT';
+  } elseif ((drupal_strtoupper($link['type']) == 'ANNULATION' && $link['sens'] == 'cible') || (drupal_strtoupper($link['type']) == 'ANNULE' && $link['sens'] == 'source')) {
+    $link['type'] = 'PERIME';
+  }
+}
+
+function  _batire_xml_parse_soarticle_sort_versions($a, $b) {
+  if ($a['date_debut'] == $b['date_debut']) { //equal dates
+    if (substr($a['id'], 0, 1) == substr($b['id'], 0, 1)) { //bioth are legi
+      return $a['id'] < $b['id'] ? -1 : 1; //order by id
+    } else {
+      return substr($a['id'], 0, 1) == "J" ? -1 : 1; //jorf is less
+    }
+  }
+  return $a['date_debut'] > $b['date_debut'] ? 1 : -1;
+}
+
+function _batire_xml_parse_soarticle_get_bodies_recursive($item, $add_title = TRUE, $root_version = '') {
+  $result = array();
+  $page_data= mongodb_page_get_page_by_bid($item['bid']);
+  if ($page_data) {
+    if (!_batire_hierarchy_match_version($root_version, $page_data['etat'], $page_data['bid'])) {
+      return $result;
+    }
+
+    $text = '';
+    if (isset($page_data['num_art']) && $page_data['num_art'] != FALSE) {
+      $text = '<div class="document-content-inline-elements">' . ($add_title ?
+              '<div class="document-content-title-4">' . l($page_data['title'],  'node/' . $page_data['nid'], array('attributes' => array('style' => "color: #0096DB; text-decoration: none;"))) . '</div>' : '' );
+      // Show Plus d'infos link only when referenced document has citations.
+      if ((isset($page_data['content']['citation']) && !empty($page_data['content']['citation'])) ||
+          (isset($page_data['content']['cited']) && !empty($page_data['content']['cited']))) {
+        $text .= '<div class="document-content-link">'. l('Plus d\'infos',  'node/' . $page_data['nid']). '</div>';
+      }
+      $text .= '</div>';
+    }
+
+    $text .= _batire_xml_parse_soarticle_get_body($page_data);
+
+    if ($text) {
+      $result[] = $text;
+    }
+
+  } else {
+    $etat = '';
+    if (isset($item['etat']) && $item['etat']) {
+      if (drupal_strtoupper($item['etat']) == 'ABROGE') {
+        $etat = ' (' . t('abrogé') . ')';
+      }
+    }
+
+    $text = '<div class="document-content-title-4" style="color:#766d69; padding-left:'.($item['niv']*50-50).'px">' . $item['title'] . $etat . '</div>';
+    $result[] = $text;
+  }
+
+  if (!empty($item['tree'])) {
+    foreach ($item['tree'] as $child) {
+      $result = array_merge($result, _batire_xml_parse_soarticle_get_bodies_recursive($child, $add_title, $root_version));
+    }
+  }
+  return $result;
+}
+
+function _batire_xml_parse_soarticle_get_pdf_description_recursive($item, $root_version = '') {
+  $result = array();
+  $page_data= mongodb_page_get_page_by_bid($item['bid']);
+  if ($page_data) {
+    if (!_batire_hierarchy_match_version($root_version, $page_data['etat'], $page_data['bid'])) {
+      return $result;
+    }
+
+    if(isset($page_data['attachment_description']) && $page_data['attachment_description']) {
+      $result = $page_data['attachment_description'];
+    }
+  }
+
+  if (!empty($item['tree'])) {
+    foreach ($item['tree'] as $child) {
+      $result = array_merge($result, _batire_xml_parse_soarticle_get_pdf_description_recursive($child, $root_version));
+    }
+  }
+  return $result;
+}
+
+/**
+ * Get body
+ * @param object $node
+ * @return string
+ */
+function _batire_xml_parse_soarticle_get_body($data) {
+  if (!empty($data['content']) && is_array($data['content'])) {
+    $data_copy = array_merge($data['content'], _batire_xml_parse_soarticle_get_to_links($data));
+    $result = array();
+    $keys = array('top', 'content', 'contenu', 'nota', 'signatures', 'visas', 'children', 'tp', 'bottom');
+    foreach ($keys as $key) {
+      if (array_key_exists($key, $data_copy)) {
+        $result[] = $data_copy[$key];
+      }
+    }
+    return implode("\n", $result);
+  }
+  return FALSE;
+}
+
+/**
+ * Generate links for to document
+ */
+function _batire_xml_parse_soarticle_get_to_links($data) {
+  if (!$data) {
+    return FALSE;
+  }
+  //if ( $data['type'] != BATIRE_SITE_CT_TO ) {
+  //  return FALSE;
+  //}
+
+  $result = array(
+    'top'      => array(),
+    'bottom'   => array(),
+    'citation' => array(),
+    'cited'    => array(),
+  );
+
+  if (isset($data['links']) && isset($data['links'][0]['bid']) && $data['links'][0]['bid']) {
+    foreach($data['links'] as $link) {
+      if ($link['type']) {
+        $prefix = '';
+        $key = FALSE;
+        switch($link['type']) {
+          case 'ABROGATION':
+            $prefix = t('Abrogé par');
+            $key = 'top';
+            break;
+          case 'CODIFICATION':
+            $prefix = t('Codifié par');
+            $key = 'top';
+            break;
+          case 'CREATION':
+            $prefix = t('Créé par');
+            $key = 'top';
+            break;
+          case 'MODIFICATION':
+            $prefix = t('Modifié par');
+            $key = 'top';
+            break;
+          case 'TRANSFERT':
+            $prefix = t('Transféré par');
+            $key = 'top';
+            break;
+          case 'PEREMPTION':
+            $prefix = t('Périmé par');
+            $key = 'top';
+            break;
+          case 'DISJONCTION':
+            $prefix = t('Disjoint par');
+            $key = 'top';
+            break;
+          case 'ANNULATION':
+            $prefix = t('Annulé par');
+            $key = 'top';
+            break;
+          case 'ABROGE':
+            $prefix = t('Abroge');
+            $key = 'bottom';
+            break;
+          case 'CODIFIE':
+            $prefix = t('Codifie');
+            $key = 'bottom';
+            break;
+          case 'CREE':
+            $prefix = t('Crée');
+            $key = 'bottom';
+            break;
+          case 'MODIFIE':
+            $prefix = t('Modifie');
+            $key = 'bottom';
+            break;
+          case 'TRANSFERE':
+            $prefix = t('Transfère');
+            $key = 'bottom';
+            break;
+          case 'PERIME':
+            $prefix = t('Périme');
+            $key = 'bottom';
+            break;
+          case 'DISJOINT':
+            $prefix = t('Disjoint');
+            $key = 'bottom';
+            break;
+          case 'ANNULE':
+            $prefix = t('Annule');
+            $key = 'bottom';
+            break;
+          case 'CITATION':
+            $key = 'citation';
+            break;
+          case 'CITE':
+            $key = 'cited';
+            break;
+          default:
+        }
+        $result[$key][] = $prefix .' '. l($link['title'], 'document/'. $link['bid'] );
+      }
+    }
+    if (!empty($data['body']['content'])) {
+      if (!_batire_xml_parse_check_TO_first_para($data['body']['content'])) {
+        $result['bottom'] = array();
+      }
+    }
+    else {
+      $result['bottom'] = array();
+    }
+  }
+  foreach($result as $key=>$value) {
+    if (!empty($value)) {
+      $result[$key] = '<br/><div class="document-content-text document-text-left">' . implode('<br/>', $value). '</div><br/>';
+    } else {
+
+    }
+    $result = array_diff($result, array(array()));
+  }
+
+  return $result;
+}
+
+function _batire_xml_parse_check_TO_first_para($xml) {
+  //set_error_handler('_cp_xslt_xml_error_handler');
+  $dom = new DOMDocument();
+  $dom->encoding = 'UTF-8';
+  $xml = str_replace(array('&hyphen;', '&rsquor;', '&mldr;', '\\'), array('-', '&rsquo;', '&hellip;', '&#92;'), $xml);
+  $xml = stripcslashes($xml);
+  $xml = '<xml>'. $xml .'</xml>';
+  try {
+    $dom->loadXML($xml);
+  } catch (DOMException $e) {
+    watchdog('CP XSL', 'Transformation failed with error: @error.', array(
+      '@error' => $e->getMessage(),
+    ), 3);
+  }
+  //restore_error_handler();
+  $xp = new DomXpath($dom);
+  $res = batire_xml_node_value_get($xp, '/xml/contenu/para');
+  $res = (array)$res;
+  $text = $res[0];
+  return (FALSE !== stripos($text, 'a modifi&eacute; les dispositions suivantes')) || (FALSE !== stripos($text, 'a modifié les dispositions suivantes'));
+}

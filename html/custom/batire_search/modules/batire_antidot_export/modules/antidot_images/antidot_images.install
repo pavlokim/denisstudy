@@ -1,0 +1,20 @@
+<?php
+/**
+ * User: Pavel Kim
+ * Date: 4/23/14
+ * Time: 6:49 PM
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function antidot_images_install() {
+
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function antidot_images_uninstall() {
+
+}

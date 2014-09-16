@@ -1,0 +1,7 @@
+name = 'MongoDB page'
+description = 'A document page data implementation using MongoDB'
+package = 'MongoDB'
+core = '6.x'
+dependencies[] = 'mongodb'
+dependencies[] = 'batire_hierarchy'
+

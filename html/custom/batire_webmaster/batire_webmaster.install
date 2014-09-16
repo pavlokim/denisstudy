@@ -1,0 +1,91 @@
+<?php
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_webmaster_install() {}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_webmaster_uninstall() {}
+
+/**
+ * Implementation of hook_requirements().
+ */
+function batire_webmaster_requirements($phase) {
+
+  $requirements = array();
+  // Ensure translations don't break at install time.
+  $t = get_t();
+
+  if ($phase == 'install' || $phase == 'runtime') {
+    $export_users_directory = file_create_path() . '/export_users';
+    if (!file_check_directory($export_users_directory, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+      if (!is_dir($export_users_directory)) {
+        $requirements['export_users_directory'] = array(
+          'title' => $t('Batire Export Users Directory'),
+          'value' => $t('%p is not a directory or is not readable by the webserver.', array('%p' => $export_users_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+      elseif (!is_writable($export_users_directory)) {
+        $requirements['export_users_directory'] = array(
+          'title' => $t('Batire Export Users Directory'),
+          'value' => $t('%p is not writeable by the webserver.', array('%p' => $export_users_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+    }
+
+    if (!is_writable(file_directory_temp())) {
+      $requirements['export_users_directory'] = array(
+        'title' => $t('Export Users Temp Directory'),
+        'value' => $t('%p is not writeable by the webserver.', array('%p' => file_directory_temp())),
+        'severity' => REQUIREMENT_ERROR,
+      );
+    }
+  }
+  return $requirements;
+}
+
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_webmaster_update_1() {
+  $requirements = array();
+  // Ensure translations don't break at install time.
+  $t = get_t();
+      $export_users_directory = file_create_path() . '/export_users';
+    if (!file_check_directory($export_users_directory, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+      if (!is_dir($export_users_directory)) {
+        $requirements['export_users_directory'] = array(
+          'title' => $t('Batire Export Users Directory'),
+          'value' => $t('%p is not a directory or is not readable by the webserver.', array('%p' => $export_users_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+      elseif (!is_writable($export_users_directory)) {
+        $requirements['export_users_directory'] = array(
+          'title' => $t('Batire Export Users Directory'),
+          'value' => $t('%p is not writeable by the webserver.', array('%p' => $export_users_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+    }
+
+    if (!is_writable(file_directory_temp())) {
+      $requirements['export_users_directory'] = array(
+        'title' => $t('Export Users Temp Directory'),
+        'value' => $t('%p is not writeable by the webserver.', array('%p' => file_directory_temp())),
+        'severity' => REQUIREMENT_ERROR,
+      );
+    }
+    return $requirements;
+    
+}

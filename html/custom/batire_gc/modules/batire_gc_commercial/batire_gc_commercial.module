@@ -1,0 +1,826 @@
+<?php
+
+define('BATIRE_GC_GC_COMMERCIAL_ROLE_ID', variable_get('batire_gc_gc_commercial_role_id', 0));
+define('BATIRE_GC_GC_USER_ROLE_ID', variable_get('batire_gc_gc_user_role_id', 0));
+define('BATIRE_GC_GC_COMMERCIAL_TERM_ID', variable_get('batire_gc_gc_commercial_term_id', 0));
+define('BATIRE_GC_GC_USER_TERM_ID', variable_get('batire_gc_gc_user_term_id', 0));
+
+define('BATIRE_GC_NO_SLOTS_ERROR_MESSAGE', variable_get('batire_gc_commercial_error_message', "<p>Vous avez été invité par <b>[prenom-administrateur] [nom-administrateur]</b> à vous inscrire sur le site Kheox pour bénéficier d'un accès à la base technique d'information réglementaire d'Afnor et du Groupe Moniteur.</p>
+<br />
+<p>Malheureusement le nombre de postes  disponibles dans le cadre de cet abonnement a été atteint et nous ne pouvons pas enregistrer votre demande.</p>
+<br />
+<p><b>[prenom-administrateur] [nom-administrateur]</b>, administrateur de cet abonnement, a été informé(e) que votre réponse positive à son invitation n'a pu être honorée.<br/>
+Nous vous prions de nous excuser pour ce désagrément et nous espérons que ce problème pourra être rapidement résolu.</p>
+<br />
+<p>Cordialement.<br />
+L'équipe KHEOX</p>"));
+
+define('BATIRE_GC_COMMERCIAL_ALLOWED_URLS', variable_get('batire_gc_commercial_allowed_urls', "admin/batire-site/gc/gc-users
+batire_gc_statistics/get"));
+
+define('BATIRE_GC_COMMERCIAL_DEMO_TDM_LOGIN', variable_get('batire_gc_commercial_demo_tdm_login', 'login'));
+define('BATIRE_GC_COMMERCIAL_DEMO_TDM_PASSWORD', variable_get('batire_gc_commercial_demo_tdm_password', 'pass'));
+define('BATIRE_GC_COMMERCIAL_DEMO_TDM_DISABLE_AUTH', variable_get('batire_gc_commercial_demo_tdm_disable_auth', 0));
+
+/**
+ * Implementation of hook_boot().
+ */
+function batire_gc_commercial_boot() {
+  $demo = isset($_GET['type']) && $_GET['type'] == 'demo';
+  if (!BATIRE_GC_COMMERCIAL_DEMO_TDM_DISABLE_AUTH && ($_GET['q'] == 'table-des-matieres') && $demo) {
+    if (!isset($_SERVER['PHP_AUTH_USER']) || !isset($_SERVER['PHP_AUTH_PW']) || $_SERVER['PHP_AUTH_USER'] != BATIRE_GC_COMMERCIAL_DEMO_TDM_LOGIN || $_SERVER['PHP_AUTH_PW'] != BATIRE_GC_COMMERCIAL_DEMO_TDM_PASSWORD) {
+      header('WWW-Authenticate: Basic realm="Demo Tdm Access"');
+      header('HTTP/1.0 401 Unauthorized');
+      exit;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_gc_commercial_init() {
+  global $user;
+  /*if (isset($user->roles[BATIRE_GC_GC_COMMERCIAL_ROLE_ID]) && $user->roles[BATIRE_GC_GC_COMMERCIAL_ROLE_ID]) {
+    $redirect = TRUE;
+    $allowed_urls = explode("\n", BATIRE_GC_COMMERCIAL_ALLOWED_URLS);
+    $allowed_urls = array_map('trim', $allowed_urls);
+    $allowed_urls[] = 'logout';
+    $allowed_urls[] = 'js';
+    $allowed_urls[] = 'table-des-matieres';
+    foreach ($allowed_urls as $allowed_url) {
+      if (strpos($_GET['q'], $allowed_url) === 0) {
+        $redirect = FALSE;
+        break;
+      }
+    }
+    if ($redirect) {
+      drupal_goto('admin/batire-site/gc/gc-users');
+    }
+  }*/
+  if (arg(0) == 'ajax') {
+    $GLOBALS['conf']['cache'] = FALSE;
+  }
+  drupal_add_js(
+    array(
+      'batire_gc_commercial' => array(
+        'invite_register_url' => url('js/batire_gc_commercial/invite-register'),
+      )
+    ), 'setting'
+  );
+  drupal_add_js(drupal_get_path('module', 'batire_gc_commercial') . '/scripts/invite_link_popup.js', 'module', 'footer');
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_gc_commercial_menu() {
+  $items = array();
+  $items['js/batire_gc_commercial/invite-register'] = array(
+    'page callback' => 'batire_gc_commercial_invite_register_js',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['batire_gc_commercial/invite-register/%'] = array(
+    'page callback' => 'batire_gc_commercial_invite_register',
+    'page arguments' => array(2),
+    'access arguments' => array('access content'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/batire-site/gc/commercial'] = array(
+    'title' => 'GC',
+    'description' => 'GC commercial settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_gc_commercial_admin_settings_form'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_gc_commercial.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/batire-site/users/add-gc-sales'] = array(
+    'title' => 'Add GC sales manager',
+    'description' => 'Add GC sales manager user',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_gc_commercial_add_sales_form'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_gc_commercial.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/batire-site/gc/gc-all-users'] = array(
+    'title' => 'GC sales list',
+    'page callback' => 'batire_gc_commercial_gc_all_users_list',
+    'access arguments' => array('administer batire configuration'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/batire-site/gc/gc-users'] = array(
+    'title' => 'GC sales list',
+    'page callback' => 'batire_gc_commercial_gc_sales_list',
+    'access arguments' => array('access content'),
+    'access callback' => 'batire_gc_commercial_is_gc_commercial',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/batire-site/gc/gc-users/%'] = array(
+    'title' => 'GC users list',
+    'page callback' => 'batire_gc_commercial_gc_users_list',
+    'page arguments' => array(4),
+    'access arguments' => array('access content'),
+    'access callback' => 'batire_gc_commercial_is_gc_commercial',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/batire-site/gc/gc-users/tdm'] = array(
+    'title' => 'TdM',
+    'page callback' => 'batire_gc_commercial_goto_tdm',
+    'access arguments' => array('access content'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['ajax/gc/header/block'] = array(
+    'title' => 'TdM',
+    'page callback' => 'batire_gc_commercial_get_gc_user_header_block',
+    'access arguments' => array('access content'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+/**
+ * Does current user have GC user role?
+ */
+function batire_gc_commercial_is_gc_user() {
+  global $user;
+  return isset($user->roles[BATIRE_GC_GC_USER_ROLE_ID]);
+}
+
+/**
+ * Does current user have GC commercial role?
+ */
+function batire_gc_commercial_is_gc_commercial() {
+  global $user;
+  if (isset($user->roles[BATIRE_GC_GC_COMMERCIAL_ROLE_ID]) || $user->uid == 1)
+    return TRUE;
+  else
+    return FALSE;
+}
+
+/**
+ * Is user permitted by its GC sales to export statistics?
+ */
+function batire_gc_commercial_can_export_statistics() {
+  global $user;
+  if (isset($user->roles[BATIRE_GC_GC_COMMERCIAL_ROLE_ID])) {
+    return TRUE;
+  }
+  if (isset($user->roles[BATIRE_GC_GC_USER_ROLE_ID])) {
+    $user_profile = batire_user_profile_load($uid->uid);
+    $permissions = !empty($user_profile->field_user_gc_stat_permissions[0]['value']) ? unserialize($user_profile->field_user_gc_stat_permissions[0]['value']) : array();
+    if (!empty($permissions) && $permissions['allow_export_statistics']) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Generate invite link JS callback.
+ */
+function batire_gc_commercial_get_invite_link() {
+  global $user;
+  $link = '';
+  if (batire_gc_commercial_is_gc_user()) {
+    $hash = md5($user->uid . $user->name);
+    $link = url('batire_gc_commercial/invite-register/' . $hash, array('absolute' => TRUE));
+  }
+  return $link;
+}
+
+/**
+ * Invite registration JS callback implementation.
+ */
+function batire_gc_commercial_invite_register_js() {
+  module_load_include('pages.inc', 'batire_user', 'includes/batire_user');
+
+  $result = array(
+    'error' => FALSE,
+    'data' => NULL,
+  );
+  $inviter_uid = isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['inviter']['uid']) ? $_SESSION[BATIRE_USERSESSION_NAMESPACE]['inviter']['uid'] : FALSE;
+  if ($inviter_uid) {
+    try {
+      $name = isset($_POST['name']) ? batire_site_check_text($_POST['name']) : '';
+      $surname = isset($_POST['surname']) ? batire_site_check_text($_POST['surname']) : '';
+      $mail = isset($_POST['mail']) ? batire_site_check_text($_POST['mail']) : '';
+
+      $values = batire_user_profile_load($inviter_uid);
+      $values->field_user_name[0]['value'] = $name;
+      $values->field_user_surname[0]['value'] = $surname;
+      $record = (object) array(
+        'id' => 0,
+        'mail' => batire_site_check_text($mail),
+        'type' => BATIRE_USER_REG_TYPE_SUB,
+        'data' => new stdClass(),
+        'created' => time(),
+        'uid' => $inviter_uid,
+      );
+      $skip_fields = array(
+        'field_user_last_login_date',
+        'field_user_posts_count',
+        'field_user_login_date',
+        'field_default_search',
+        'field_user_subacc',
+      );
+      foreach ($values as $key => $field) {
+        if (0 === strpos($key, 'field_') && !in_array($key, $skip_fields)) {
+          $record->data->$key = $field;
+        }
+      }
+      drupal_write_record('batire_user_registration_requests', $record);
+
+      $ident = isset($_POST['ident']) ? batire_site_check_text($_POST['ident']) : '';
+      $pass = isset($_POST['pass']) ? batire_site_check_text($_POST['pass']) : '';
+      $remember_me = isset($_POST['remember_me']) ? batire_site_check_text($_POST['remember_me']) : '';
+      batire_user_abonement_activation_s2_sub($record->id, $ident, $pass, $remember_me);
+      $result['error'] = FALSE;
+      $result['redir'] = TRUE;
+      $result['data'] = url('<front>');
+      drupal_json($result);
+      return NULL;
+    }
+    catch (Exception $e) {
+      $result['error'] = TRUE;
+      $result['data'] = batire_site_show_message($e->getMessage(), $e->getCode());
+      drupal_json($result);
+      return NULL;
+    }
+  }
+  else {
+    $result['error'] = TRUE;
+    $result['data'] = t('Incorrect invite link.');
+    drupal_json($result);
+    return NULL;
+  }
+}
+
+/**
+ * Get No free slots error message.
+ */
+function batire_gc_commercial_get_no_slots_error_message() {
+  $admin_uid = isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['inviter']['uid']) ? $_SESSION[BATIRE_USERSESSION_NAMESPACE]['inviter']['uid'] : FALSE;
+  $admin_profile = batire_user_profile_load($admin_uid);
+  if ($admin_profile) {
+    return token_replace(BATIRE_GC_NO_SLOTS_ERROR_MESSAGE, 'global', $admin_profile);
+  }
+  else {
+    return t('No free slots.');
+  }
+}
+
+/**
+ * Invite registration link callback.
+ */
+function batire_gc_commercial_invite_register($hash) {
+  $query = "SELECT * FROM {users} u WHERE md5(concat(u.uid, u.name)) = '%s'";
+  $inviter_user = db_query($query, $hash);
+  $inviter_user = db_fetch_object($inviter_user);
+  if ($inviter_user) {
+    $_SESSION[BATIRE_USERSESSION_NAMESPACE]['inviter']['uid'] = batire_site_check_text($inviter_user->uid);
+    if (batire_gc_commercial_left_slots($inviter_user) > 0) {
+      global $user;
+      $front_page = 'http://' . $_SERVER['HTTP_HOST'];
+      if ($user->uid) {
+        _batire_user_drupal_logout();
+      }
+      //need to override session variable, because function _batire_user_drupal_logout() destroyed it
+      $_SESSION[BATIRE_USERSESSION_NAMESPACE]['inviter']['uid'] = batire_site_check_text($inviter_user->uid);
+      // all ok, allow registration
+      $cookie = '1';
+    }
+    else {
+      // no slots
+      $options = array(
+        'module' => 'batire_gc_commercial',
+        'mailkey' => 'batire_gc_commercial_no_free_slots',
+        'recipient' => $inviter_user->mail,
+        'subject' => '',
+        'data' => array(
+        ),
+        'plaintext' => FALSE
+      );
+
+      if (!batire_site_send_mail($options, variable_get('site_mail', 'batire@adyax.com'))) {
+        batire_site_log_watchdog(t("Can't send email."), BATIRE_SITE_ERROR_SYSTEM);
+      }
+      $cookie = '2';
+    }
+  }
+  else {
+    // incorrect hash
+    $cookie = '3';
+  }
+  setcookie('invite_register', $cookie, NULL, '/');
+  _batire_site_set_cookie('invite_register', $cookie);
+  drupal_goto($front_page);
+}
+
+/**
+ * Regestration by invite form implementation.
+ */
+function batire_gc_commercial_invite_register_form($form) {
+  $form = array();
+  $form['name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Prenom'),
+  );
+  $form['surname'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Nom'),
+  );
+  $form['mail'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Email',
+  );
+  $form['ident'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Identifiant')
+  );
+  $form['pass'] = array(
+    '#type' => 'password',
+    '#title' => t('Mot de passe')
+  );
+  $form['pass2'] = array(
+    '#type' => 'password',
+    '#title' => t('Confirmation mot de passe')
+  );
+  $form['remember_me'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Mémoriser mes codes d\'accès'),
+    '#default_value' => variable_get('remember_me_checkbox', 0),
+  );
+  $form['info'] = array(
+    '#value' => '<div class="description-info">' . t('6 caractères minimum, sans accent, ni espace, ni caractères spéciaux') . '</div>'
+  );
+  $form['error'] = array(
+    '#value' => '<div class="popup-messages messages show-hide-block-non"><div class="messages-content"></div></div>'
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider'),
+    '#prefix' => '<div class="button-form-submit">',
+    '#suffix' => '</div>'
+  );
+  $form['#theme'] = 'batire_gc_commercial_popup_invite_register_form';
+  return $form;
+}
+
+/**
+ * Implementation of hook_batire_site_popups_info().
+ */
+function batire_gc_commercial_batire_site_popups_info($type) {
+  switch ($type) {
+    case 'invite-register':
+    case 'invite-link':
+    case 'invite-no-slots':
+      return 'batire_gc_commercial';
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_batire_site_popups().
+ */
+function batire_gc_commercial_batire_site_popups($type) {
+  $result = array(
+    'error' => FALSE,
+    'data' => ''
+  );
+  switch ($type) {
+    case 'invite-register':
+      $result['data'] = theme('batire_gc_commercial_popup_invite_register', drupal_get_form('batire_gc_commercial_invite_register_form'));
+      break;
+    case 'invite-link':
+      $result['data'] = theme('batire_gc_commercial_popup_invite_link', batire_gc_commercial_get_invite_link());
+      break;
+    case 'invite-no-slots':
+      $result['data'] = theme('batire_gc_commercial_popup_invite_no_slots', batire_gc_commercial_get_no_slots_error_message());
+      break;
+  }
+  if (!$result['data']) {
+    return array();
+  }
+  return $result;
+}
+
+/**
+ * Get amount of subaccounts left for multipost admin.
+ */
+function batire_gc_commercial_left_slots($user = NULL) {
+  if (!isset($user)) {
+    global $user;
+  }
+  $adm_profile = batire_user_profile_load($user->uid);
+  $members = mongodb_user_get_members($user->uid);
+  $sub_cnt = $adm_profile->field_user_posts_count[0]['value'] - 1;
+  $cntr = 0;
+  foreach ($members as $member) {
+    if (!$member['is_admin']) {
+      $cntr++;
+    }
+  }
+  return $sub_cnt - $cntr;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function batire_gc_commercial_theme() {
+  $items = array(
+    'batire_gc_commercial_popup_invite_register' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_gc_commercial_popup_invite_register_form' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_token_list().
+ */
+function batire_gc_commercial_token_list($type = 'all') {
+  $tokens = array();
+  if ($type == 'global' || $type == 'all') {
+    $tokens['global']['prenom-administrateur'] = t('GC administrator name');
+    $tokens['global']['nom-administrateur'] = t('GC administrator surname');
+  }
+  return $tokens;
+}
+
+/**
+ * Implementation of hook_token_values().
+ */
+function batire_gc_commercial_token_values($type, $object = NULL, $options = array()) {
+  $tokens = array();
+  switch ($type) {
+    case 'global':
+      $admin_uid = isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['inviter']['uid']) ? $_SESSION[BATIRE_USERSESSION_NAMESPACE]['inviter']['uid'] : FALSE;
+      $admin_profile = batire_user_profile_load($admin_uid);
+      $tokens['prenom-administrateur'] = $admin_profile->field_user_name[0]['value'];
+      $tokens['nom-administrateur'] = $admin_profile->field_user_surname[0]['value'];
+      break;
+  }
+  return $tokens;
+}
+
+/**
+ * Implements hook_mailkeys().
+ */
+function batire_gc_commercial_mailkeys() {
+  return array(
+    'batire_gc_commercial_no_free_slots' => t('No free slots mail'),
+  );
+}
+
+/**
+ * Implements hook_tokens_list().
+ */
+function batire_gc_commercial_mail_edit_tokens_list($mailkey, $options = array()) {
+  $tokens = array();
+  switch ($mailkey) {
+    case 'batire_gc_commercial_no_free_slots':
+      $tokens['!prenom-administrateur'] = t('GC administrator name');
+      $tokens['!nom-administrateur'] = t('GC administrator surname');
+      break;
+  }
+  return $tokens;
+}
+
+/**
+ * Implementation of hook_mail_edit_tokens_value().
+ * @param $mailkey
+ * @param $mail
+ */
+function batire_gc_commercial_mail_edit_tokens_value($mailkey, $mail) {
+  $tokens = array();
+  switch ($mailkey) {
+    case 'batire_gc_commercial_no_free_slots':
+      $tokens['!prenom-administrateur'] = t('aname');
+      $tokens['!nom-administrateur'] = t('asurname');
+      break;
+  }
+  return $tokens;
+}
+/**
+ * GC commercial dashboard
+ * list of all gc users for admins
+ */
+function batire_gc_commercial_gc_all_users_list() {
+  global $user;
+  drupal_add_js(drupal_get_path('module', 'batire_gc_commercial') . '/scripts/gc_users_table.js', 'module', 'footer');
+  drupal_add_css(drupal_get_path('module', 'batire_gc_commercial') . '/styles/gc_users_table.css');
+  $header = array(
+    t('Identifiant'),
+    t('Nom'),
+    t('Prénom'),
+    t('Code Privilège'),
+    t('Actions')
+  );
+  $users_header = array(
+    t('# abonne'),
+    t('Raison sociale'),
+    t('Prenom cpte princ'),
+    t('Nom cpte princ'),
+    t('NB postes'),
+    t('NB inscrits'),
+    t('Offre'),
+    t('Actions'),
+    t('Adresses IP'),
+  );
+  $members_header = array(
+    t('Raison sociale'),
+    t('Prenom cpte princ'),
+    t('Nom cpte princ'),
+    t('Offre'),
+  );
+  $products_query = "SELECT GROUP_CONCAT(DISTINCT pn.title ORDER BY pn.nid ASC SEPARATOR ', ') AS products FROM {node} n
+      LEFT JOIN {content_field_user_products} cfup ON cfup.vid = n.vid
+      LEFT JOIN {node} pn ON pn.nid = cfup.field_user_products_nid
+      WHERE n.type = 'batire_user_profile' AND n.uid = %d";
+
+  $gc_sales = batire_gc_commercial_get_all_sales($user->uid, TRUE);
+  $rows = array();
+  //gc managers
+  foreach ($gc_sales as $gc_sale) {
+    $members = mongodb_user_get_members($gc_sale->uid);
+    $action = l(t('View GC Users'), 'admin/batire-site/gc/gc-users/' . $gc_sale->uid);
+    $rows[] = array(
+      'data' => array(
+        //$gc_sale->name,
+        l($gc_sale->name, 'admin/batire-site/gc/gc-users', array('attributes' => array('class' => 'gc-manage-collapse', 'id' => 'gc-manage-collapse-' . $gc_sale->uid))),
+        $gc_sale->field_user_name[0]['value'],
+        $gc_sale->field_user_surname[0]['value'],
+        $gc_sale->field_user_promo[0]['value'],
+        $action,
+      ),
+      'class' => 'gc-abo-manager-row'
+    );
+    $gc_users = batire_gc_statistics_get_users_for_commercial($gc_sale->uid, TRUE);
+    $gc_user_rows = array();
+    foreach ($gc_users as $gc_user) {
+       //members
+      $members = mongodb_user_get_members($gc_user->uid);
+      $subaccs = 0;
+      $members_rows = array();
+      foreach ($members as $member) {
+        if (!$member['is_admin']) {
+          $products = db_fetch_object(db_query($products_query, $member['uid']));
+          $member = batire_user_profile_load($member['uid']);
+          $members_rows[] = array('data' => array(
+              $member->field_user_company[0]['value'],
+              $member->field_user_name[0]['value'],
+              $member->field_user_surname[0]['value'],
+              $products ? $products->products : '',
+            ),
+            'class' => 'gc-abo-subacc-row',
+          );
+          $subaccs++;
+        }
+      }
+      //gc admins
+      $actions = array(
+        l(t('Edit permissions'), 'admin/batire-site/gc/gc-users/permissions/' . $gc_user->uid),
+        l(t('Export statistics'), 'admin/batire-site/gc/gc-users/get_stats_for_user/' . $gc_user->uid),
+      );
+      $products = db_fetch_object(db_query($products_query, $gc_user->uid));
+      $ip_addresses = array(
+        l(t('Télécharger'), 'admin/batire-site/gc/gc-users/ip/upload/' . $gc_user->uid),
+      );
+      if ($ip_download = batire_gc_ip_get_file($gc_user->uid)) {
+        $ip_addresses[] = l(t('Récupérer'), $ip_download, array('attributes' => array('target' => '_blank')));
+      }
+      $gc_user_rows[] = array(
+        'data' => array(
+          l($gc_user->field_user_abon_num[0]['value'], 'admin/batire-site/gc/gc-users', array('attributes' => array('class' => 'gc-collapse', 'id' => 'gc-collapse-' . $gc_user->uid))),
+          $gc_user->field_user_company[0]['value'],
+          $gc_user->field_user_name[0]['value'],
+          $gc_user->field_user_surname[0]['value'],
+          $gc_user->field_user_posts_count[0]['value'],
+          $subaccs,
+          $products ? $products->products : '',
+          implode(' | ', $actions),
+          implode(' | ', $ip_addresses),
+        ),
+        'class' => 'gc-abo-admin-row'
+      );
+      if (!empty($members_rows)) {
+        $gc_user_rows[] = array
+          ('data' => array(array('data' => theme('table', $members_header, $members_rows),'colspan' => count($users_header))), 'class' =>'gc-member-collapsible gc-member-collapsible-' . $gc_user->uid);
+      }
+    }
+    if (!empty($gc_users)) {
+      $rows[] = array('data' => array(array('data' => theme('table', $users_header, $gc_user_rows), 'colspan' => count($users_header))), 'class' => 'gc-admin-collapsible gc-admin-collapsible-' . $gc_sale->uid);
+    }
+  }
+  return l('Expand all', 'admin/batire-site/gc/gc-users', array('attributes' => array('class' => 'gc-collapse-all'))) . theme('table', $header, $rows);
+}
+/**
+ * GC commercial dashboard
+ */
+function batire_gc_commercial_gc_users_list($gc_sales_uid) {
+  global $user;
+  if ($user->uid == $gc_sales_uid || $user->uid == 1) {
+    drupal_add_js(drupal_get_path('module', 'batire_gc_commercial') . '/scripts/gc_users_table.js', 'module', 'footer');
+    drupal_add_css(drupal_get_path('module', 'batire_gc_commercial') . '/styles/gc_users_table.css');
+    $header = array(
+      t('# abonne'),
+      t('Raison sociale'),
+      t('Prenom cpte princ'),
+      t('Nom cpte princ'),
+      t('NB postes'),
+      t('NB inscrits'),
+      t('Offre'),
+      t('Actions'),
+      t('Adresses IP')
+    );
+    $members_header = array(
+      t('Raison sociale'),
+      t('Prenom cpte princ'),
+      t('Nom cpte princ'),
+      t('Offre'),
+    );
+    $products_query = "SELECT GROUP_CONCAT(DISTINCT pn.title ORDER BY pn.nid ASC SEPARATOR ', ') AS products FROM {node} n
+        LEFT JOIN {content_field_user_products} cfup ON cfup.vid = n.vid
+        LEFT JOIN {node} pn ON pn.nid = cfup.field_user_products_nid
+        WHERE n.type = 'batire_user_profile' AND n.uid = %d";
+    $gc_users = batire_gc_statistics_get_users_for_commercial($gc_sales_uid, TRUE);
+    $rows = array();
+    foreach ($gc_users as $gc_user) {
+      $members = mongodb_user_get_members($gc_user->uid);
+      $subaccs = 0;
+      $members_rows = array();
+      foreach ($members as $member) {
+        if (!$member['is_admin']) {
+          $products = db_fetch_object(db_query($products_query, $member['uid']));
+          $member = batire_user_profile_load($member['uid']);
+          $members_rows[] = array('data' => array(
+              $member->field_user_company[0]['value'],
+              $member->field_user_name[0]['value'],
+              $member->field_user_surname[0]['value'],
+              $products ? $products->products : '',
+            ),
+            'class' => 'gc-abo-subacc-row',
+          );
+          $subaccs++;
+        }
+      }
+      $actions = array(
+        l(t('Edit permissions'), 'admin/batire-site/gc/gc-users/permissions/' . $gc_user->uid),
+        l(t('Export statistics'), 'admin/batire-site/gc/gc-users/get_stats_for_user/' . $gc_user->uid),
+      );
+      $ip_addresses = array(
+        l(t('Télécharger'), 'admin/batire-site/gc/gc-users/ip/upload/' . $gc_user->uid),
+      );
+      if ($ip_download = batire_gc_ip_get_file($gc_user->uid)) {
+        $ip_addresses[] = l(t('Récupérer'), $ip_download, array('attributes' => array('target' => '_blank')));
+      }
+      $ip_addresses[] =l(t('Settings'), 'admin/batire-site/gc/gc-users/ip/settings/' . $gc_user->uid);
+      $products = db_fetch_object(db_query($products_query, $gc_user->uid));
+      $rows[] = array(
+        'data' => array(
+          l($gc_user->field_user_abon_num[0]['value'], 'admin/batire-site/gc/gc-users', array('attributes' => array('class' => 'gc-collapse', 'id' => 'gc-collapse-' . $gc_user->uid))),
+          $gc_user->field_user_company[0]['value'],
+          $gc_user->field_user_name[0]['value'],
+          $gc_user->field_user_surname[0]['value'],
+          $gc_user->field_user_posts_count[0]['value'],
+          $subaccs,
+          $products ? $products->products : '',
+          implode(' | ', $actions),
+          implode(' | ', $ip_addresses),
+        ),
+        'class' => 'gc-abo-admin-row'
+      );
+      if (!empty($members_rows)) {
+        $rows[] = array('data' => array(array('data' => theme('table', $members_header, $members_rows), 'colspan' => count($header))), 'class' => 'gc-abo-subacc-toprow gc-collapsible gc-collapsible-' . $gc_user->uid);
+      }
+    }
+    return l('Expand all', 'admin/batire-site/gc/gc-users', array('attributes' => array('class' => 'gc-collapse-all'))) . theme('table', $header, $rows);
+  }
+  else {
+    drupal_goto('admin/batire-site/gc/gc-users/' . $user->uid);
+  }
+}
+/**
+ * GC commercial dashboard
+ */
+function batire_gc_commercial_gc_sales_list() {
+  global $user;
+  if ($user->uid == 1) {
+    $header = array(
+      t('Identifiant'),
+      t('Nom'),
+      t('Prénom'),
+      t('Code Privilège'),
+      t('Actions')
+    );
+    $gc_sales = batire_gc_commercial_get_all_sales($user->uid, TRUE);
+    $rows = array();
+    foreach ($gc_sales as $gc_sale) {
+      $members = mongodb_user_get_members($gc_sale->uid);
+      $subaccs = 0;
+      foreach ($members as $member) {
+        if (!$member['is_admin']) {
+          $subaccs++;
+        }
+      }
+      $action =  l(t('View GC Users'), 'admin/batire-site/gc/gc-users/' . $gc_sale->uid);
+      $rows[] = array(
+        $gc_sale->name,
+        $gc_sale->field_user_name[0]['value'],
+        $gc_sale->field_user_surname[0]['value'],
+        $gc_sale->field_user_promo[0]['value'],
+        $action,
+      );
+    }
+    return theme('table', $header, $rows);
+  }
+  elseif ($user->roles[BATIRE_GC_GC_COMMERCIAL_ROLE_ID]) {
+    drupal_goto('admin/batire-site/gc/gc-users/' . $user->uid);
+  }
+}
+
+function batire_gc_commercial_get_sales_by_promo($promo) {
+  $sql = "SELECT n.uid FROM {node} n
+    LEFT JOIN {content_type_batire_user_profile} ctup ON n.vid = ctup.vid
+    LEFT JOIN {users_roles} ur ON ur.uid = n.uid
+    WHERE n.type = 'batire_user_profile' AND
+      ctup.field_user_promo_value = '%s' AND
+      ur.rid = %d";
+  $result = db_query($sql, $promo, BATIRE_GC_GC_COMMERCIAL_ROLE_ID);
+  $result = db_fetch_object($result);
+  if ($result) {
+    return user_load($result->uid);
+  }
+  return FALSE;
+}
+
+function batire_gc_commercial_get_all_sales() {
+  $sql = "SELECT n.uid FROM {node} n
+    LEFT JOIN {content_type_batire_user_profile} ctup ON n.vid = ctup.vid
+    LEFT JOIN {users_roles} ur ON ur.uid = n.uid
+    WHERE n.type = 'batire_user_profile' AND ur.rid = %d";
+  $result = db_query($sql, BATIRE_GC_GC_COMMERCIAL_ROLE_ID);
+  $users = array();
+  while ($row = db_fetch_object($result)) {
+    $users[] = batire_user_profile_load($row->uid);
+  }
+  return $users;
+}
+
+function batire_gc_commercial_goto_tdm() {
+  drupal_goto('table-des-matieres', array('type' => 'demo'));
+}
+
+function batire_gc_commercial_get_replace_user() {
+  $user_ip = ip_address();
+  $svc_id = batire_svc_get_svc_id_by_mapping(BATIRE_SVC_APPELANT_ID, $user_ip);
+  return user_load(array('name' => $svc_id['svc_id']));
+}
+
+function batire_gc_commercial_get_gc_user_header_block() {
+  global $user;
+  $replace_user = batire_gc_commercial_get_replace_user();
+
+  $data = array();
+  if ($replace_user->uid > 0) {
+    $replace_user_data = unserialize($replace_user->data);
+    if (isset($replace_user_data) && !empty($replace_user_data)) {
+      $replace_user_data['message'] = substr($replace_user_data['message'], 0, 140);//3 rows of message in header block (155 symbols)
+      $dynamic_header_logo = theme_image($replace_user_data['logo'], '', '', array('class' => 'dynamic-logo'));
+      $data['gc_user_header_block'] = theme('batire_site_gc_user_header_block', $replace_user_data['message'], $dynamic_header_logo);
+      echo json_encode($data);
+    }
+    else {
+      $data['form'] = theme('batire_site_header_login_form', drupal_get_form('user_login_block'));
+      echo json_encode($data);
+    }
+  }
+  /*elseif ($_GET['logined'] == TRUE) {
+    $user_profile = mongodb_user_get_user($user->uid);
+    $data['auth_block'] = theme('batire_site_user_header', $user_profile);
+    return drupal_json($data);
+  }*/
+  elseif($user->uid == 1) {
+    $data['is_admin'] = TRUE;
+    echo json_encode($data);
+  }
+  elseif($user->uid > 1) {
+    $user_profile = mongodb_user_get_user($user->uid);
+    $data['auth_block'] = theme('batire_site_user_header', $user_profile);
+    echo json_encode($data);
+  }
+  else {
+    $data['form'] = theme('batire_site_header_login_form', drupal_get_form('user_login_block'));
+    echo json_encode($data);
+  }
+}

@@ -1,0 +1,503 @@
+<?php
+
+define('BATIRE_BASE_PRODUCT_ID', variable_get('batire_user_products_base_product', NULL));
+define('BATIRE_USER_PRODUCTS_CODES_VID', variable_get('batire_user_products_codes_vid', NULL));
+define('BATIRE_USER_PRODUCTS_TYPES_VID', variable_get('batire_user_products_types_vid', NULL));
+define('BATIRE_USER_PRODUCTS_OFFRE_HTTPAUTH', variable_get('batire_user_products_form_url', 'http://abonnement.lemoniteur.fr/sources/articles.asp?codepublication=kheox&codearticle='));
+
+/**
+ * Get user's product
+ * @param  $uid
+ */
+function batire_user_products_get_user_products($uid) {
+  if ($uid != 0) {
+    $profile = batire_user_profile_load($uid);
+    if (!empty($profile)) {
+      if (!empty($profile->field_user_products[0]['nid'])) {
+        $products = $profile->field_user_products;
+        if (!empty($products)) {
+          return $products;
+        }
+      }
+      return array();
+    }
+  }
+}
+
+/**
+ * Get user's product for register offre page
+ * @param  $uid
+ */
+function batire_user_products_get_user_for_products_page($uid) {
+  $user_profile = batire_user_profile_load($uid);
+  $user_pr = !empty($user_profile->field_user_products) ? $user_profile->field_user_products : array();
+
+  $user_products = array();
+  if (!empty($user_pr)) {
+    foreach ($user_pr as $pr) {
+      $product = node_load($pr['nid']);
+      if ($product->field_product_enabled[0]['value'] == 1) {
+        if ($product->nid == BATIRE_BASE_PRODUCT_ID) {//if user have base product than we return empty array, because base product selected by default
+          return array();
+        }
+        else {
+          $user_products[$product->field_svc_code[0]['value']] = $product->field_svc_code[0]['value'];
+        }
+      }
+    }
+    return $user_products;
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_user_products_menu() {
+  $items = array();
+
+  $items['admin/batire-site/product/set-product-url'] = array(
+    'title' => 'Products settings',
+    'description' => 'Products list form URL settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_batire_user_products_settings_form'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  return $items;
+}
+
+/**
+ * Get search criterias defined by user's products
+ *
+ * @param type $uid User id to return criterias for
+ * @return array
+ */
+function batire_user_products_products_criteria_user($uid) {
+  static $criteria;
+  if (!isset($criteria[$uid])) {
+    $criteria[$uid] = array(
+      'sources' => array(),
+      'types' => array(),
+      'trades' => array(),
+      'themes' => array(),
+      'cites' => array(),
+      'tn' => array(),
+    );
+    $products = batire_user_products_get_user_products($uid);
+    foreach ($products as $product) {
+      $product_criteria = batire_user_products_get_product_criteria($product['nid']);
+      $criteria[$uid] = _batire_user_products_merge_criterias($criteria[$uid], $product_criteria);
+    }
+  }
+  return $criteria[$uid];
+}
+
+/**
+ * Get search criterias by products list
+ *
+ * @param type Array of products nids
+ * @return array
+ */
+function batire_user_products_products_criteria($products) {
+  static $criteria;
+  if (!isset($criteria)) {
+    $criteria = array(
+      'sources' => array(),
+      'types' => array(),
+      'trades' => array(),
+      'themes' => array(),
+      'cites' => array(),
+      'tn' => array(),
+    );
+    foreach ($products as $product) {
+      $product_criteria = batire_user_products_get_product_criteria($product['nid']);
+      $criteria = _batire_user_products_merge_criterias($criteria, $product_criteria);
+    }
+  }
+  return $criteria;
+}
+
+/**
+ * Get search criteria defined by separate product
+ *
+ * @param type $nid Product node nid
+ * @return array Array of criteria
+ */
+function batire_user_products_get_product_criteria($nid) {
+  $criteria = array(
+    'sources' => array(),
+    'types' => array(),
+    'trades' => array(),
+    'themes' => array(),
+    'cites' => array(),
+    'tn' => array(),
+  );
+  $sources = array(BATIRE_SITE_VID_FM, BATIRE_SITE_VID_LIVRES);
+  $product = node_load($nid);
+  // sources, themes
+  foreach ($product->taxonomy as $term) {
+    if (in_array($term->vid, $sources)) {
+      $criteria['sources'][$term->tid] = $term->tid;
+      $criteria['cites'][$term->tid] = $term->tid;
+    }
+    else {
+      switch ($term->vid) {
+        case BATIRE_SITE_VID_BATIMENT:
+          $criteria['types'][$term->tid] = $term->tid;
+          break;
+        case BATIRE_SITE_VID_CORPS:
+          $criteria['trades'][$term->tid] = $term->tid;
+          break;
+        case BATIRE_SITE_VID_THEMES:
+          $criteria['themes'][$term->tid] = $term->tid;
+          break;
+      }
+    }
+  }
+  // actualite
+  if ($product->field_product_actuality[0]['value']) {
+    $criteria['sources'][BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE;
+  }
+  // ct
+  if ($product->field_product_ct[0]['value']) {
+    $tree = taxonomy_get_tree(BATIRE_SITE_VID_TYPE_CT);
+    foreach ($tree as $term) {
+      $criteria['sources'][$term->tid] = $term->tid;
+    }
+  }
+  // tn
+  if ($product->field_product_tn[0]['value']) {
+    $criteria['tn'][] = 1;
+  }
+  return $criteria;
+}
+
+/**
+ * Merge two arrays with criterias with correct criterias intersection checks
+ *
+ * @param type $merge_to Where to merge
+ * @param type $merge_what What to merge
+ * @return array Merged criterias
+ */
+function _batire_user_products_merge_criterias($merge_to, $merge_what) {
+  $keys_to_merge = array('sources', 'types', 'trades', 'themes', 'cites', 'tn');
+  foreach ($keys_to_merge as $key) {
+    if (isset($merge_to[$key]) && isset($merge_what[$key])) {
+      $merge_to[$key] = array_unique($merge_to[$key] + $merge_what[$key]);
+    }
+    elseif (isset($merge_what[$key])) {
+      $merge_to[$key] = $merge_what[$key];
+    }
+    else {
+      $merge_to[$key] = array();
+    }
+  }
+  return $merge_to;
+}
+
+/**
+ * Check node access based on products
+ */
+function batire_user_products_access_node($node, $criteria, $cites = NULL, $item = NULL) {
+  $actu_pass = FALSE;
+
+  $vid = FALSE;
+
+  switch ($node->type) {
+    case BATIRE_SITE_CT_FM:
+      $vid = BATIRE_SITE_VID_FM;
+      break;
+    case BATIRE_SITE_CT_LIVRE:
+      $vid = BATIRE_SITE_VID_LIVRES;
+      break;
+    case BATIRE_SITE_CT_COMP_TECH:
+      $vid = BATIRE_SITE_VID_TYPE_CT;
+      break;
+    case BATIRE_SITE_CT_CODE:
+    case BATIRE_SITE_CT_TO:
+      if (!isset($cites)) {
+        $cites = batire_antidot_export_get_cites($node->page_data['bid']);
+      }
+      break;
+    case BATIRE_SITE_CT_TN:
+      if (in_array(1, $criteria['tn'])) {
+        if (!isset($cites)) {//detail view of the document
+          $cites = batire_user_products_get_tn_summary_cities_by_bid($node->page_data['bid']);
+        }
+        elseif (isset($node->bid)) {//serach result list
+          $cites = batire_user_products_get_tn_summary_cities_by_bid($node->bid);
+        }
+      }
+      else {
+        $cites = array();
+      }
+      break;
+    case BATIRE_SITE_CT_ACTUALITE:
+      $actu_pass = isset($criteria['sources'][BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE]);
+      break;
+  }
+
+  foreach ($node->taxonomy as $term) {
+    $term = (array) $term;
+    switch ($term['vid']) {
+      case $vid:
+        $type = $term['tid'];
+        break;
+      case BATIRE_SITE_VID_BATIMENT:
+        $types[] = $term['tid'];
+        break;
+      case BATIRE_SITE_VID_CORPS:
+        $trades[] = $term['tid'];
+        break;
+      case BATIRE_SITE_VID_THEMES:
+        $themes[] = $term['tid'];
+        break;
+    }
+  }
+
+  $type_pass = isset($type) && in_array($type, $criteria['sources']);
+
+  $cites_pass = FALSE;
+  if (isset($cites)) {
+    foreach ($cites as $cite) {
+      if (in_array($cite, $criteria['sources'])) {
+        $cites_pass = TRUE;
+        break;
+      }
+    }
+  }
+
+  $check_themes = FALSE;
+  if (!empty($criteria['types']) || !empty($criteria['trades']) || !empty($criteria['themes'])) {
+    $check_themes = TRUE;
+  }
+
+  $types_pass = FALSE;
+  if (isset($types)) {
+    foreach ($types as $type) {
+      if (in_array($type, $criteria['types'])) {
+        $types_pass = TRUE;
+        break;
+      }
+    }
+  }
+
+  $trades_pass = FALSE;
+  if (isset($trades)) {
+    foreach ($trades as $trade) {
+      if (in_array($trade, $criteria['trades'])) {
+        $trades_pass = TRUE;
+        break;
+      }
+    }
+  }
+
+  $themes_pass = FALSE;
+  if (isset($themes)) {
+    foreach ($themes as $theme) {
+      if (in_array($theme, $criteria['themes'])) {
+        $themes_pass = TRUE;
+        break;
+      }
+    }
+  }
+
+  if ($check_themes) {
+    if (($type_pass || $cites_pass || $actu_pass) && ($types_pass || $trades_pass || $themes_pass)) {
+      return TRUE;
+    }
+  }
+  else {
+    if ($type_pass || $cites_pass || $actu_pass) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Get All existing products
+ */
+function batire_user_products_get_products($field = NULL) {
+  $query = "SELECT n.nid
+    FROM {node} n
+    WHERE n.type IN ('batire_product_module_1_2', 'batire_product_module_3')";
+  $result = db_query($query);
+  $products = array();
+  while ($nid = db_fetch_object($result)) {
+    $product = node_load($nid->nid);
+      $key = $product->field_svc_code[0]['value'];
+      $products[$key] = array(
+        'nid'         => $product->nid,
+        'title'       => $product->title,
+        'acroche'     => $product->field_product_acroche[0]['value'],
+        'description' => $product->field_product_description[0]['value'],
+        'svc_code'    => $product->field_svc_code[0]['value'],
+        'tarif'       => $product->field_product_tarif,
+        'enabled'     => $product->field_product_enabled[0]['value'],
+        'weight'      => $product->node_weight,
+        'taxonomy'    => $product->taxonomy,
+      );
+  }
+  if (isset($field)) {
+    $products_field = array();
+    foreach ($products as $product) {
+      $products_field[] = $product[$field];
+    }
+    return $products_field;
+  }
+  return $products;
+}
+
+/**
+ * Should we apply subscription filters to given user?
+ */
+function batire_user_products_should_filter($uid = NULL) {
+  if (!isset($uid)) {
+    global $user;
+
+    $replace_user = batire_gc_ip_replace_user();
+    if ($replace_user) {
+      $uid = $replace_user->uid;
+    }
+    else {
+      $uid = $user->uid;
+    }
+  }
+
+  // anon and admin users
+  if ($uid == 0 || $uid == 1) {
+    return FALSE;
+  }
+
+  // tout la base products
+  $products = batire_user_products_get_user_products($uid);
+  foreach ($products as $product) {
+    if ($product['nid'] == BATIRE_BASE_PRODUCT_ID) {
+      return FALSE;
+    }
+  }
+
+  // free and trialtn users
+  if (
+    (isset($user->roles[BATIRE_USER_FREEACCOUNT]) && $user->roles[BATIRE_USER_FREEACCOUNT]) ||
+    (isset($user->roles[BATIRE_USER_TRIALTNACCOUNT]) && $user->roles[BATIRE_USER_TRIALTNACCOUNT])
+  ) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+/*
+ * User products offre form
+ */
+function batire_user_products_form(&$form) {
+  global $user;
+
+  $user_products = batire_user_products_get_user_for_products_page($user->uid);
+
+  $form = array();
+  $checkboxes_array = array();
+  $products = batire_user_products_get_products();
+  foreach ($products as $product) {
+      if ($product['nid'] == BATIRE_BASE_PRODUCT_ID) {
+        $base_product = $product['svc_code'];
+        continue;
+      }
+      if ($product['enabled'] == 1) {//is activate
+        $checkboxes_array[$product['svc_code']] = '';
+      }
+  }
+
+  $form['user_products'] = array(
+    '#type' => 'checkboxes',
+    '#options' => $user_products,
+  );
+
+  $form['products'] = array(
+    '#type' => 'checkboxes',
+    '#options' => $checkboxes_array,
+  );
+
+  $form['base_product'] = array(
+    '#type' => 'radio',
+    '#return_value' => $base_product,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider'),
+  );
+  $form['#submit'][] = 'batire_user_products_form_submit';
+  $form['#theme'] = 'batire_user_products_form';
+
+  return $form;
+}
+
+/**
+ * User products offre form hook submit
+ */
+function batire_user_products_form_submit($form_state) {
+  if(!empty($form_state['#post']['base_product'])) {
+    $url_part = $form_state['#post']['base_product'];
+  }
+  else {
+    $url_part = implode(',', $form_state['#post']['products']);
+  }
+
+  drupal_goto(BATIRE_USER_PRODUCTS_OFFRE_HTTPAUTH . $url_part);
+}
+
+function batire_batire_user_products_settings_form() {
+  $form['batire_user_products_form_url'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Products Form URL'),
+    '#default_value' => BATIRE_USER_PRODUCTS_OFFRE_HTTPAUTH,
+  );
+
+  return system_settings_form($form);
+}
+/*
+ * Get cites which occurs in at least one document
+ * see task #68092
+ */
+function batire_user_products_get_tn_summary_cities_by_bid($bid) {
+
+  if (isset($bid) && !is_null($bid)) {
+    $summary_nids = batire_hierarchy_get_hierarchy_list($bid);
+    $cites = array();
+    foreach ($summary_nids as $nid) {
+      $hierarchy = db_fetch_object(db_query('SELECT bid FROM {batire_hierarchy} WHERE nid= %d', $nid));
+      $cites = array_merge($cites, batire_antidot_export_get_cites($hierarchy->bid));
+      $cites = array_unique($cites);
+    }
+  }
+  return $cites;
+}
+
+function _batire_user_products_update_tn_cites($nids, $cites) {
+  foreach ($nids as $nid) {
+    $current_cites = array();
+    $summary_node = node_load($nid);
+    if (isset($summary_node->field_cites)) {
+      foreach ($summary_node->field_cites as $cite) {
+        $current_cites[] = (int) $cite['value'];
+      }
+    } else {
+      $summary_node->field_cites = array();
+    }
+    foreach ($cites as $cite) {
+      if (!in_array($cite, $current_cites)) {
+        $summary_node->field_cites[]['value'] = $cite;
+      }
+    }
+    $page_data = mongodb_page_get_node_page($summary_node);
+    $page_data['cites'] = $cites;
+    mongodb_page_save($page_data);
+    node_save($summary_node);
+  }
+  $op = 'edit';
+  job_queue_add('_batire_antidot_export_job_run', 'Antidot '. $op .' documents', array($nids, $op));
+}

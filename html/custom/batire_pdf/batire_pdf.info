@@ -1,0 +1,6 @@
+name = "Batire PDF"
+description = "Process pdf files."
+core = "6.x"
+package = "Batire"
+dependencies[] = "pdf_to_imagefield"
+dependencies[] = "batire_user_docs_pdf"

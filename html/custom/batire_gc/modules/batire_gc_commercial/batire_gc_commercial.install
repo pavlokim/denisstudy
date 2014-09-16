@@ -1,0 +1,37 @@
+<?php
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_gc_commercial_install() {
+  // Add GC roles
+  $roles = array('gc_commercial' => 'GC commercial', 'gc_user' => 'GC user');
+  $insert_query = "INSERT INTO {role} (name) VALUES ('%s')";
+  $select_query = "SELECT rid FROM {role} WHERE name = '%s'";
+  foreach ($roles as $key => $role_name) {
+    db_query($insert_query, $role_name);
+    $inserted_role = db_fetch_object(db_query($select_query, $role_name));
+    variable_set("batire_gc_{$key}_role_id", $inserted_role->rid);
+    $term = array();
+    $term['vid'] = BATIRE_USER_ROLES_VID;
+    $term['name'] = $role_name;
+    taxonomy_save_term($term);
+    variable_set("batire_gc_{$key}_term_id", $term['tid']);
+  }
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_gc_commercial_uninstall() {
+  // Remove GC roles
+  $roles = array('gc_commercial' => 'GC commercial', 'gc_user' => 'GC user');
+  $delete_query = "DELETE FROM {role} WHERE rid = %d";
+  foreach ($roles as $key => $role_name) {
+    $rid = variable_get("batire_gc_{$key}_role_id", 0);
+    if ($rid) {
+      db_query($query, $rid);
+      variable_del("batire_gc_{$key}_role_id");
+    }
+  }
+}

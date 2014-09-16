@@ -1,0 +1,173 @@
+<?php
+
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_schema().
+ */
+function batire_user_statistics_schema() {
+  return array(
+    'batire_user_statistics' => array(
+      'description' => 'This table stores different users actions.',
+      'fields' => array(
+        'uid' => array(
+          'description' => 'User ID.',
+          'type' => 'int',
+          'unsigned' => FALSE,
+          'not null' => TRUE
+        ),
+        'access' => array(
+          'type' => 'int',
+          'not null' => TRUE,
+          'default' => 0,
+          'description' => 'Timestamp when action was performed.'
+        ),
+        'action' => array(
+          'type' => 'int',
+          'not null' => TRUE,
+          'default' => 0,
+          'description' => 'Action type.' //0 - print, 1 - download
+        ),
+        'counter' => array(
+          'type' => 'int',
+          'not null' => TRUE,
+          'default' => 1,
+          'description' => 'Number of actions.'
+        ),
+      ),
+      'primary key' => array('uid', 'action', 'access')
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_user_statistics_install() {
+  drupal_install_schema('batire_user_statistics');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_user_statistics_uninstall() {
+  drupal_uninstall_schema('batire_user_statistics');
+}
+
+/**
+ * Implementation of hook_update_N().
+ *
+ * Create mongo collections to store user statistics.
+ */
+function batire_user_statistics_update_6000() {
+  module_load_include('module', 'mongodb');
+  module_load_include('module', 'batire_user_statistics');
+
+  $mongo = mongodb();
+
+  if ($mongo) {
+    $mongo->createCollection(MONGODB_USER_STATISTICS_COLLECTION);
+    $collection = $mongo->selectCollection(MONGODB_USER_STATISTICS_COLLECTION);
+    $collection->ensureIndex(array('uid' => 1), array('background' => TRUE));
+    $collection->ensureIndex(array('access' => 1), array('background' => TRUE));
+
+    //Mail notifications for free users
+    $mongo->createCollection(MONGODB_USER_HISTORY_COLLECTION);
+    $collection2 = $mongo->selectCollection(MONGODB_USER_HISTORY_COLLECTION);
+    $collection2->ensureIndex(array('uid' => 1), array('background' => TRUE));
+    $collection2->ensureIndex(array('access' => 1), array('background' => TRUE));
+  }
+}
+
+/**
+ * Implementation of hook_update_N().
+ *
+ * Update history collection with additional fields.
+ */
+function batire_user_statistics_update_6001() {
+  $mongo_record = mongodb_select(MONGODB_USER_HISTORY_COLLECTION, array(), array('$id'));
+  $chunks = array_chunk($mongo_record, 500);
+  foreach ($chunks as $chunk) {
+    job_queue_add('_batire_user_statistics_update_history', 'Update history collection with additional fields', array($chunk));
+  }
+}
+
+/**
+ * Implementation of hook_requirements().
+ */
+function batire_user_statistics_requirements($phase) {
+  $requirements = array();
+  // Ensure translations don't break at install time.
+  $t = get_t();
+
+  if ($phase == 'install' || $phase == 'runtime') {
+    $reports_directory = file_create_path() . '/statistics_application';
+    if (!file_check_directory($reports_directory, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+      if (!is_dir($reports_directory)) {
+        $requirements['statistics_application_directory'] = array(
+          'title' => $t('Statistics Application Directory'),
+          'value' => $t('%p is not a directory or is not readable by the webserver.', array('%p' => $reports_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+      elseif (!is_writable($reports_directory)) {
+        $requirements['statistics_application_directory'] = array(
+          'title' => $t('Statistics Application Directory'),
+          'value' => $t('%p is not writeable by the webserver.', array('%p' => $reports_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+      else {
+        $requirements['statistics_application_directory'] = array(
+          'title' => $t('Statistics Application Directory'),
+          'value' => $t('An unknown error occured.'),
+          'description' => $t('An unknown error occured trying to verify %p is a directory and is writable.', array('%p' => $reports_directory)),
+          'severity' => REQUIREMENT_ERROR,
+        );
+      }
+    }
+    else {
+      if (!is_file("$reports_directory/.htaccess")) {
+        $htaccess_lines = "Order Deny,Allow\nDeny from All";
+        if (($fp = fopen("$reports_directory/.htaccess", 'w')) && fputs($fp, $htaccess_lines)) {
+          fclose($fp);
+          chmod($reports_directory . '/.htaccess', 0664);
+        }
+        else {
+          $variables = array('%directory' => $reports_directory, '!htaccess' => '<br />' . nl2br(check_plain($htaccess_lines)));
+          watchdog('security', "Security warning: Couldn't write .htaccess file. Please create a .htaccess file in your %directory directory which contains the following lines: <code>!htaccess</code>", $variables, WATCHDOG_ERROR);
+        }
+      }
+    }
+
+    if (!is_writable(file_directory_temp())) {
+      $requirements['statistics_application_directory'] = array(
+        'title' => $t('Statistics Application Temp Directory'),
+        'value' => $t('%p is not writeable by the webserver.', array('%p' => file_directory_temp())),
+        'severity' => REQUIREMENT_ERROR,
+      );
+    }
+  }
+  return $requirements;
+}
+
+function batire_user_statistics_update_6002() {
+  module_load_include('module', 'mongodb');
+  module_load_include('module', 'batire_user_statistics');
+
+  $mongo = mongodb();
+
+  if ($mongo) {
+    //session collection
+    $mongo->createCollection(MONGODB_USER_SESSIONS_COUNTS);
+    $collection = $mongo->selectCollection(MONGODB_USER_SESSIONS_COUNTS);
+    $collection->ensureIndex(array('access' => 1), array('background' => TRUE));
+    //viewed documents collection
+    $mongo->createCollection(MONGODB_USER_VIEWED_DOCUMENTS_COUNTS);
+    $collection2 = $mongo->selectCollection(MONGODB_USER_VIEWED_DOCUMENTS_COUNTS);
+    $collection2->ensureIndex(array('access' => 1), array('background' => TRUE));
+  }
+}

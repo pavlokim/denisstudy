@@ -1,0 +1,6 @@
+; $Id$
+name = Batire Webmaster
+description = Provides webmaster functionallity and restrictions
+package = Batire
+core = 6.x
+version = "6.x-1"

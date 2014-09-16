@@ -1,0 +1,169 @@
+<?php
+
+/**
+ * @file
+ * Search related data to mongodb.
+ */
+define('MONGODB_SEARCH_COLLECTION', 'search');
+define('MONGODB_SEARCH_CLEANUP_TIME', 30 * 24 * 3600);
+
+/**
+ * Save seach to mongo
+ * @param $sid Search id
+ * @param $data Search criterias
+ * @param $time Timestamp of search created
+ * @param $nid Id of search
+ * @return Bool TRUE|FALSE
+ */
+function mongodb_search_save_search($sid, $data, $mode) {
+  switch ($mode) {
+    case 'insert':
+      $keys = array('sid' => 0);
+      break;
+
+    case 'update':
+      $keys = array('sid' => $sid);
+      drupal_static_reset('mongodb_search_get_search_data');
+      break;
+  }
+  $data['sid'] = $sid;
+
+  return mongodb_update(MONGODB_SEARCH_COLLECTION, $keys, $data);
+}
+
+/**
+ * Find search id in database
+ * @param $sid Search id
+ * @return Bool TRUE|FALSE
+ */
+function mongodb_search_find_search_id($sid) {
+  $data = mongodb_select_one(MONGODB_SEARCH_COLLECTION, array('sid' => $sid), array('sid'));
+  if (isset($data['sid'])) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Delete old searches
+ */
+function mongodb_search_cleanup_search() {
+  $cleanup_date = time() - MONGODB_SEARCH_CLEANUP_TIME;
+  $find_sids = mongodb_search_cleanup_menu_link();
+
+  $keys = array(
+    'nid' => NULL,
+    'ts' => array(
+      '$lte' => $cleanup_date
+    ),
+    'sid' => array(
+      '$nin' => $find_sids
+    ),
+    'undelete' => FALSE
+  );
+  mongodb_delete(MONGODB_SEARCH_COLLECTION, $keys);
+}
+
+/**
+ * Get search data
+ * @param $sid Search id
+ * @return Array search data
+ */
+function mongodb_search_get_search_data($sid, $reset = FALSE) {
+  $output = &drupal_static(__FUNCTION__, array());
+  if (isset($output[$sid]) && !empty($output[$sid]) && !$reset) {
+    return $output[$sid];
+  }
+  if (!empty($sid)) {
+    $keys = array('sid' => $sid);
+    $data = mongodb_select_one(MONGODB_SEARCH_COLLECTION, $keys);
+    if (isset($data['sid'])) {
+      $output[$sid] = $data;
+      return $output[$sid];
+    }
+  }
+  return array();
+}
+
+/**
+ * Get search data by nid
+ * @param $nid nid of saved search
+ * @return Array search data
+ */
+function mongodb_search_get_search_data_by_nid($nid) {
+  $output = &drupal_static(__FUNCTION__, array());
+  if (isset($output[$nid]) && !empty($output[$nid])) {
+    return $output[$nid];
+  }
+  if (!empty($nid)) {
+    $keys = array('nid' => $nid);
+    $data = mongodb_select_one(MONGODB_SEARCH_COLLECTION, $keys);
+    if (isset($data['nid'])) {
+      $output[$nid] = $data;
+      return $output[$nid];
+    }
+  }
+  return array();
+}
+
+/**
+ * Get search ids from menu link
+ * @return Array
+ */
+function mongodb_search_cleanup_menu_link() {
+  $menu_name = variable_get('batire_search_search_links_menu', NULL);
+  if ($menu_name) {
+    $sql = "
+      SELECT link_path
+      FROM {menu_links}
+      WHERE
+        menu_name IN(" . db_placeholders($menu_name, "varchar") . ") AND
+        link_path LIKE '%%recherche-avancee/resultats/%%'";
+    $result = db_query($sql, $menu_name);
+  }
+  else {
+    $sql = "
+      SELECT link_path
+      FROM {menu_links}
+      WHERE link_path LIKE '%%recherche-avancee/resultats%%'";
+    $result = db_query($sql);
+  }
+
+  $return_array = array();
+  while ($link_path = db_fetch_object($result)) {
+    $links_part = explode('/', array_shift(explode('?', $link_path->link_path)));
+
+    if (is_array($links_part)) {
+      for ($i = 0; $i < 2; $i++) {
+        $sid = array_pop($links_part);
+        if (mongodb_search_find_search_id($sid)) {
+          $return_array[] = $sid;
+        }
+      }
+    }
+  }
+  return $return_array;
+}
+
+/**
+ * Get count searches for user
+ * @param $uid User id
+ */
+function mongodb_search_count_user_searches($uid) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+  return mongodb_query_count(MONGODB_SEARCH_COLLECTION, array('uid' => $uid));
+}
+
+/**
+ * Delete search
+ * @param $sid Search id
+ */
+function mongodb_search_delete_search($sid) {
+  if (empty($sid)) {
+    return FALSE;
+  }
+  return mongodb_delete(MONGODB_SEARCH_COLLECTION, array('sid' => $sid));
+}

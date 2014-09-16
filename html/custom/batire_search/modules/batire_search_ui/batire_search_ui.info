@@ -1,0 +1,11 @@
+; $Id: batire_search_ui.info
+name = Batire search UI
+description = "User interface to search. Without this module, you cannot search on the site."
+package = Batire
+core = 6.x
+
+dependencies[] = term_fields
+dependencies[] = drupal_static
+dependencies[] = batire_search
+dependencies[] = batire_usersession
+dependencies[] = batire_user_docs

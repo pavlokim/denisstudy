@@ -1,0 +1,15 @@
+<?php
+
+function  batire_xml_parse_xslt_install() {
+  _batire_xml_parse_xslt_install_set_weight();
+}
+
+
+function _batire_xml_parse_xslt_install_set_weight() {
+  db_query("UPDATE system SET weight = -5 WHERE type='module' AND name='%s'", 'batire_xml_parse_xslt');
+}
+
+/** update functions **/
+function batire_xml_parse_xslt_update_1() {
+  _batire_xml_parse_xslt_install_set_weight();
+}

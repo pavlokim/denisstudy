@@ -1,0 +1,22 @@
+<?php
+function antidot_pratiques_antidot_info() {
+  return array(
+    BATIRE_SITE_CT_DOC_PRAT => 'antidot_pratiques',
+  );
+}
+
+function antidot_pratiques_xml_preprocess($node, &$data) {
+  $data->type_source_off = array('name' => 'Fiches pratiques', 'id' => 379, 'priorite' => 0);
+
+  $data->editorial = '';
+  $editorial = 'Eric Landot'; //@todo - get correct data
+  if (!empty($editorial)) {
+    $data->editorial = _batire_antidot_export_xml_tag('editeur', $editorial);
+  }
+
+  $data->fichemedia = '';
+  $fichemedia = 'FICHIER_2010_03_18_1673291_1.pdf'; //@todo - get correct data
+  if (!empty($fichemedia)) {
+    $data->fichemedia = _batire_antidot_export_xml_tag('fiche', $fichemedia);
+  }
+}

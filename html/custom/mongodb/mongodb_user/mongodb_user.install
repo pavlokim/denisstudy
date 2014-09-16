@@ -1,0 +1,36 @@
+<?php
+
+/**
+ * @file
+ * MongoDB user stuff install file.
+ */
+
+/**
+ * Implement hook_install().
+ */
+function mongodb_user_install() {
+  module_load_include('module', 'mongodb');
+  module_load_include('module', 'mongodb_user');
+
+  $mongo = mongodb();
+
+  if ($mongo) {
+    $mongo->createCollection(MONGODB_USER_COLLECTION);
+
+    $collection = $mongo->selectCollection(MONGODB_USER_COLLECTION);
+
+    $collection->ensureIndex(array('data.uid' => 1), array('background' => TRUE));
+
+    //Mail notifications for free users
+    $mongo->createCollection(MONGODB_USER_MAIL_COLLECTION);
+
+    $collection2 = $mongo->selectCollection(MONGODB_USER_MAIL_COLLECTION);
+
+    $collection2->ensureIndex(array('uid' => 1), array('background' => TRUE));
+  }
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function mongodb_user_uninstall() {}

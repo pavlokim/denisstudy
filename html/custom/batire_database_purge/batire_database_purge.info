@@ -1,0 +1,8 @@
+; $Id$
+name = Batire purge database
+description = Provides purging database user/docs related stuff
+package = Batire
+core = 6.x
+version = "6.x-1"
+
+dependencies[] = job_queue

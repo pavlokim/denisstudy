@@ -1,0 +1,266 @@
+<?php
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_antidot_menu() {
+  return array(
+    'admin/batire-site/settings/antidot/settings' => array(
+      'title' => 'Antidot interaction settings',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('batire_antidot_settings_form'),
+      'access arguments' => array('administer batire configuration'),
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+    ),
+  );
+}
+
+function batire_antidot_settings_form() {
+  $form = array();
+
+  return system_settings_form($form);
+}
+
+/**
+ * Return search result filter group title
+ * @param type $title
+ * @return type
+ */
+function batire_antidot_json_key_title($title, $flip = FALSE) {
+  $key_title_array = array(
+    'typeSource' => 'Sources',
+    'corpsEtat' => "Corps d'état",
+    'theme' => "Thèmes",
+    'typeBatiment' => "Types de batiments",
+    'Actualité' => "Actualité",
+    'Code' => "Codes",
+    'Classeurs à mises à jour' => "Classeurs à mises à jour",
+    'Livre' => "Livres",
+    'Norme' => "Textes Normatifs",
+    'Pratique' => "Documents Pratiques",
+    'Texte officiel' => "Textes officiels",
+    'date' => 'Dates'
+  );
+  if ($flip) {
+    $key_title_array = array_flip($key_title_array);
+  }
+  return array_key_exists($title, $key_title_array) ? $key_title_array[$title] : $title;
+}
+
+/**
+ * Content type map with taxonomy vid = BATIRE_SITE_VID_DOC_TYPE
+ * @return list of content types
+ */
+function _batire_antidot_ct_map() {
+  $types_documents = array(
+    BATIRE_SITE_CT_TO => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL,
+    BATIRE_SITE_CT_CODE => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE,
+    BATIRE_SITE_CT_COMP_TECH => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT,
+    BATIRE_SITE_CT_DOC_PRAT => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_DP,
+    BATIRE_SITE_CT_FM => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM,
+    BATIRE_SITE_CT_LIVRE => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE,
+    BATIRE_SITE_CT_TN => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF,
+    BATIRE_SITE_CT_ACTUALITE => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE,
+    BATIRE_SITE_CT_DR => BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE,
+  );
+  return $types_documents;
+}
+
+/**
+ * Convert type from antidot to machine name used on the site
+ * @param type $type
+ * @return type
+ */
+function batire_antidot_convert_type_source($type) {
+  $types = taxonomy_get_tree(BATIRE_SITE_VID_DOC_TYPE);
+  $map = _batire_antidot_ct_map();
+  foreach ($types as $term) {
+    if ($term->tid == $type) {
+      return array_search($term->tid, $map);
+    }
+  }
+  return '';
+}
+
+/**
+ * Convert content(XML) of result to object
+ * @param $content One document
+ */
+function batire_antidot_convert_content(&$content, $feed = NULL) {
+  if (!empty($content->client_XML_data_ext) && !empty($content->client_XML_data_ext->contents)) {
+    $node = new stdClass();
+    /*
+     * todo: need to refactor
+     */
+    if (isset($feed) && $feed == 'IMAGES') {
+      $xml = simplexml_load_string($content->client_XML_data_ext->contents);
+      $node->id = (string) $xml->id;
+      $bid = (string) $xml->document_id;
+      $node->nid = batire_hierarchy_get_by_bid($bid, 'nid');
+    }
+    else {
+      $xml = simplexml_load_string($content->client_XML_data_ext->contents);
+      $node->id = (string) $xml->id;
+      $node->nid = batire_hierarchy_get_by_bid($node->id, 'nid');
+    }
+    if (is_numeric($node->nid)) {
+      $tid = (string) $xml->typeSource->attributes()->id;
+      $node->read_type = taxonomy_get_term($tid)->name;
+      $node->type = batire_antidot_convert_type_source($tid);
+      //image search part
+
+      $node->document_title =(string) $xml->document_title;
+      $node->document_id = $bid;
+      $node->image_title = (string) $xml->image_title;
+      $node->image_id = (string) $xml->image_id;
+      $node->image_path = (string) $xml->image_path;
+      $node->document_url = (string) $xml->document_url;
+      $node->other_title = (string) $xml->other_title;
+      $node->image_legend = (string) $xml->image_legend;
+      $node->image_type = (string) $xml->image_type;
+      if (!$node->type) {
+        return;
+      }
+      $node->url = (string) $xml->url;
+      $node->title = (string) $xml->titre;
+
+      $type_source_off = (string) $xml->source;
+      if (!empty($type_source_off)) {
+        $node->type_source_off = $type_source_off;
+      }
+      // date of created doc
+      if (isset($xml->date)) {
+        $date = (string) $xml->date;
+        $node->doc_created = !empty($date) ? strtotime($date) : '';
+      }
+
+      $node->numero_ref = (string) $xml->numeroRef;
+
+      // batiment
+      $typeBatiment = (string) $xml->indexation->typeBatiment;
+      if (!empty($typeBatiment)) {
+        $node->parent_batiment = $typeBatiment;
+      }
+      $sousTypeBatiment = (string) $xml->indexation->sousTypeBatiment;
+      if (!empty($sousTypeBatiment)) {
+        $node->child_batiment = $sousTypeBatiment;
+      }
+
+      // corps
+      $corpsEtat = (string) $xml->indexation->corpsEtat;
+      if (!empty($corpsEtat)) {
+        $node->parent_corps = $corpsEtat;
+      }
+      $sousCorpsEtat = (string) $xml->indexation->sousCorpsEtat;
+      if (!empty($sousCorpsEtat)) {
+        $node->child_corps = $sousCorpsEtat;
+      }
+
+      // themes
+      $theme = (string) $xml->indexation->theme;
+      if (!empty($theme)) {
+        $node->parent_theme = $theme;
+      }
+      $sousTheme = (string) $xml->indexation->sousTheme;
+      if (!empty($sousTheme)) {
+        $node->child_theme = $sousTheme;
+      }
+
+      $node->content = (string) $xml->contenu;
+      $node->version = (string) $xml->version;
+      $node->latest = (string) $xml->derniere;
+
+      $node->created = strtotime((string) $xml->drupal->dateCreation); // node created
+      $node->changed = strtotime((string) $xml->drupal->dateMaj); // node changed
+      batire_antidot_convert_additional_info($node, $xml);
+    }
+    $content->node = $node;
+  }
+}
+
+/**
+ * Add aditional info for each content type
+ * @param $node List of params
+ * @param $xml Xml from antidot
+ */
+function batire_antidot_convert_additional_info(&$node, $xml) {
+  if (!empty($node->type)) {
+    switch ($node->type) {
+      case BATIRE_SITE_CT_TO:
+        $node->field_document_fundamental = (string) $xml->documentFondamental;
+        $node->date_signature = strtotime((string) $xml->dateSignature);
+        $node->date_publication = strtotime((string) $xml->datePublication);
+        if (isset($xml->nor)) {
+          $node->field_number_nor = (string) $xml->nor;
+        }
+        break;
+
+      case BATIRE_SITE_CT_CODE:
+        break;
+
+      case BATIRE_SITE_CT_DOC_PRAT:
+        break;
+
+      case BATIRE_SITE_CT_TN:
+        if (isset($xml->sousTitre)) {
+          $node->field_h1_title = (string) $xml->sousTitre;
+        }
+        if (isset($xml->indice)) {
+          $node->field_classification_index = (string) $xml->indice;
+        }
+        if (isset($xml->etatNorme)) {
+          $node->field_annuler = (string) $xml->etatNorme == 'En vigueur' ? 0 : 1;
+        }
+        if (isset($xml->noticeDetaillee)) {
+          $node->field_notice = (int) $xml->noticeDetaillee;
+        }
+        if (isset($xml->horsPerimetre)) {
+          $node->horsPerimetre = (int) $xml->horsPerimetre;
+        }
+        $tid = (string) $xml->source->attributes()->id;
+        $node->read_type = taxonomy_get_term($tid)->name;
+        $bid_parts = explode('-', $node->id);
+        $node->super_bid = $bid_parts[0] . '-' . $bid_parts[1];
+        break;
+
+      case BATIRE_SITE_CT_ACTUALITE:
+        //@todo need to fill it
+        break;
+        
+      case BATIRE_SITE_CT_COMP_TECH:
+        if (!empty($xml->niveau)) {
+          $node->field_surtitle = (string) $xml->niveau;
+        }
+        break;
+
+      case BATIRE_SITE_CT_FM:
+        if (!empty($xml->niveau)) {
+          $node->field_sublayer_level_title = (string) $xml->niveau;
+        }
+      case BATIRE_SITE_CT_LIVRE:
+        //field_section_title
+        if (isset($xml->niveau)) {
+          $node->field_section_title = (string) $xml->niveau;
+        }
+        if (isset($xml->sousNiveau)) {
+          $node->field_part_title = (string) $xml->sousNiveau;
+        }
+        if (isset($xml->rubrique)) {
+          $node->rubrique = (string) $xml->rubrique;
+        }
+        if (isset($xml->collection)) {
+          $node->collection = (string) $xml->collection;
+        }
+        if (isset($xml->collectionOrdre)) {
+          $node->collection_ord = (string) $xml->collectionOrdre;
+        }
+        if (isset($xml->nombreMots)) {
+          $node->words_num = (string) $xml->nombreMots;
+        }
+        // @todo editeurs
+        $node->date_archive = (string) $xml->dateArchive;
+        $node->ante = (string) $xml->ante;
+        break;
+    }
+  }
+}

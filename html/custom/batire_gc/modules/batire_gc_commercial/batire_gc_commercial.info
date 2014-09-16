@@ -1,0 +1,6 @@
+; $Id: batire_gc_trial_tn.info
+name = Batire GC - Commercial
+description = "Batire Grand Comptes Commercial/User support."
+package = Batire GC
+core = 6.x
+dependencies[] = batire_gc

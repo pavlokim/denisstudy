@@ -1,0 +1,3 @@
+<?php
+
+include_once('batire_products.features.inc');

@@ -1,0 +1,916 @@
+<?php
+
+// $Id:$
+
+define("BATIRE_XML_PARSE_DEFAULT_BACKUP_FOLDER", file_directory_path() . "/xml_backup");
+define("BATIRE_XML_PARSE_DEFAULT_TEMPORARY_FOLDER", file_directory_path() . "/xml_temp");
+define('BATIRE_XML_PARSE_ATTACHES_PATH', file_directory_path() . '/page-files/');
+define('BATIRE_XML_PARSE_ATTACHES_IMAGECACHE_PATH', file_directory_path() . '/imagecache/batire_document_img/page-files/');
+
+//@Todo: move this line inside functions
+//include_once(drupal_get_path('module', 'batire_xml_parse') . '/batire_xml_parse.xml.inc');
+
+/**
+ * @file
+ * Defines an api for data processing after XML parsing.
+ */
+
+
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_xml_parse_menu() {
+  $items = array();
+
+  $items['admin/cp-site/settings/xml-settings'] = array(
+    'title' => 'XML Parse settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_xml_parse_settings'),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer cp configuration'),
+    'file' => 'batire_xml_parse.admin.inc',
+    'description' => 'Settings for XML parsing',
+    'weight' => -10
+  );
+  return $items;
+}
+
+/**
+ * Process one archive
+ * @param string $archive_path
+ * @param bool $generate_content
+ * @return array
+ * @throws Batire_Xml_Parse_Exception
+ */
+function batire_xml_parse_process_archive_file($archive_path, $generate_content = FALSE) {
+  include_once(drupal_get_path('module', 'batire_xml_parse') . '/batire_xml_parse.xml.inc');
+
+  $required_fields = array("op", "id", "bid", "nid", "errors", "doc_type");
+
+  $archive_name = basename($archive_path);
+  $archive_id = basename($archive_name, ".zip") . '-' . md5($archive_path);
+
+  $temporary_folder = variable_get('batire_xml_parse_temporary_folder', BATIRE_XML_PARSE_DEFAULT_TEMPORARY_FOLDER);
+  $backup_folder = variable_get('batire_xml_parse_backup_folder', BATIRE_XML_PARSE_DEFAULT_BACKUP_FOLDER);
+
+  $temporary_subfolder = $temporary_folder . '/' . $archive_id;
+  $backup_path = $backup_folder . '/' . $archive_name;
+
+  if (file_exists($temporary_subfolder)) {
+    throw new Batire_Xml_Parse_Exception(t("Like @archive_path processed now by some another", array('@archive_path' => $archive_path)));
+  }
+  if (!@mkdir($temporary_subfolder)) {
+    throw new Batire_Xml_Parse_Exception(t("Cannot create folder @dir", array('@dir' => $temporary_subfolder)));
+  }
+  if (!_batire_xml_parse_unzip($archive_path, $temporary_subfolder)) {
+    throw new Batire_Xml_Parse_Exception(t("Cannot unzip @archive_path", array('@archive_path' => $archive_path)));
+  }
+  if (!@copy($archive_path, $backup_path)) {
+    batire_site_file_unmanaged_delete_recursive($temporary_subfolder);
+    throw new Batire_Xml_Parse_Exception(t("Cannot copy archive to @path", array('@path' => $backup_path)));
+  }
+
+
+  //Launch Parse Process of unpacked files
+  $result = array();
+  $doc_types = variable_get('batire_import_types', array());
+  // Prepare array of XML files in directory
+  $files = file_scan_directory($temporary_subfolder, '.xml');
+  $nids = array();
+
+  if ($files) {
+    // Sort files array
+    ksort($files);
+    $cnt = 0;
+    foreach ($files as $xml_name) {
+      $cnt++;
+      $data = array();
+      try {
+        $data = batire_xml_parse_process_xml_file($xml_name->filename);
+      } catch (Batire_Xml_Parse_Exception $e) {
+        $data = array("errors" => array($e->getMessage()));
+      }
+      if (array_key_exists('errors',$data) && !empty($data['errors'])) {
+        echo "E";
+      } else {
+        if (!empty($data['op'])) {
+          switch ($data['op']) {
+            case 'ignore':
+              echo 'x';
+              break;
+            case 'edit':
+              echo 'u';
+              $nids[] = $data['node']->nid;
+
+              break;
+            case 'add':
+              echo 'i';
+              $nids[] = $data['node']->nid;
+
+              break;
+
+            default:
+              echo substr($data['op'], 0, 1);
+              if (!empty($data['node'])) {
+                $nids[] = $data->nid;
+              }
+              break;
+          }
+        } else {
+          echo ".";
+        }
+      }
+      // prebody
+      if (array_key_exists('prebody', $data) && array_key_exists('nid', $data['prebody']) && !empty($data['prebody']['nid'])) {
+        $nids[] = $data['prebody']['nid'];
+      }
+      // chapter_desc
+      if (array_key_exists('chapter_desc', $data) && array_key_exists('nid', $data['chapter_desc']) && !empty($data['chapter_desc']['nid'])) {
+        $nids[] = $data['chapter_desc']['nid'];
+      }
+      if ($cnt % 10 == 0) {
+        echo ' ' . $cnt . ' ';
+      }
+
+      //memory freeing
+      $result[$xml_name->basename] = array();
+      foreach ($required_fields as $key) {
+        if (array_key_exists($key, $data)) {
+          $result[$xml_name->basename][$key] = $data[$key];
+        }
+      }
+      if (!empty($data['node'])) {
+        $result[$xml_name->basename]['nid'] = $data['node']->nid;
+        $result[$xml_name->basename]['field_import_date'] = $data['node']->field_import_date[0]['value'];
+        if (isset($doc_types[$data['node']->type])) {
+          $doc_types[$data['node']->type]++;
+        } else {
+          $doc_types[$data['node']->type] = 1;
+        }
+      }
+      $data = array();
+
+    }
+    echo "\n";
+  } else {
+    batire_site_file_unmanaged_delete_recursive($temporary_subfolder);
+    throw new Batire_Xml_Parse_Exception(t("Empty archive"));
+  }
+  batire_site_file_unmanaged_delete_recursive($temporary_subfolder);
+//TODO: remove unziped folder recursive
+
+  if ($generate_content) {
+    $nids = array_unique($nids);
+    list($count, $errors) = batire_xml_parse_process_queue_content_by_nids($nids);
+    if ($errors) {
+      foreach ($errors as $nid => $err_array) {
+        $result['Generation ' . $nid] = array("errors" => $err_array);
+      }
+    }
+  }
+
+  $flag = array();
+
+  $queues = array();
+  foreach ($result as $data) {
+    if (isset($data['file'])) {
+      echo $data['file'] . ': ' . $data["bid"] , "\n";
+    }
+    else {
+      echo $data["bid"] , "\n";
+    }
+    if (!empty($data['op']) && in_array($data['op'], array('add', 'edit', 'delete'))) {
+      $queues[$data['op']][] = $data['nid'];
+      if (!empty($data['archive'])) {
+        foreach ($data['archive'] as $archived_page) {
+          if ($archived_page['nid']) {
+            $queues['edit'][] = $archived_page['nid'];
+          }
+        }
+      }
+    }
+  }
+  if ($doc_types) {
+    variable_set('batire_import_types', $doc_types);
+  }
+
+  foreach ($queues as $op => $nids) {
+    if ($op == 'delete') {
+      $chunked_nids = array_chunk($nids, variable_get('batire_xml_parse_job_size', 10));
+      foreach($chunked_nids  as $chunk) {
+        job_queue_add("_batire_site_delete_node_job_run",  'Remove documents from ' . SITE_NAME_FS, array($chunk, $op));
+      }
+    } else {
+//      job_queue_add("_batire_antidot_export_job_run",  'Antidot '. $op .' documents', array($nids, $op));
+    }
+  }
+  return $result;
+}
+
+/**
+ * Process one xml file
+ * @param string $xml_name
+ * @return array
+ */
+function batire_xml_parse_process_xml_file($xml_name) {
+
+  $data = array();
+  $data['errors'] = array();
+  $data['file'] = basename($xml_name);
+  $data['dir'] = dirname($xml_name);
+  $dom = new DOMDocument();
+  batire_xml_parse_invoke_parseapi('repair', $data, $xml_name);
+  if ($data['errors']) {
+    return $data;
+  }
+  libxml_use_internal_errors(true); //@hack @todo: remove
+
+  if ($dom->load($xml_name)) {
+
+    $log_file = basename($xml_name, '.xml');
+    batire_xml_parse_log("\n--Start of processing " . $xml_name, $log_file);
+
+    $types_suggestions = batire_xml_parse_invoke_parseapi('suggest types', $data, $dom);
+    if (!$types_suggestions) {
+      batire_xml_parse_log('Cannot determinate document type for ' . $xml_name, $log_file);
+      $data['errors'][] = 'Cannot determinate document type for ' . $xml_name;
+      return $data;
+    } elseif (count($types_suggestions) > 1) {
+      batire_xml_parse_log('Too many types suggested for file ' . $xml_name . ':' . implode(',', $types_suggestions), $log_file);
+      $data['errors'][] = 'Too many types suggested for file ' . $xml_name . ':' . implode(',', $types_suggestions);
+      return $data;
+    }
+    $data['type'] = $types_suggestions[0];
+
+    batire_xml_parse_invoke_parseapi('preprocess', $data, $dom);
+    batire_xml_parse_invoke_parseapi('process', $data, $dom);
+    batire_xml_parse_invoke_parseapi('postprocess', $data, $dom);
+    batire_xml_parse_log("--End of processing " . $xml_name, $log_file);
+  } else {
+    $errors = libxml_get_errors();
+    $data['errors'] = array();
+    foreach ($errors as $error) {
+      if (!in_array($error->message, $data['errors'])) {
+        $data['errors'][] = $error->message;
+        watchdog('batire_xml_parse', 'Error while processing XML from file !path: !error', array('!error' => $error->message, '!path' => $xml_name), WATCHDOG_ERROR);
+        batire_xml_parse_log("\nParse Error: " . $error->message . "\n", $xml_name);
+      }
+    }
+    libxml_clear_errors();
+  }
+  $dom = null;
+  batire_hierarchy_cache_clear();
+  node_load(NULL, NULL, TRUE); //reset node cache, solve memory problems
+
+  return $data;
+}
+
+/**
+ * Implementation of hook_cronapi().
+ */
+function batire_xml_parse_cronapi($op, $job = NULL) {
+  include_once(drupal_get_path('module', 'batire_xml_parse') . '/batire_xml_parse.xml.inc');
+
+  switch ($op) {
+    case 'list':
+      return array(
+        'batire_xml_parse_check_new' => t('Check new import'),
+        'batire_xml_parse_generate_queued_content' => t('Generate queued content')
+      );
+      break;
+
+    case 'rule':
+      if ($job == 'batire_xml_parse_check_new') {
+        return '*/1 * * * *';
+      }
+      if ($job == 'batire_xml_parse_generate_queued_content') {
+        return '*/10 * * * *';
+      }
+      break;
+
+    case 'execute':
+      if ($job == 'batire_xml_parse_check_new') {
+        batire_xml_parse_check_new();
+      }
+      if ($job == 'batire_xml_parse_generate_queued_content') {
+        drush_batire_xml_parse_generate_queued_content(100);
+      }
+      break;
+  }
+}
+
+function batire_xml_parse_check_new() {
+  // Get 2 unprocessed archives and add necessary jobs
+  // prioritize files which are not marked as "import retry", we expect new files have data == ''
+  $query2 = db_query_range("SELECT * FROM {batire_xml_parse_archives} WHERE status = 0 ORDER BY data, archive_id", 0, 2);
+  while ($result = db_fetch_array($query2)) {
+    // Add jobs for preparing archives
+    job_queue_add('batire_xml_parse_import_job', 'Prepare archive ' . $result['archive_name'], array($result['archive_name'], $result['archive_id']), '', TRUE);
+  }
+}
+
+function batire_xml_parse_import_job($archive_name, $archive_id) {
+  $ts      = format_date(time(), 'custom', 'YmdHis');
+  $path    = 'SIR/';
+  if (file_exists($path . $archive_name)) {
+    $root_log_dir = 'ws/log/';
+    file_check_directory($root_log_dir, FILE_CREATE_DIRECTORY);
+    $log_dir  = 'ws/log/' . substr($archive_name, 0, strlen($archive_name) - 4);
+    file_check_directory($log_dir, FILE_CREATE_DIRECTORY);
+    $log_file =  $log_dir . '/' . $ts . '.log';
+    try {
+      // Set archive status to "in process"
+      db_query("UPDATE {batire_xml_parse_archives} SET status = 1, data = 'In process', errors_count = 0 WHERE archive_id = %d", $archive_id);
+
+      error_log("\nImport start.\n", 3, $log_file);
+      //Cleanup folder if exists
+      batire_site_file_unmanaged_delete_recursive(variable_get('batire_xml_parse_temporary_folder', BATIRE_XML_PARSE_DEFAULT_TEMPORARY_FOLDER) . '/' . basename($archive_name, ".zip") . '-' . md5($archive_name));
+      //Unpack archive and get import each xml
+      $xmls = batire_xml_parse_process_archive_file($path . $archive_name, TRUE);
+      //check for errors
+      $err_cnt = 0;
+      foreach ($xmls as $xml) {
+        if (isset($xml['errors']) && count($xml['errors'])) {
+          $err_cnt++;
+          error_log("\nImport error: " . var_export($xml, TRUE) . "\n", 3, $log_file);
+        }
+        else {
+          $log_arr = array(
+            'id'           => $xml['id'],
+            'bid'          => $xml['bid'],
+            'parent_id'    => $xml['parent_id'],
+            'parent_bid'   => $xml['parent_bid'],
+            'page_version' => $xml['page_version'],
+            'doc_type'     => $xml['doc_type']
+          );
+          error_log("\nImport info: " . var_export($log_arr, TRUE) . "\n", 3, $log_file);
+        }
+      }
+      if ($err_cnt) {
+        db_query("UPDATE {batire_xml_parse_archives} SET status = 3, data = 'Done with errors', errors_count = %d WHERE archive_id = %d", $err_cnt, $archive_id);
+      }
+      else {
+        db_query("UPDATE {batire_xml_parse_archives} SET status = 2, data = 'Done', errors_count = 0 WHERE archive_id = %d", $archive_id);
+      }
+    } catch (Batire_Xml_Parse_Exception $e) {
+      error_log("\nImport failed. Error: " . $e->getMessage() . "\n", 3, $log_file);
+      db_query("UPDATE {batire_xml_parse_archives} SET status = 4, data = 'Failed. See log.', errors_count = 0 WHERE archive_id = %d", $archive_id);
+    }
+  }
+  else {
+    // Set archive status to "missing file"
+    db_query("UPDATE {batire_xml_parse_archives} SET status = 6, data = 'Missing file', errors_count = 0 WHERE archive_id = %d", $archive_id);
+
+    error_log("\nCouldn't find file: " . $archive_name . "\n", 3, 'log/service.log');
+  }
+}
+
+
+/**
+ * Queue content for generation
+ * @param string $bid
+ * @param array $data
+ * @param int $time
+ */
+function batire_xml_parse_queue_content($nid, $data = NULL, $is_new = 0, $time = NULL) {
+  if (!$time) {
+    $time = microtime(TRUE);
+  }
+  $row = array(
+    'nid' => $nid,
+    'data' => $data,
+    'is_new' => $is_new,
+    'queue_time' => $time
+  );
+
+  //db_query("LOCK TABLE {batire_xml_parse_generation_queue} WRITE");
+  //first check if new content not generated
+  $sth = db_query('SELECT nid FROM {batire_xml_parse_generation_queue} WHERE nid = "%s" and is_new = 1', $nid);
+  if (db_fetch_array($sth)) {
+    //then queue update
+    $row['is_new'] = 0;
+    drupal_write_record('batire_xml_parse_generation_queue', $row);
+  } else {
+    //check if node already queued
+    $sth = db_query('SELECT queue_time FROM {batire_xml_parse_generation_queue} WHERE nid = "%s" and is_new = 0', $nid);
+    if ($fetched_row =db_fetch_array($sth)) {
+      //just update
+      db_query('UPDATE {batire_xml_parse_generation_queue} SET data = "%s", queue_time = %f WHERE nid = %d and queue_time = %f', $data, $time, $nid, $fetched_row['queue_time']);
+    } else {
+      //insert
+      drupal_write_record('batire_xml_parse_generation_queue', $row);
+    }
+  }
+  //db_query("UNLOCK TABLES");
+}
+
+/**
+ * Generate content from queue
+ *
+ * @param int $limit
+ * @return array
+ */
+function batire_xml_parse_process_queue_content($limit = 100) {
+  $errors = array();
+  $count = 0;
+  $sth = db_query_range("SELECT * FROM {batire_xml_parse_generation_queue} ORDER BY queue_time", $limit);
+  $new_nodes = array();
+  $updated_nodes = array();
+  $generated = array();
+  while ($row = db_fetch_object($sth)) {
+    if ($row->data) {
+      $row->data = unserialize($row->data);
+    }
+    $generation_errors = batire_xml_parse_generate_content($row->nid, $row->data, $row->is_new);
+    if ($generation_errors) {
+      $errors[$row->nid] = $generation_errors;
+    } else {
+      if ($row->is_new) {
+        $new_nodes[] = $row->nid;
+      } else {
+        $updated_nodes[] = $row->nid;
+      }
+      $generated[] = $row;
+      //db_query('DELETE FROM {batire_xml_parse_generation_queue} WHERE nid = "%s" AND queue_time = %d', $row->nid, $row->queue_time);
+      $count++;
+    }
+  }
+  if ($new_nodes) {
+    $chunked_nids = array_chunk($new_nodes, variable_get('batire_xml_parse_job_size', 10));
+    foreach($chunked_nids  as $chunk) {
+      job_queue_add("_batire_antidot_export_job_run",  'Antidot add documents', array($chunk, 'add'));
+      //Images export
+      batire_xml_parse_images_job_queue_run($chunk, 'add');
+    }
+  }
+  if ($updated_nodes) {
+    $chunked_nids = array_chunk($updated_nodes, variable_get('batire_xml_parse_job_size', 10));
+    foreach($chunked_nids  as $chunk) {
+      job_queue_add("_batire_antidot_export_job_run",  'Antidot add documents', array($chunk, 'edit'));
+      //Images export
+      batire_xml_parse_images_job_queue_run($chunk, 'edit');
+    }
+  }
+
+  //remove generated and queued to antidot nodes
+  foreach ($generated as $row) {
+    db_query('DELETE FROM {batire_xml_parse_generation_queue} WHERE nid = "%s" AND queue_time = %f', $row->nid, $row->queue_time);
+  }
+  return array($count, $errors);
+}
+
+/**
+ * Implementation of hook_job_queue_functions().
+ */
+function batire_xml_parse_job_queue_functions() {
+  $functions['batire_xml_parse_process_queue_content_by_nids'] = array(
+    'title'    => t('Process generate content by nids queue'),
+  );
+  return $functions;
+}
+
+/**
+ * Generate content from queue, by nids
+ *
+ * @param array $nids
+ * @return array
+ */
+function batire_xml_parse_process_queue_content_by_nids($nids) {
+  $errors = array();
+  $count = 0;
+  if (!is_array($nids) | count($nids) <  1) {
+    $nids = array(0);
+  }
+  $sth = db_query("SELECT * FROM {batire_xml_parse_generation_queue} WHERE nid in (" . db_placeholders($nids). ") ORDER BY queue_time", $nids);
+  $new_nodes = array();
+  $updated_nodes = array();
+  $generated = array();
+  while ($row = db_fetch_object($sth)) {
+    if ($row->data) {
+      $row->data = unserialize($row->data);
+    }
+    $generation_errors = batire_xml_parse_generate_content($row->nid, $row->data, $row->is_new);
+    if ($generation_errors) {
+      $errors[$row->nid . '-' . $row->queue_time] = $generation_errors;
+    } else {
+      if ($row->is_new) {
+        $new_nodes[] = $row->nid;
+      } else {
+        $updated_nodes[] = $row->nid;
+      }
+      $generated[] = $row;
+      //db_query('DELETE FROM {batire_xml_parse_generation_queue} WHERE nid = "%s" AND queue_time = %d', $row->nid, $row->queue_time);
+      $count++;
+    }
+  }
+  if ($new_nodes) {
+    $chunked_nids = array_chunk($new_nodes, variable_get('batire_xml_parse_job_size', 10));
+    foreach($chunked_nids  as $chunk) {
+      job_queue_add("_batire_antidot_export_job_run",  'Antidot add documents', array($chunk, 'add'));
+      //Images export
+      batire_xml_parse_images_job_queue_run($chunk, 'add');
+    }
+  }
+  if ($updated_nodes) {
+    $chunked_nids = array_chunk($updated_nodes, variable_get('batire_xml_parse_job_size', 10));
+    foreach($chunked_nids  as $chunk) {
+      job_queue_add("_batire_antidot_export_job_run",  'Antidot edit documents', array($chunk, 'edit'));
+      //Images export
+      batire_xml_parse_images_job_queue_run($chunk, 'edit');
+    }
+  }
+
+  //remove generated and queued to antidot nodes
+  foreach ($generated as $row) {
+    db_query('DELETE FROM {batire_xml_parse_generation_queue} WHERE nid = "%s" AND queue_time = %f', $row->nid, $row->queue_time);
+  }
+  return array($count, $errors);
+}
+
+/**
+ * Generate content
+ * @param int $nid
+ * @param mixed $data
+ * @param integer $is_new
+ * @return mixed FALSE if succes, else errors list
+ */
+function batire_xml_parse_generate_content($nid, $data, $is_new) {
+  include_once(drupal_get_path('module', 'batire_xml_parse') . '/batire_xml_parse.xml.inc');
+
+  $errors = array();
+  batire_xml_parse_invoke_parseapi('pregeneration', $errors, $nid, $data, $is_new);
+  batire_xml_parse_invoke_parseapi('generation', $errors, $nid, $data, $is_new);
+  batire_xml_parse_invoke_parseapi('postgeneration', $errors, $nid, $data, $is_new);
+  batire_hierarchy_cache_clear();
+  node_load(NULL, NULL, TRUE); //reset node cache, solve memory problems
+  return $errors ? $errors : FALSE;
+}
+
+
+function batire_xml_parse_inner_structure_recursive_get($xpath, $element, $level = 1, $element_tag = 'NIV') {
+  $result = array();
+  switch ($element_tag) {
+    case 'NIVSYNT':
+      $inner_structure = $xpath->query('./*[name() = "' . $element_tag . '" and @Style = "syn' . $level . '"]', $element);
+      if (is_object($inner_structure) && $inner_structure->length > 0) {
+        foreach ($inner_structure as $element) {
+          $values = batire_xml_multiple_node_value_get($xpath, array(
+            'title' => './TITRE',
+            'id' => './@ID | ./@id'
+            ), $element);
+          $values['title'] = strip_tags($values['title']);
+          if (empty($values['id'])) {
+            $new_id = md5($values['title'] . rand(1, 100));
+            $element->setAttribute('id', $new_id);
+            $values['id'] = $new_id;
+          }
+          $values['content'] = batire_xml_parse_inner_structure_recursive_get($xpath, $element, $level + 1, $element_tag);
+          $result[] = $values;
+        }
+      }
+      break;
+    case 'NIVOFF':
+      $inner_structure = $xpath->query('./*[(name() = "' . $element_tag . '") or name() = "ARTOFF"]', $element);
+      if (is_object($inner_structure) && $inner_structure->length > 0) {
+        foreach ($inner_structure as $element) {
+          $values = batire_xml_multiple_node_value_get($xpath, array(
+            'title' => './TITRE',
+            'numero' => './NUMERO',
+            'id' => './@ID | ./@id'
+          ), $element);
+          if (!empty($values['numero'])) {
+            $values['title'] = 'Art. ' . $values['numero'] . (!empty($values['title']) ? ' - ' . $values['title'] : '');
+          }
+          $values['title'] = strip_tags($values['title']);
+          if (empty($values['id'])) {
+            $new_id = md5($values['title'] . rand(1, 100));
+            $element->setAttribute('id', $new_id);
+            $values['id'] = $new_id;
+          }
+          $values['content'] = batire_xml_parse_inner_structure_recursive_get($xpath, $element, $level + 1, $element_tag);
+          $result[] = $values;
+        }
+      }
+      break;
+    case 'ARTICLE':
+      $inner_structure = $xpath->query('./*[name() = "' . $element_tag . '" or name() = "NIVFART"]', $element);
+      if (is_object($inner_structure) && $inner_structure->length > 0) {
+        foreach ($inner_structure as $element) {
+          $values = batire_xml_multiple_node_value_get($xpath, array(
+            'title' => './NUMERO',
+            'id' => './@ID | ./@id'
+            ), $element);
+          if (empty($values['title'])) {
+            $values = batire_xml_multiple_node_value_get($xpath, array(
+              'title' => './TITRE',
+            ), $element);
+          }
+          else {
+            $values['title'] = 'Art. ' . strip_tags($values['title']);
+          }
+          if (empty($values['id'])) {
+            $new_id = md5($values['title'] . rand(1, 100));
+            $element->setAttribute('id', $new_id);
+            $values['id'] = $new_id;
+          }
+          $values['content'] = batire_xml_parse_inner_structure_recursive_get($xpath, $element, $level + 1, $element_tag);
+          $result[] = $values;
+        }
+      }
+      break;
+    case 'NIV':
+      $inner_structure = $xpath->query('./*[name() = "' . $element_tag . $level . '"]', $element);
+      if (is_object($inner_structure) && $inner_structure->length > 0) {
+        foreach ($inner_structure as $element) {
+          $values = batire_xml_multiple_node_value_get($xpath, array(
+            'title' => './TITRE',
+            'id' => './@ID | ./@id'
+            ), $element);
+          $values['title'] = strip_tags($values['title']);
+          if (empty($values['id'])) {
+            $new_id = md5($values['title'] . rand(1, 100));
+            $element->setAttribute('id', $new_id);
+            $values['id'] = $new_id;
+          }
+          $values['content'] = batire_xml_parse_inner_structure_recursive_get($xpath, $element, $level + 1);
+          $result[] = $values;
+        }
+      }
+      break;
+  }
+  return $result;
+}
+
+//get type_ud for Livre internal numeration @see task #56343
+function  _batire_xml_parse_xslt_get_livre_type_ud() {
+  $data = _batire_xml_parse_xslt_storage('page_data');
+  $page_data = array_pop($data);
+  return $page_data['type_ud'];
+}
+/*
+ * function for job_queue
+ */
+function batire_xml_parse_images_job_queue_run($nids, $op) {
+  $result_data = array();
+  foreach($nids as $nid) {
+    $result = _batire_xml_parse_figures($nid);
+    if (isset($result) && !empty($result)) {
+      $result_data = array_merge($result_data, $result);
+    }
+  }
+  if (!empty($result_data)) {
+    $chunked_data = array_chunk($result_data, variable_get('batire_xml_parse_job_size', 10));
+    foreach ($chunked_data as $data) {
+      job_queue_add('_batire_antidot_export_job_run', 'Antidot ' . $op . ' images', array($data, $op, TRUE));
+    }
+  }
+  unset($result_data);
+  unset($chunked_data);
+}
+
+function _batire_xml_parse_figures($nid) {
+  include_once(drupal_get_path('module', 'batire_xml_parse') . '/batire_xml_parse.xml.inc');
+  /*
+   * Titles for text search
+   * 1) Title of point above image
+   * document-content-title-1
+   * document-content-title-2
+   .........................
+   * document-content-title-9
+   * document-content-title-10
+   */
+  $limits = 'jpeg jpg gif png';
+  $regex = '/\.('. ereg_replace(' +', '|', preg_quote('jpeg jpg gif tiff png')) .')$/i';
+  $content_titles_types = array(
+    'document-content-title-1',
+    'document-content-title-2',
+    'document-content-title-3',
+    'document-content-title-4',
+    'document-content-title-5',
+    'document-content-title-6',
+    'document-content-title-7',
+    'document-content-title-8',
+    'document-content-title-9',
+    'document-content-title-10',
+  );
+  $node = node_load($nid);
+  if (isset($node->page_data['attached']) && !empty($node->page_data['attached']) && !in_array($node->type, array(BATIRE_SITE_CT_ACTUALITE, BATIRE_SITE_CT_DR))) {
+    if (isset($node->page_data['body']['content']) && !empty($node->page_data['body']['content'])) {
+      $dom = new DOMDocument();
+      $dom->loadXML($node->page_data['body']['content']);
+      $xpath = new DOMXPath($dom);
+      /*
+       * Fill anchors array from document body
+       */
+      //process for <fig>
+      $in_body_figures = array();
+      $fig_nodes = $xpath->query('//artwork');
+      if (is_object($fig_nodes) && $fig_nodes->length > 0) {
+        foreach ($fig_nodes as $fig_node) {
+          if ($fig_node->parentNode->nodeName == 'fig') {
+            $image_id = $fig_node->getAttribute('name');
+            $image_html_position = strpos($node->page_data['content']['content'], $image_id);
+            $image_legend ='';
+            $max = 0;
+            //other title
+            foreach ($content_titles_types as $title) {
+              $pos = strripos(substr($node->page_data['content']['content'], 0, $image_html_position), $title);
+              if ($max < $pos) {
+                $result_max = array($title => $pos);
+                $max = $pos;
+              }
+            }
+            foreach ($result_max as $title => $pos) {
+              $beginnig_title_position = strpos($node->page_data['content']['content'], $title . '">', $pos) + strlen($title . '">');
+              if (!$beginnig_title_position) {
+                $beginnig_title_position = strpos($node->page_data['content']['content'], $title . ' notice-text">', $pos) + strlen($title . '">');
+                if (!$beginnig_title_position) {
+                  $beginnig_title_position = strpos($node->page_data['content']['content'], $title . ' uppercased-text">', $pos) + strlen($title . '">');
+                }
+              }
+              if ($beginnig_title_position) {
+                $finish_title_position = strpos($node->page_data['content']['content'], '</div>', $pos);
+                $other_title = substr($node->page_data['content']['content'], $beginnig_title_position, $finish_title_position - $beginnig_title_position);
+              }
+            }
+            //image title
+            foreach ($node->page_data['content_images']['content'] as $image) {
+              if (in_array($image_id, $image)) {
+                $fig_number = substr($image[2], 1 , strpos($image[2], ')') -1);
+                $image_title = 'Figure ' . $fig_number . ' ' . substr($image[2], strpos($image[2], ')') + 2 , strlen($image[2]));
+              }
+            }
+            //legend
+            $image_legend_teaser_beginning_position = strpos($node->page_data['content']['content'], '<b>Légende', $image_html_position);
+            if ($image_legend_teaser_beginning_position) {
+              $image_legend_beginning_wrapper_position = strpos($node->page_data['content']['content'], '<div class="document-image-info document-image-info-line">', $image_legend_teaser_beginning_position);
+              $image_legend_beginning_position = $image_legend_beginning_wrapper_position + strlen('<div class="document-image-info document-image-info-line">');
+              $image_legend_finish_position = strpos($node->page_data['content']['content'], '</div>', $image_legend_beginning_position);
+              $image_legend = substr($node->page_data['content']['content'], $image_legend_beginning_position, $image_legend_finish_position - $image_legend_beginning_position);
+            }
+            unset($image_legend_teaser_beginning_position);
+            $in_body_figures[] = array(
+              'id' => $fig_node->getAttribute('name'),
+              'other_title' => isset($other_title) ? $other_title : '',
+              'image_title' => $image_title,
+              'image_type' => 'FIGURE',
+              'image_legend' => $image_legend,
+            );
+          }
+        }
+      }
+      //<FIGURE> and <TABLEAU>
+      $domNodeList = $xpath->query("//FIGURE[@type = 'illustration' or @type = 'photo'] | FIGURECMT[@type='illustration' or @type='photo'] | //figure | //TABLEAU");
+      if (is_object($domNodeList) && $domNodeList->length != 0) {
+        foreach ($domNodeList as $domNode) {
+          $image_id = $domNode->getAttribute('ID');
+          if (empty($image_id)) {
+            $image_id = $domNode->getAttribute('id');
+          }
+          if (empty($image_id)) {
+            continue;
+          }
+          if (strstr($image_id, 'TAB')) {
+            $image_type = 'TABLEAU';
+          }
+          else {
+            $image_type = 'FIGURE';
+          }
+          //Find position of image
+          $image_html_position = strpos($node->page_data['content']['content'], $image_id);
+          $max = 0;
+          foreach ($content_titles_types as $title) {
+            $pos = strripos(substr($node->page_data['content']['content'], 0, $image_html_position), $title);
+            if ($max < $pos) {
+              $result_max = array($title => $pos);
+              $max = $pos;
+            }
+          }
+          if (isset($result_max) && !is_null($result_max)) {
+            foreach ($result_max as $title => $pos) {
+              $beginnig_title_position = strpos($node->page_data['content']['content'], $title . '">', $pos) + strlen($title . '">');
+              if (!$beginnig_title_position) {
+                $beginnig_title_position = strpos($node->page_data['content']['content'], $title . ' notice-text">', $pos) + strlen($title . '">');
+                if (!$beginnig_title_position) {
+                  $beginnig_title_position = strpos($node->page_data['content']['content'], $title . ' uppercased-text">', $pos) + strlen($title . '">');
+                }
+              }
+              if ($beginnig_title_position) {
+                $finish_title_position = strpos($node->page_data['content']['content'], '</div>', $pos);
+                $other_title = substr($node->page_data['content']['content'], $beginnig_title_position, $finish_title_position - $beginnig_title_position);
+              }
+            }
+          }
+          $image_legend = batire_xml_node_xml_inner_get($xpath, "LEGENDE/*", $domNode);
+          if (!empty($image_legend)) {
+            foreach($image_legend as $key => $legend_part) {
+              if (in_array(strtoupper($legend_part), array('<BR/>'))) {
+                unset($image_legend[$key]);
+              }
+            }
+            $image_legend = implode(' ', $image_legend);
+          }
+          else {
+            $image_legend = batire_xml_node_value_get($xpath, 'multi_fignote', $domNode);
+          }
+          $in_body_figures[] = array(
+            'id' => $image_id,
+            'image_title' => batire_xml_node_value_get($xpath, 'TITRE', $domNode),
+            'image_legend' => $image_legend,
+            'image_type' => $image_type,
+            'other_title' => isset($other_title) ? $other_title : '',
+          );
+        }
+      }
+
+      //fill the result
+      if (!empty($in_body_figures)) {
+        foreach ($node->page_data['attached'] as $file) {
+          if (preg_match($regex, $file['filename'])) {
+            foreach ($in_body_figures as $figure) {
+              if ((strpos($file['filename'], $figure['id']) !== FALSE)) {
+                $result[] = array(
+                  'nid' => $node->nid,
+                  'type' => 'batire_images',
+                  'image_path' => $file['filepath'],
+                  'image_id' => $figure['id'],
+                  'image_type' => $figure['image_type'],
+                  'filename' => $file['filename'],
+                  'document_id' => $node->page_data['bid'],
+                  'document_title' => $node->title,
+                  'image_title' => isset($figure['image_title']) ? $figure['image_title'] : '',
+                  'image_legend' => $figure['image_legend'],
+                  'other_title' => isset($figure['other_title']) ? $figure['other_title'] : '',
+                  'document_url' => 'document/' . $node->page_data['bid'] . '#' . $figure['id'],
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+  } elseif (in_array($node->type, array(BATIRE_SITE_CT_ACTUALITE, BATIRE_SITE_CT_DR))) {
+    $dom = new DOMDocument();
+    $dom->loadXML($node->page_data['body']['contenu1']);
+    $xpath = new DOMXPath($dom);
+    //Media object: in presse images exist like single nodes and the related by @rfid  of $page_data['liens']['lien_reference']
+    $media_nodes = $xpath->query('//lien_objet_metier');
+    if (is_object($media_nodes) && $media_nodes->length > 0) {
+      foreach ($media_nodes as $media_node) {
+        $refid = $media_node->getAttribute('refid');
+        foreach ($node->page_data['liens']['lien_reference'] as $lien_reference) {
+          if ($lien_reference['refid'] == $refid) {
+            $page_data = mongodb_page_get_page_by_bid($lien_reference['bid']);
+            $file = $page_data['attached'][1];
+            if (preg_match($regex, $file['filename'])) {
+              $file_paths = explode('.', $file['filename']);
+              $image_id = $file_paths[0];
+              $image_html_position = strpos($node->page_data['content']['content'], $image_id);
+              $max = 0;
+              foreach ($content_titles_types as $title) {
+                $pos = strripos(substr($node->page_data['content']['content'], 0, $image_html_position), $title);
+                if ($max < $pos) {
+                  $result_max = array($title => $pos);
+                  $max = $pos;
+                }
+              }
+              if (isset($result_max) && !is_null($result_max)) {
+                foreach ($result_max as $title => $pos) {
+                  $beginnig_title_position = strpos($node->page_data['content']['content'], $title . '">', $pos) + strlen($title . '">');
+                  if (!$beginnig_title_position) {
+                    $beginnig_title_position = strpos($node->page_data['content']['content'], $title . ' notice-text">', $pos) + strlen($title . '">');
+                    if (!$beginnig_title_position) {
+                      $beginnig_title_position = strpos($node->page_data['content']['content'], $title . ' uppercased-text">', $pos) + strlen($title . '">');
+                    }
+                  }
+                  if ($beginnig_title_position) {
+                    $finish_title_position = strpos($node->page_data['content']['content'], '</div>', $pos);
+                    $other_title = substr($node->page_data['content']['content'], $beginnig_title_position, $finish_title_position - $beginnig_title_position);
+                  }
+                }
+              }
+              $result[] = array(
+                'nid' => $node->nid,
+                'type' => 'batire_images',
+                'image_path' => $file['filepath'],
+                'image_id' => $image_id,
+                'filename' => $file['filename'],
+                'document_id' => $node->page_data['bid'],
+                'document_title' => $node->title,
+                'image_type' => 'FIGURE',
+                'image_title' => '',
+                'other_title' => isset($other_title) ? $other_title : '',
+                'document_url' => 'document/' . $node->page_data['bid'] . '#' . $file['filename'],
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+  if (isset($result) && !empty($result)) {
+    return $result;
+  }
+  else return array();
+}

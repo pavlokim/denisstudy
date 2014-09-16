@@ -1,0 +1,21 @@
+.gc-collapsible {
+  display: none;
+}
+.gc-admin-collapsible {
+  display: none;
+}
+.gc-member-collapsible {
+  display: none;
+}
+.gc-abo-manager-row {
+  background-color: #FFC9C9;
+}
+.gc-abo-admin-row {
+  background-color: #CCFFCC;
+}
+.gc-abo-subacc-row {
+  background-color: #FFFFCC;
+}
+.gc-abo-subacc-toprow {
+  background-color: #E6FFE6;
+}

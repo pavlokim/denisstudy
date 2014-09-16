@@ -1,0 +1,9 @@
+; $Id$
+name = Batire Antidot
+description = Provides menu and useful functions to interact with Antidot
+package = Batire
+core = 6.x
+version = "6.x-1"
+
+dependencies[] = batire_search
+dependencies[] = job_queue

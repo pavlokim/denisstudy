@@ -1,0 +1,1960 @@
+<?php
+
+/**
+ * @file
+ * Enables site-wide keyword searching.
+ */
+define('BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE', 'batire_search_views');
+define("BATIRE_SEARCH_ID_DEFAULT_ALPHABET", 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_');
+define("BATIRE_SEARCH_ID_LENGTH", 4);
+define("BATIRE_SEARCH_COUNT_SEARCH_TO_DISPLAY", 200);
+define("BATIRE_SEARCH_EXCLUDED_WORDS", "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z,',-,10eme,1er,1ere,2eme,3eme,4eme,5eme,6eme,7eme,8eme,9eme,a,afin,ai,ainsi,ais,
+ait,alors,apres,as,assez,au,aucun,aucune,aupres,auquel,auquelles,auquels,auraient,aurais,aurait,aurez,auriez,aurions,aurons,auront,aussi,
+aussitot,autre,autres,aux,avaient,avais,avait,avant,avec,avez,aviez,avoir,avos,ayant,beaucoup,c',car,ce,ceci,cela,celle,celles,celui,cependant,
+certes,ces,cet,cette,ceux,chacun,chacune,chaque,chez,cinq,comme,d',d'abord,dans,de,dehors,dela,depuis,des,dessous,dessus,deux,deça,dix,doit,donc,dont,
+du,durant,des,deja,elle,elles,eme,en,encore,enfin,entre,er,est,est-ce,etaient,etais,etait,etant,etiez,etions,etes,etre,et,etc,eu,eurent,eut,faut,
+fur,hormis,hors,huit,il,ils,j',je,jusqu',l',la,laquelle,le,lequel,les,lesquels,leur,leurs,lors,lorsque,lui,la,m',mais,malgre,me,melle,mes,mm,mme,
+moi,moins,mon,mr,meme,memes,n',neuf,ni,non-,nos,notamment,notre,nous,neanmoins,notres,on,ont,ou,où,par,parce,parfois,parmi,partout,pas,pendant,peu
+peut,peut-etre,plus,plutot,pour,pourquoi,pres,puisqu',puisque,qu',quand,quant,quatre,que,quel,quelle,quelles,quelqu',quelque,quelquefois,quelques,
+quels,qui,quoi,quot,s',sa,sans,sauf,se,selon,sept,sera,serai,seraient,serais,serait,seras,serez,seriez,serions,serons,seront,ses,si,sien,
+sienne,siennes,siens,sitot,six,soi,soit,sommes,son,sont,sous,souvent,suis,sur,t',tandis,tant,tes,tienne,tiennes,tiens,toi,ton,toujours,tous,
+tout,toutefois,toutes,troiw,tu,un,une,unes,uns,voici,voila,vos,votre,vous,votres");
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_search_menu() {
+  $items = array();
+  $items['admin/batire-site/settings/search'] = array(
+    'title' => '!site_name search settings',
+    'title arguments' => array('!site_name' => SITE_NAME_FS),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_search_search_settings'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_search.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_search') . '/includes',
+    'description' => 'Search settings for website'
+  );
+  return $items;
+}
+
+/**
+ * Generate a random alphanumeric search id.
+ */
+function batire_search_generate_id() {
+  $length = variable_get('batire_search_id_length', BATIRE_SEARCH_ID_LENGTH);
+  // This variable contains the list of allowable characters for the id.
+  $allowable_characters = variable_get('batire_search_id_alphabet', BATIRE_SEARCH_ID_DEFAULT_ALPHABET);
+
+  // Zero-based count of characters in the allowable list:
+  $len = strlen($allowable_characters) - 1;
+
+  // Declare the id as a blank string.
+  $id = '';
+
+  // Loop the number of times specified by $length.
+  for ($i = 0; $i < $length; $i++) {
+    // Each iteration, pick a random character from the
+    // allowable string and append it to the id:
+    $id .= $allowable_characters[mt_rand(0, $len)];
+  }
+  // @todo need to add settings on case if all ids already engaged.
+  while (mongodb_search_find_search_id($id)) {
+    $id = batire_search_generate_id();
+  }
+  return $id;
+}
+
+/**
+ * Submit search form.
+ */
+function batire_search_form_submit($form, &$form_state) {
+  $data = array();
+  $sid = '';
+  $mode = '';
+  $nid = NULL;
+  if ($form_state['values']['type_form'] == 'footer') {
+    $data = batire_search_search_form_build_criteria($form_state['values']);
+    $sid = batire_search_generate_id();
+    $mode = 'insert';
+  }
+  elseif ($form_state['values']['type_form'] == 'header') {
+    if (!empty($form_state['values']['list_criteries_sources'])) {
+      $form_state['values']['list_criteries_sources'] = batire_search_ui_return_render_sources($form_state['values']['list_criteries_sources']);
+    }
+    if (!empty($form_state['clicked_button']['#post']['search_type_hidden'])) {
+      $form_state['values']['link_submit'] = ($form_state['clicked_button']['#post']['search_type_hidden'] == 'image_search') ? 'image_search' : 'text_search';
+    }
+    $data = batire_search_search_form_build_criteria($form_state['values']);
+    $sid = batire_search_generate_id();
+    $mode = 'insert';
+  }
+  elseif ($form_state['values']['type_form'] == 'switcher') {
+    $sid = $form_state['values']['search_key'];
+    $search_data = mongodb_search_get_search_data($sid);
+    if ($search_data['data']['image_search']) {
+      $search_data['data']['image_search'] = FALSE;
+    }
+    else {
+      $search_data['data']['image_search'] = TRUE;
+    }
+    $data = $search_data['data'];
+    $sid = batire_search_generate_id();
+    $mode = 'insert';
+  }
+  else {
+    $data = batire_search_search_form_build_criteria($form_state['values']);
+    $sid = $form_state['values']['search_key'];
+    $search_data = mongodb_search_get_search_data($sid);
+    $nid = $search_data['nid'];
+    if (!empty($search_data['data']['search_depend'])) {
+      $data['search_depend'] = $search_data['data']['search_depend'];
+    }
+    $mode = 'update';
+  }
+
+  batire_search_save_search_criteria($sid, $data, $nid, $mode);
+  $form_state['redirect'] = "recherche-avancee/resultats/" . $sid;
+
+  unset($_REQUEST['destination']);
+}
+
+/**
+ * Create array with criteries from search forms
+ */
+function batire_search_search_form_build_criteria($data) {
+  $criteries = batire_search_get_list_default_search_data();
+  $criteries['status'] = TRUE;
+  $gen_criterial_array = array();
+  $criteries['search_type'] = $data['type_form'];
+
+  if (!empty($data['link_submit'])) {
+    $criteries['image_search'] = ($data['link_submit'] == 'image_search') ? TRUE : FALSE;
+  }
+  else {
+    $criteries['image_search'] = ($data['op'] == 'image_search') ? TRUE : FALSE;
+  }
+
+  $criteries['search_word'] = htmlspecialchars($data['search_word']);
+  switch ($data['type_form']) {
+    case 'footer':
+      return $criteries;
+      break;
+
+    case 'header':
+      $gen_criterial_array = array();
+      $header_gen_criteries_array = array(
+        'sources' => 'list_criteries_sources',
+        'types' => 'list_criteries_types',
+        'trades' => 'list_criteries_trades',
+        'themes' => 'list_criteries_themes',
+      );
+
+      foreach ($header_gen_criteries_array as $general_key => $current_criterial_array) {
+        if (isset($data[$current_criterial_array]) && is_array($data[$current_criterial_array])) {
+          foreach ($data[$current_criterial_array] as $key => $value) {
+            if ($value) {
+              if (is_numeric($value)) {
+                $gen_criterial_array[$general_key][$value] = $value;
+              }
+              else {
+                $gen_criterial_array[$general_key][$key] = $value;
+              }
+            }
+          }
+        }
+      }
+      $criteries['title_only'] = $data['title_only'];
+      $criteries['access_products'] = $data['access_products'];
+      break;
+
+    case 'advanced':
+      $gen_criterial_array = array();
+
+      $types_tax = taxonomy_get_tree(BATIRE_SITE_VID_BATIMENT, 0, 2);
+      foreach ($types_tax as $term) {
+        $types_array[] = $term->tid;
+      }
+      $trades_tax = taxonomy_get_tree(BATIRE_SITE_VID_CORPS, 0, 2);
+      foreach ($trades_tax as $term) {
+        $trades_array[] = $term->tid;
+      }
+
+      $adv_general_criteries_array = array(
+        'types' => $types_array,
+        'trades' => $trades_array,
+        'themes' => array(
+          'batire_themes',
+        ),
+        'sources' => array(
+          BATIRE_SITE_CT_CODE,
+          BATIRE_SITE_CT_TO,
+          'include_db',
+          BATIRE_SITE_CT_FM,
+          BATIRE_SITE_CT_LIVRE,
+          BATIRE_SITE_CT_COMP_TECH,
+          BATIRE_SITE_CT_DOC_PRAT,
+          BATIRE_SITE_CT_ACTUALITE,
+          BATIRE_SITE_CT_TN,
+        )
+      );
+      //@todo add other type's arrays
+      foreach ($adv_general_criteries_array as $general_key => $current_criterial_array) {
+        foreach ($current_criterial_array as $current_criterial_key) {
+          if (isset($data[$current_criterial_key])) {
+            if (is_array($data[$current_criterial_key])) {
+              // This is needed to not to get long queries to antidot when complete doctype is selected as filter.
+              // Previously it would select all doctype subtypes which could cause long query string and search fail.
+              // Now we will select only one complete doctype ID, not all sub-IDs.
+              // Also check all other changes in this commit to understand more.
+              if (isset($data[$current_criterial_key]['tous']) && $data[$current_criterial_key]['tous'] && $general_key == 'sources') {
+                switch ($current_criterial_key) {
+                  case 'batire_feuillet_mobile':
+                    $gen_criterial_array[$general_key][BATIRE_SITE_TID_DOC_TYPE_FM] = BATIRE_SITE_TID_DOC_TYPE_FM;
+                    break;
+                  case 'batire_codes':
+                    $gen_criterial_array[$general_key][BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE;
+                    break;
+                  case 'batire_texte_officiel':
+                    $gen_criterial_array[$general_key][BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL;
+                    break;
+                  case 'batire_livres':
+                    $gen_criterial_array[$general_key][BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE;
+                    break;
+                  case 'batire_complement_technique':
+                    $gen_criterial_array[$general_key][BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT;
+                    break;
+                  case 'batire_texte_normatifs':
+                    $gen_criterial_array[$general_key][BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF;
+                    break;
+                }
+              }
+              else {
+                foreach ($data[$current_criterial_key] as $key => $value) {
+                  if ($value) {
+                    if ($key == 'tous') {
+                      unset($data[$current_criterial_key][$key]);
+                    }
+                    else {
+                      $gen_criterial_array[$general_key][$key] = $value;
+                    }
+                  }
+                }
+              }
+            }
+            else {
+              if ($data[$current_criterial_key]) {
+                $gen_criterial_array[$general_key][$current_criterial_key] = $current_criterial_key;
+              }
+            }
+          }
+        }
+      }
+
+      //Documents de Reference type
+      $sous_types_tids = batire_xml_parse_ddr_get_sous_types_tids();
+      $rubrique_tids = batire_xml_parse_ddr_get_rubriques_tids();
+      $ddr_sources = array();
+      foreach ($data as $key => $value) {
+        if (in_array($key, $sous_types_tids) || in_array($key, $rubrique_tids)) {
+          if (is_array($value)) {
+            foreach ($value as $tid) {
+              if ($tid) {
+                $ddr_sources[$key] = $key;
+              }
+            }
+          }
+          else {
+            if ($value) {
+              $ddr_sources[$key] = $key;
+            }
+          }
+        }
+      }
+
+      if (!empty($ddr_sources)) {
+        if (!empty($gen_criterial_array['sources'])) {
+          $gen_criterial_array['sources'] += $ddr_sources;
+        }
+        else {
+          $gen_criterial_array['sources'] = $ddr_sources;
+        }
+      }
+
+      $criteries['date_type'] = $data['date_type'];
+      switch ($criteries['date_type']) {
+        case 'of_to':
+          $criteries['first_date'] = $data['first_date'];
+          $criteries['last_date'] = $data['last_date'];
+          break;
+        case 'accurate':
+          $criteries['first_date'] = $data['first_date'];
+          $criteries['last_date'] = '';
+          break;
+        default :
+          $criteries['first_date'] = '';
+          $criteries['last_date'] = '';
+          break;
+      }
+
+      $criteries['public_date_type'] = $data['public_date_type'];
+      $criteries['public_first_date'] = $data['public_first_date'];
+      $criteries['public_last_date'] = $data['public_last_date'];
+      $criteries['reference'] = $data['reference'];
+      $criteries['reference_text'] = trim($data['reference_text']);
+      $criteries['title_only'] = $data['title_only'];
+      $criteries['include_db'] = $data['include_db'];
+      $criteries['access_products'] = $data['access_products'];
+      break;
+  }
+  if (!empty($gen_criterial_array['sources'])) {
+    $criteries['sources'] = $gen_criterial_array['sources'];
+  }
+  if (!empty($gen_criterial_array['types'])) {
+    $criteries['types'] = $gen_criterial_array['types'];
+  }
+  if (!empty($gen_criterial_array['trades'])) {
+    $criteries['trades'] = $gen_criterial_array['trades'];
+  }
+  if (!empty($gen_criterial_array['themes'])) {
+    $criteries['themes'] = $gen_criterial_array['themes'];
+  }
+
+  return $criteries;
+}
+
+/**
+ * Save selected search criteries
+ * @param $sid Search id
+ * @param $data Search data
+ * @param $nid Nid of search
+ * @param $mode insert or update
+ * @param $status_active active or noactive
+ * @param $status_undelete TRUE or FALSE
+ * @return Bool TRUE|FALSE
+ */
+function batire_search_save_search_criteria($sid, $data, $nid = NULL, $mode = 'insert', $status = TRUE, $undelete = FALSE) {
+  global $user;
+  if (!empty($sid)) {
+    $sdata = array(
+      'data' => $data,
+      'uid' => $user->uid,
+      'nid' => $nid,
+      'status' => $status,
+      'undelete' => $undelete,
+      'ts' => time() // will be insert or update time of search
+    );
+    return mongodb_search_save_search($sid, $sdata, $mode);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Return default list search
+ */
+function batire_search_get_list_default_search_data() {
+  return array(
+    'search_type' => 'default',
+    'search_word' => '',
+    'title_only' => FALSE,
+    'date_type' => '',
+    'reference' => '',
+    'reference_text' => '',
+    'status' => FALSE,
+    'first_date' => '',
+    'last_date' => '',
+    'types' => array(),
+    'trades' => array(),
+    'themes' => array(),
+    'sources' => array(),
+    'public_date_type' => '',
+    'public_first_date' => '',
+    'public_last_date' => '',
+    'include_db' => FALSE,
+    'refine_search' => array(), // used only when user registered search
+    'documents' => array(),
+    'related_search' => NULL,
+  );
+}
+
+/**
+ * Load criteries from database
+ * @param  $sid Search id
+ * @param  $string Return criteries such as string
+ * @return Array or string
+ */
+function batire_search_load_search_criteries($sid, $string = FALSE, $hl = TRUE) {
+  if (!empty($sid)) {
+    $search_data = mongodb_search_get_search_data($sid);
+    $criteries = isset($search_data['data']) ? $search_data['data'] : array();
+
+    if ($string) {
+      if (isset($criteries['sources'])) {
+        $criteries = batire_search_ui_return_unrender_sources($criteries, FALSE);
+        $criteries['sources'] = batire_search_ui_return_render_sources($criteries['sources'], TRUE);
+      }
+      return batire_search_criteries_array_to_list($criteries, $hl);
+    }
+    else {
+      return $criteries;
+    }
+  }
+  return NULL;
+}
+
+/**
+ * Transform from array to list
+ */
+function batire_search_criteries_array_to_list($criteries, $hl = TRUE) {
+  $search_criteries = array(
+    'search_word' => '',
+    'title_only' => FALSE,
+    'date_type' => '',
+    'reference' => '',
+    'types' => '',
+    'trades' => '',
+    'themes' => '',
+    'codes' => '',
+    'to' => '',
+    'public_date_type' => '',
+    'tn' => '',
+    'include_db' => FALSE,
+    'fm' => '',
+    'livres' => '',
+    'ct' => '',
+    'doc_pr' => FALSE,
+    'actual' => FALSE,
+  );
+
+  $output = '';
+  if (!empty($criteries['search_word'])) {
+    if ($hl) {
+      $output .= '<span class="labeled">«' . $criteries['search_word'] . '»</span>';
+    }
+    else {
+      $output .= $criteries['search_word'];
+    }
+  }
+
+  if (!empty($criteries['title_only'])) {
+    $search_criteries['title_only'] = t('Dans les titres uniquement');
+  }
+
+  if (!empty($criteries['date_type'])) {
+    switch ($criteries['date_type']) {
+      case 'of_to':
+        if (!empty($criteries['first_date']) && !empty($criteries['last_date'])) {
+          $search_criteries['date_type'] = t('Du @fdate au @ldate', array('@fdate' => $criteries['first_date'], '@ldate' => $criteries['last_date']));
+        }
+        break;
+      case 'accurate':
+        if (!empty($criteries['first_date'])) {
+          $search_criteries['date_type'] = t('le @date', array('@date' => $criteries['first_date']));
+        }
+        break;
+      case 'last_7_day':
+        $search_criteries['date_type'] = t('Depuis 7 jours');
+        break;
+      case 'last_30_day':
+        $search_criteries['date_type'] = t('Depuis 30 jours');
+        break;
+      case 'last_6_month':
+        $search_criteries['date_type'] = t('Depuis 6 mois');
+        break;
+      case 'current_year':
+        $search_criteries['date_type'] = t('En @year', array('@year' => format_date(time(), 'custom', 'Y')));
+        break;
+      case 'last_year':
+        $search_criteries['date_type'] = t('Depuis un an');
+        break;
+      case 'over_year':
+        $search_criteries['date_type'] = t("Depuis plus d'un an");
+        break;
+    }
+  }
+
+  if (!empty($criteries['reference'])) {
+    $reference_array = array(
+      '' => t('Sélectionnez une source'),
+      'codes' => t('Codes'),
+      'to' => t('Textes officiels'),
+      'tn' => t('Textes normatifs'),
+      'fm' => t('Classeurs à mises à jour'),
+      'livres' => t('Livres'),
+    );
+    $reference = $reference_array[$criteries['reference']];
+    if (isset($criteries['reference_text'])) {
+      $reference .= ' ' . $criteries['reference_text'];
+    }
+    $search_criteries['reference'] = $reference;
+  }
+
+  $temp_temp_array = array(
+    'types' => BATIRE_SITE_VID_BATIMENT,
+    'trades' => BATIRE_SITE_VID_CORPS,
+  );
+//types
+  $temp_parent_types_array = taxonomy_get_tree(BATIRE_SITE_VID_BATIMENT, 0, -1);
+  foreach ($temp_parent_types_array as $parent) {
+    $parent_types_array[$parent->tid]['name'] = $parent->name;
+    $parent_types_array[$parent->tid]['parent'] = $parent->parents[0];
+    foreach ($temp_parent_types_array as $child) {
+      if ($child->parents[0] == $parent->tid) {
+        $parent_types_array[$parent->tid]['childs'][$child->tid] = $child->tid;
+      }
+    }
+  }
+
+//trades
+  $temp_parent_corps_array = taxonomy_get_tree(BATIRE_SITE_VID_CORPS, 0, -1);
+  foreach ($temp_parent_corps_array as $parent) {
+    $parent_corps_array[$parent->tid]['name'] = $parent->name;
+    $parent_corps_array[$parent->tid]['parent'] = $parent->parents[0];
+    foreach ($temp_parent_corps_array as $child) {
+      if ($child->parents[0] == $parent->tid) {
+        $parent_corps_array[$parent->tid]['childs'][$child->tid] = $child->tid;
+      }
+    }
+  }
+
+  $themes = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_THEMES, 'list', FALSE);
+
+  $source_codes = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_CODES, 'list', FALSE);
+  $source_fm = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_FM, 'list', FALSE);
+  $source_tn = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_NORMATIF, 'list', FALSE);
+  $source_to = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_TO, 'list', FALSE);
+  $source_livres = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_LIVRES, 'list', FALSE);
+  // According to #45633 some items need to be removed (temporarily)
+  $options_to_remove = array(
+    165, // Vocabulaire illustré de la construction
+    168, // Introduction à la mécanique des sols
+    170, // Diagnostic des structures
+    172, // Formulation des bétons
+  );
+  foreach ($options_to_remove as $tid) {
+    unset($source_livres[$tid]);
+  }
+  $source_ct = batire_search_batire_taxonomy_get_tree(BATIRE_SITE_VID_TYPE_CT, 'list', FALSE);
+
+  $criteria_group = array(
+    'types' => $parent_types_array,
+    'trades' => $parent_corps_array,
+    'themes' => $themes,
+    'codes' => $source_codes,
+    'fm' => $source_fm,
+    'tn' => $source_tn,
+    'to' => $source_to,
+    'livres' => $source_livres,
+    'ct' => $source_ct,
+  );
+  $criteria_group_all_text = array(
+    'types' => t('Tous les types de bâtiment'),
+    'trades' => t('Tous les corps d’état'),
+    'themes' => t('Tous les thèmes'),
+    'codes' => t('Tous les codes'),
+    'fm' => t('Tous les classeurs à mises à jour'),
+    'tn' => t('Tous les types de texte normatif'),
+    'to' => t('Tous les textes officiels'),
+    'livres' => t('Tous les livres'),
+    'ct' => t('Tous les complément technique'),
+  );
+
+  foreach ($criteria_group as $criteria_key => $criteria_array) {
+    $exist = TRUE;
+    switch ($criteria_key) {
+      case 'types':
+      case 'trades':
+        $temp_current_criteria_arr = isset($criteries[$criteria_key]) ? $criteries[$criteria_key] : array();
+        $output_array = array();
+        if (!empty($temp_current_criteria_arr)) {
+          foreach ($temp_current_criteria_arr as $cc_key => $cc_val) {
+            if (in_array($cc_key, array_keys($temp_current_criteria_arr))) {
+              if ($criteria_array[$cc_key]['parent'] == 0) {
+                $output_array[$cc_key] = $criteria_array[$cc_key]['name'];
+                if (!empty($criteria_array['childs'])) {
+                  foreach ($criteria_array['childs'] as $k => $v) {
+                    unset($temp_current_criteria_arr[$k]);
+                  }
+                }
+              }
+              else {
+                $p_id = $criteria_array[$cc_key]['parent'];
+                if (!isset($temp_child_array[$p_id])) {
+                  $temp_child_array[$p_id] = 0;
+                }
+                ++$temp_child_array[$p_id];
+              }
+            }
+          }
+        }
+        if (!empty($temp_child_array)) {
+          foreach ($temp_child_array as $key => $ch_count) {
+
+            if (isset($criteria_array[$key]['childs']) && (count($criteria_array[$key]['childs']) == $ch_count)) {
+              $output_array[$key] = $criteria_array[$key]['name'];
+              foreach ($criteria_array[$key]['childs'] as $k => $v) {
+                unset($temp_current_criteria_arr[$k]);
+              }
+            }
+          }
+        }
+        if (!empty($temp_current_criteria_arr)) {
+          foreach ($temp_current_criteria_arr as $c_k => $c_v) {
+            $temp_current_criteria_arr[$c_k] = !empty($criteria_array[$c_k]['name']) ? $criteria_array[$c_k]['name'] : $criteria_array[$c_k];
+          }
+          $output_array += $temp_current_criteria_arr;
+        }
+
+        $output_array_temp[$criteria_key] = $output_array;
+
+        $criteria_array = array();
+
+        $only_parent_array = taxonomy_get_tree($temp_temp_array[$criteria_key], 0, -1, 1);
+        foreach ($only_parent_array as $k => $v) {
+          $criteria_array[$v->tid] = $v->name;
+        }
+        $temp_current_criteria_arr = $output_array;
+        break;
+
+      case 'themes':
+        $temp_current_criteria_arr = isset($criteries[$criteria_key]) ? $criteries[$criteria_key] : array();
+        break;
+      default:
+        $temp_current_criteria_arr = isset($criteries['sources']) ? $criteries['sources'] : array();
+        break;
+    }
+
+    foreach ($criteria_array as $c_key => $c_val) {
+      if (!isset($temp_current_criteria_arr[$c_key])) {
+        $exist = FALSE;
+        break;
+      }
+    }
+
+    if ($exist) {
+      foreach ($criteria_array as $c_key => $c_val) {
+        switch ($criteria_key) {
+          case 'types':
+          case 'trades':
+          case 'themes':
+            unset($temp_current_criteria_arr[$c_key]);
+            break;
+          default:
+            unset($criteries['sources'][$c_key]);
+            break;
+        }
+      }
+      $search_criteries[$criteria_key] = $criteria_group_all_text[$criteria_key];
+    }
+    $criteries[$criteria_key] = $temp_current_criteria_arr;
+  }
+
+  foreach ($criteria_group as $criteria_key => $criteria_array) {
+    $temp_arr = array();
+    switch ($criteria_key) {
+      case 'types':
+      case 'trades':
+        $temp_arr = array();
+
+        $temp_current_criteria_arr = $output_array_temp[$criteria_key]; //$criteries[$criteria_key];
+        if (!empty($criteries[$criteria_key])) {
+          $temp_arr = $output_array_temp[$criteria_key];
+        }
+
+        break;
+      case 'themes':
+        $temp_current_criteria_arr = $criteries[$criteria_key];
+        if (!empty($temp_current_criteria_arr)) {
+
+
+          foreach ($temp_current_criteria_arr as $key => $val) {
+            if (isset($criteria_array[$key]) && $val) {
+
+              $temp_arr[] = $criteria_array[$key];
+            }
+          }
+        }
+        break;
+      default:
+        $temp_current_criteria_arr = isset($criteries['sources']) ? $criteries['sources'] : array();
+        if (!empty($temp_current_criteria_arr)) {
+
+          foreach ($temp_current_criteria_arr as $key => $val) {
+            if (isset($criteria_array[$key]) && $val) {
+              $temp_arr[] = $criteria_array[$key];
+            }
+          }
+        }
+        break;
+    }
+
+    if (!empty($temp_arr)) {
+      $search_criteries[$criteria_key] = implode(', ', $temp_arr);
+    }
+  }
+
+//  foreach ($criteries['refine_search'] as $refine) {
+//    $search_criteries[] = $refine;
+//  }
+  if (!empty($criteries['public_date_type'])) {
+    switch ($criteries['public_date_type']) {
+      case 'of_to':
+        $search_criteries['public_date_type'] = t('Publication au JO du @fdate au @ldate', array('@fdate' => $criteries['public_first_date'], '@ldate' => $criteries['public_last_date']));
+        break;
+      case 'accurate':
+        $search_criteries['public_date_type'] = t('Publication au JO le @date', array('@date' => $criteries['public_first_date']));
+        break;
+      case 'less_year':
+        $search_criteries['public_date_type'] = t("Publication au JO depuis moins d’un an");
+        break;
+    }
+  }
+  if (!empty($criteries['include_db'])) {
+    $search_criteries['include_db'] = t('Inclure toutes les notices de la base');
+  }
+
+  if (isset($criteries['sources']['batire_document_pratique'])) {
+    $search_criteries['doc_pr'] = t('Documents pratiques');
+  }
+  if (isset($criteries['sources']['batire_actualite'])) {
+    $search_criteries['actual'] = t('Actualité');
+  }
+
+  $output_array = array();
+  if (!empty($search_criteries)) {
+    foreach ($search_criteries as $sc_key => $sc_val) {
+      if ($sc_val) {
+        $output_array[$sc_key] = $sc_val;
+      }
+    }
+  }
+  if (!empty($output_array)) {
+    if ($output) {
+      $output .= ' + ';
+    }
+    $output .= implode(', ', $output_array);
+  }
+
+  return $output;
+}
+
+/**
+ * Get tree taxonomy
+ * @param int $vid
+ * @param string $mod
+ * @param Bool $access
+ * @return type
+ */
+function batire_search_batire_taxonomy_get_tree($vid, $mod = 'list', $access = TRUE) {
+  $taxonomy_items = array();
+  if ($mod == 'list') {
+
+    $taxonomy_tree = taxonomy_get_tree($vid);
+    $access_terms = batire_search_get_term_fields_values();
+    if ($access) {
+      $data = batire_cache_get('batire_search_taxonomy_tree_list_' . $vid);
+      if (!empty($data)) {
+        return $data;
+      }
+
+      foreach ($taxonomy_tree as $term) {
+        if (isset($access_terms[$term->tid]['field_include_in_simple_search_value']) &&
+        $access_terms[$term->tid]['field_include_in_simple_search_value']) {
+          $childrens = taxonomy_get_children($term->tid);
+          if ($childrens) {
+            foreach ($childrens as $child) {
+              $taxonomy_items[$child->tid] = t($child->name);
+            }
+          }
+          else {
+            $taxonomy_items[$term->tid] = $term->name;
+          }
+        }
+      }
+    }
+    else {
+      foreach ($taxonomy_tree as $term) {
+
+        $childrens = taxonomy_get_children($term->tid);
+        if ($childrens) {
+          foreach ($childrens as $child) {
+            $taxonomy_items[$child->tid] = t($child->name);
+          }
+        }
+        else {
+          $taxonomy_items[$term->tid] = $term->name;
+        }
+      }
+    }
+    batire_cache_set('batire_search_taxonomy_tree_list_' . $vid, $taxonomy_items);
+  }
+  else {
+    $data = batire_cache_get('batire_search_texonomy_tree_array_' . $vid);
+    if (!empty($data)) {
+      return $data;
+    }
+    $taxonomy_tree = taxonomy_get_tree($vid);
+
+    foreach ($taxonomy_tree as $term) {
+      $childrens = taxonomy_get_children($term->tid);
+      if ($childrens) {
+        $taxonomy_items[$term->tid]['name'] = $term->name;
+
+        $taxonomy_items[$term->tid]['childrens']['tous'] = t('Tous les critères');
+        $taxonomy_items[$term->tid]['class'] = 'adv_select_all';
+
+        foreach ($childrens as $child) {
+          $taxonomy_items[$term->tid]['childrens'][$child->tid] = t($child->name);
+        }
+      }
+      elseif (!$term->parents[0]) {
+        $taxonomy_items[$term->tid]['name'] = $term->name;
+      }
+    }
+    batire_cache_set('batire_search_texonomy_tree_array_' . $vid, $taxonomy_items);
+  }
+  return $taxonomy_items;
+}
+
+/**
+ * Implementation of hook_term_fields_api().
+ */
+function batire_search_term_fields_api($op, $field, $values = array()) {
+  switch ($op) {
+    case 'field save':
+    case 'delete field':
+      batire_cache_clear_all('batire_search_taxonomy_terms');
+      batire_cache_clear_all('batire_search_taxonomy_tree_list_' . BATIRE_SITE_VID_BATIMENT);
+      batire_cache_clear_all('batire_search_taxonomy_tree_list_' . BATIRE_SITE_VID_CORPS);
+      batire_cache_clear_all('batire_search_taxonomy_tree_list_' . BATIRE_SITE_VID_THEMES);
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_taxonomy().
+ */
+function batire_search_taxonomy($op, $type, $array = NULL) {
+  switch ($op) {
+    case 'delete':
+    case 'update':
+      batire_cache_clear_all('batire_search_taxonomy_terms');
+      $vocs = array(
+        BATIRE_SITE_VID_BATIMENT,
+        BATIRE_SITE_VID_CORPS,
+        BATIRE_SITE_VID_THEMES
+      );
+      if (isset($array['vid']) && !empty($array['vid']) && in_array($array['vid'], $vocs)) {
+        batire_cache_clear_all('batire_search_taxonomy_tree_list_' . $array['vid']);
+        batire_cache_clear_all('batire_search_texonomy_tree_array_' . $array['vid']);
+      }
+      break;
+  }
+}
+
+/**
+ * Get array of access terms
+ * @return array
+ */
+function batire_search_get_term_fields_values() {
+  $data = batire_cache_get('batire_search_taxonomy_terms');
+  if (!empty($data)) {
+    return $data;
+  }
+  $terms_fields_array = array();
+  $vocab_array = array(
+    'types_array' => taxonomy_get_tree(BATIRE_SITE_VID_BATIMENT),
+    'trades_array' => taxonomy_get_tree(BATIRE_SITE_VID_CORPS),
+    'themes_array' => taxonomy_get_tree(BATIRE_SITE_VID_THEMES),
+    'normaf_array' => taxonomy_get_tree(BATIRE_SITE_VID_NORMATIF),
+  );
+  foreach ($vocab_array as $terms_array) {
+    foreach ($terms_array as $term) {
+      $terms_fields_array[$term->tid] = term_fields_get_fields_values($term);
+    }
+  }
+
+  batire_cache_set('batire_search_taxonomy_terms', $terms_fields_array);
+  return $terms_fields_array;
+}
+
+/**
+ * Create copy of search
+ * @param $sid Search id
+ * @param $data Additional search data
+ * @return New search id
+ */
+function batire_search_create_search_copy($sid, $data = array()) {
+  $search_data = mongodb_search_get_search_data($sid);
+
+  if (!empty($search_data['data'])) {
+    $search_data['data'] = array_merge($search_data['data'], $data);
+  }
+  else {
+    $search_data['data'] = array_merge($search_data, $data);
+  }
+  $new_search_id = batire_search_generate_id();
+  batire_search_save_search_criteria($new_search_id, $search_data['data'], NULL, 'insert');
+  return $new_search_id;
+}
+
+/**
+ * Create new search
+ * @param $sid Search id
+ * @param $data Additional search data
+ * @return New search id
+ */
+function batire_search_create_new_search($sid = NULL, $data = array()) {
+  if (empty($sid)) {
+    $sid = batire_search_generate_id();
+  }
+  $search_data = batire_search_get_list_default_search_data();
+  $search_data = array_merge($search_data, $data);
+  batire_search_save_search_criteria($sid, $search_data, NULL, 'insert');
+  return $sid;
+}
+
+/**
+ * Get count of search results
+ * @param $sid Search id
+ * @return Integer Quantity
+ */
+function batire_search_get_count_results($sid) {
+  //$search = _batire_site_get_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $sid, NULL);
+  $search = mongodb_select_one(MONGODB_SEARCH_COLLECTION, array('sid' => $sid));
+  if (!empty($search['pager']['count_all_results'])) {
+    if (isset($search['pager']['count_all_results']) && $search['pager']['count_all_results']) {
+      return $search['pager']['count_all_results'];
+    }
+  }
+  return 0;
+}
+
+/**
+ * Maps the search request data to proper antidot field names
+ * @param $criterias List of criterias for search
+ * @param $selected_documents Selected documents
+ * @param $sort_by Sorting
+ * @param $sort_order Order for sorting ASC|DESC
+ * @param $limit count documents per page
+ * @param $page number of page
+ */
+function batire_search_map_request(array $criterias, $selected_documents = array(), $sort_by = 'relevant', $sort_order = 'DESC', $limit = 50, $page = 0) {
+  global $user;
+  if (!$replace_user = batire_gc_ip_replace_user()) {
+    $replace_user = $user;
+  }
+  $request = array();
+  // sorts
+  //if no keywords - sort by source
+  if (((!isset($criterias['search_word']) || empty($criterias['search_word'])) && ($sort_by == 'relevant')) && !$criterias['image_search']) {
+    $sort_by = 'source';
+  }
+  elseif (((!isset($criterias['search_word']) || empty($criterias['search_word'])) && ($sort_by == 'relevant')) && $criterias['image_search']) {
+    $sort_by = 'date';
+  }
+
+  switch ($sort_by) {
+    default:
+    case 'relevant':
+      if (strtoupper($sort_order) == 'DESC') {
+        $request['afs:sort'] = 'afs:relevance';
+      }
+      break;
+
+    case 'source':
+      if ((isset($criterias['refine_search']['typeSource']) && count($criterias['refine_search']['typeSource'])) || (isset($criterias['sources']) && count($criterias['sources']))) {
+        //Reverse sort order
+        if (strtoupper($sort_order) == 'DESC') {
+          $sort_order = 'ASC';
+        }
+        else {
+          $sort_order = 'DESC';
+        }
+
+        //Detect sorting types
+        $req_types = batire_search_detect_request_types($criterias);
+
+        //if 1 - apply specified filter
+        if (count($req_types) == 1) {
+          $req_type = array_pop($req_types);
+          switch ($req_type) {
+            case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM:
+              $request['afs:sort'] = 'numeroRef';
+              break;
+            case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE:
+              $request['afs:sort'] = 'id';
+              break;
+            case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF:
+              $request['afs:sort'] = 'numeroRef';
+              $second_sort         = ' and Position,ASC';
+              break;
+            case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL:
+              $request['afs:sort'] = 'typeSource';
+              $second_sort         = ' and dateSignature,DESC';
+
+              if (strtoupper($sort_order) == 'DESC') {
+                $sort_order = 'ASC';
+              }
+              else {
+                $sort_order = 'DESC';
+              }              break;
+            case BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE:
+              $request['afs:sort'] = 'id';
+              break;
+          }
+        }
+        else {
+          //if >1 - just by priorite?
+          $request['afs:sort'] = 'priorite';
+        }
+      }
+      else {
+        $request['afs:sort'] = 'id';
+      }
+      break;
+
+    case 'date':
+      //Detect sorting types
+      $req_types = batire_search_detect_request_types($criterias);
+
+      //if 1 - apply specified filter
+      if ((count($req_types) == 1) && array_pop($req_types) == BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL) {
+        $request['afs:sort'] = 'dateSignature';
+      }
+      else {
+        $request['afs:sort'] = 'date';
+        $second_sort = ' and numeroRef,ASC';
+      }
+
+      break;
+  }
+
+  if (!empty($request['afs:sort'])) {
+    $request['afs:sort'] .= ',' . strtoupper($sort_order);
+  }
+
+  if (isset($second_sort) && !empty($second_sort)) {
+    $request['afs:sort'] .= $second_sort;
+  }
+
+  // page from pager
+  if ($page) {
+    $request['afs:page'] = $page + 1;
+  }
+  // count per page
+  if (isset($limit) && is_int($limit)) {
+    $request['afs:replies'] = $limit;
+  }
+
+  $filter = array();
+  //Facets
+  if (!empty($criterias['refine_search'])) {
+    $refine_search = $criterias['refine_search'];
+    foreach ($refine_search as $facet_name => $facet_fid) {
+      if ($facet_name == 'date') {
+        switch ($facet_fid) {
+          case 1:
+            $year = date('Y') - 1;
+            $to = $year . date('-m-d');
+            $filter[] = '(date<="' . $to . '")';
+            break;
+
+          case 2:
+            $year = date('Y') - 1;
+            $from = $year . date('-m-d');
+            $to = date('Y-m-d');
+            $filter[] = '(date>="' . $from . '")and(date<="' . $to . '")';
+            break;
+
+          case 3:
+            $year = date('Y');
+            $from = $year . date('-m-d');
+            $filter[] = '(date>"' . $from . '")';
+            break;
+        }
+      }
+      else {
+        $filter[] = $facet_name . '="' . $facet_fid . '"';
+      }
+    }
+  }
+
+  if (!empty($selected_documents)) {
+    $subfilter = array();
+    foreach ($selected_documents as $nid) {
+      $bid = batire_hierarchy_get_by_nid($nid, 'bid');
+      if (!empty($bid)) {
+        $subfilter[] = '(id="' . $bid . '")';
+      }
+    }
+    $filter[] = implode('or', $subfilter);
+  }
+  else {
+    if (!empty($criterias['search_word'])) {
+      $criterias['search_word'] = str_replace('ET ', ' ', $criterias['search_word']);
+      $criterias['search_word'] = str_replace('OU ', '|', $criterias['search_word']);
+      $criterias['search_word'] = str_replace('SAUF ', '-', $criterias['search_word']);
+
+      if ($criterias['title_only']) {
+        $filter[] = 'vfts("titre","' . $criterias['search_word'] . '")';
+      }
+      else {
+        $request['afs:query'] = $criterias['search_word'];
+      }
+    }
+
+    //Dates filter
+    if (!empty($criterias['date_type'])) {
+      $stamp = time();
+      $from = $criterias['first_date'];
+      $to = $criterias['last_date'];
+      switch ($criterias['date_type']) {
+        case 'accurate':
+          if (!empty($from)) {
+            $pre_date = explode('/', $from);
+            $filter[] = 'date="' . $pre_date[2] . '-' . $pre_date[1] . '-' . $pre_date[0] . '"';
+          }
+          break;
+
+        case 'of_to':
+          if (!empty($from) && !empty($to)) {
+            $pre_date_from = explode('/', $from);
+            $pre_date_from_p = $pre_date_from[2] . '-' . $pre_date_from[1] . '-' . $pre_date_from[0];
+            $pre_date_to = explode('/', $to);
+            $pre_date_to_p = $pre_date_to[2] . '-' . $pre_date_to[1] . '-' . $pre_date_to[0];
+
+            $filter[] = '(date>="' . $pre_date_from_p . '")and(date<="' . $pre_date_to_p . '")';
+          }
+          break;
+
+        case 'last_7_day':
+          $from = date('Y-m-d', $stamp - 604800);
+          $to = date('Y-m-d');
+          $filter[] = '(date>="' . $from . '")and(date<="' . $to . '")';
+          break;
+
+        case 'last_30_day':
+          $from = date('Y-m-d', $stamp - 2592000);
+          $to = date('Y-m-d');
+          $filter[] = '(date>="' . $from . '")and(date<="' . $to . '")';
+          break;
+
+        case 'last_6_month':
+          $from = date('Y-m-d', $stamp - 15552000);
+          $to = date('Y-m-d');
+          $filter[] = '(date>="' . $from . '")and(date<="' . $to . '")';
+          break;
+
+        case 'current_year':
+          $from = date('Y') . '-01-01';
+          $to = date('Y-m-d');
+          $filter[] = '(date>="' . $from . '")and(date<="' . $to . '")';
+          break;
+
+        case 'last_year':
+          $year = date('Y') - 1;
+          $from = $year . date('-m-d');
+          $to = date('Y-m-d');
+          $filter[] = '(date>="' . $from . '")and(date<="' . $to . '")';
+          break;
+
+        case 'over_year':
+          $year = date('Y') - 1;
+          $to = $year . date('-m-d');
+          $filter[] = '(date<="' . $to . '")';
+          break;
+      }
+    }
+
+    //Reference
+    if (!empty($criterias['reference_text']) && !empty($criterias['reference'])) {
+      $filter[] = 'numeroRef="' . $criterias['reference_text'] . '"';
+      switch ($criterias['reference']) {
+        case 'codes' :
+          $filter[] = 'typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE .'"';
+          break;
+        case 'to' :
+          $filter[] = 'typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL .'"';
+          break;
+        case 'tn' :
+          $filter[] = 'typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF .'"';
+          break;
+        case 'fm' :
+          $filter[] = 'typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM .'"';
+          break;
+        case 'ct' :
+          $filter[] = 'typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT .'"';
+          break;
+      }
+    }
+
+    //Batiment
+    if (count($criterias['types'])) {
+      foreach ($criterias['types'] as $type) {
+        $par = taxonomy_get_parents($type);
+        if (!empty($par)) {
+          $types[] = key($par) . '/' . $type;
+        }
+        else {
+          $types[] = $type;
+        }
+      }
+      $filter[] = '(typeBatiment="' . implode('")or(typeBatiment="', $types) . '")';
+    }
+    //Corps
+    if (count($criterias['trades'])) {
+      foreach ($criterias['trades'] as $corp) {
+        $par = taxonomy_get_parents($corp);
+        if (!empty($par)) {
+          $corps[] = key($par) . '/' . $corp;
+        }
+        else {
+          $corps[] = $corp;
+        }
+      }
+      $filter[] = '(corpsEtat="' . implode('")or(corpsEtat="', $corps) . '")';
+    }
+    //Themes
+    if (count($criterias['themes'])) {
+      $filter[] = '(theme="' . implode('")or(theme="', $criterias['themes']) . '")';
+    }
+    //Sources
+    if (isset($criterias['sources']['include_db'])) {
+      unset($criterias['sources']['include_db']);
+    }
+    else {
+      $filter[] = '(not(horsPerimetre="1"))';
+    }
+
+    if (count($criterias['sources'])) {
+      $sources = $criterias['sources'];
+      $sources_filter = array();
+      foreach ($sources as $source) {
+        if (is_numeric($source)) {
+          $par = taxonomy_get_parents_all($source);
+          $vid = $par[0]->vid;
+        }
+        else {
+          $vid = $source;
+        }
+        switch ($vid) {
+          case BATIRE_SITE_VID_CODES:
+            $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE . '/' . $source;
+            break;
+          case BATIRE_SITE_VID_TO:
+            $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL . '/' . $source;
+            break;
+          case BATIRE_SITE_VID_NORMATIF:
+            if ($replace_user->uid) {
+              $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF . '/' . $source;
+            }
+            break;
+          case BATIRE_SITE_VID_FM:
+            $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM . '/' . $source;
+            break;
+          case BATIRE_SITE_VID_LIVRES:
+            $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE . '/' . $source;
+            break;
+          case BATIRE_SITE_CT_DOC_PRAT:
+            $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_DP;
+            break;
+          case BATIRE_SITE_CT_ACTUALITE:
+            $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE;
+            break;
+          case BATIRE_SITE_VID_TYPE_CT:
+            $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT . '/' . $source;
+            break;
+          case BATIRE_SITE_VID_DOC_TYPE:
+            $sources_filter[] = $source;
+            break;
+          case BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE:
+            $sources_filter[] = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE . '/' . $source;
+            break;
+        }
+      }
+      $cite_dans_filter = '';
+      if (!empty($criterias['cites'])) {
+        $cite_dans_filter = 'or(citeDans=' . implode(')or(citeDans=', $criterias['cites']) . ')'; // NO " " (quotes) around filter !!!!!11
+      }
+      $filter[] = '(typeSource="' . implode('")or(typeSource="', $sources_filter) . '")' . $cite_dans_filter;
+    }
+  }
+
+  if (isset($criterias['tn']) && !in_array(1, $criterias['tn'])) {
+    $filter[] = '(not(typeSource="' . BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF . '"))';
+  }
+
+  //Custom filters
+  if (!empty($criterias['custom_filter'])) {
+    $filter[] = $criterias['custom_filter'];
+  }
+
+  if (is_array($filter) && isset($filter[0]) && $filter[0]) {
+    $request['afs:filter'] = '(' . implode(')and(', $filter) . ')';
+  }
+
+  /*
+   * Kheox V2:
+   */
+  /*
+   * Images Search
+   * and
+   * Using clustering by number of reference
+   */
+  if ($criterias['image_search']) {
+    $request['afs:feed'] = 'IMAGES';
+  }
+  else {
+    $request['afs:feed'] = 'Editions';
+    $request['afs:cluster'] = 'clusterRef,1';
+  }
+  return $request;
+}
+
+/**
+ * Get all documents from database
+ * @param $search Search data from mongo
+ * @param $selected_documents List of selected nids
+ * @param $storage List of additional data for search
+ * @return Object Pager with results
+ */
+function batire_search_results($search, $selected_documents, array $storage, $hard_limit = NULL) {
+  global $user;
+  if (!$replace_user = batire_gc_ip_replace_user()) {
+    $replace_user = $user;
+  }
+
+  // get pager from session if it exist
+  //$session_search = _batire_site_get_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $search['sid'], NULL);
+
+  // get count of results
+  if (!$selected_documents) {
+    $count_search_docs = variable_get('batire_search_count_searches_to_display', BATIRE_SEARCH_COUNT_SEARCH_TO_DISPLAY);
+  }
+  else {
+    $count_search_docs = count($selected_documents);
+  }
+
+  $search_pager = $storage['search_pager'];
+  // check if value from $_GET['page'] more then real count pages with results.
+  $pages_max = $search['data']['image_search'] ? ceil($count_search_docs / $storage['search_pp_images']) : ceil($count_search_docs / $storage['search_pp']);
+  $system_pager_total = max(0, min(($search_pager + 1), (int) $pages_max)) - 1; // + 1 because first page, -1 for pager, because first pager == 0
+  if ($search_pager > $system_pager_total && $system_pager_total >= 0) {
+    $search_pager = $system_pager_total;
+  }
+
+  // create antidot query
+  if (!empty($hard_limit) && is_int($hard_limit)) {
+    $limit = $hard_limit;
+  }
+  elseif ($search['data']['image_search']) {
+    $limit = $storage['search_pp_images'];
+  }
+  else {
+    $limit = $storage['search_pp'];
+  }
+
+  // apply user's products to search
+  if ($search['data']['access_products']) {
+    $access_products = batire_user_products_products_criteria_user($replace_user->uid);
+    _batire_search_apply_products_criterias_to_search($search, $access_products);
+  }
+
+  $request = batire_search_map_request(
+    $search['data'], $selected_documents, $storage['search_sorts'], $storage['search_sort_order'], $limit, $search_pager
+  );
+
+  // run search
+  $antidot_result = batire_antidot_search_run($request);
+  if (!$antidot_result) {
+    return FALSE;
+  }
+  $nids = array();
+  /*if (!empty($session_search->pager_list)) {
+    if ((!$session_search->r_sid && !empty($storage['r_sid'])) || ($session_search->r_sid && empty($storage['r_sid']))) {
+      $nids = array();
+    }
+    else {
+      $nids = $session_search->pager_list;
+    }
+  }*/
+
+
+  if (!empty($antidot_result->content)) {
+    unset($nids[$search_pager]);
+    foreach ($antidot_result->content as $item) {
+      $nid = (int) $item->node->nid;
+      if (!empty($nid) && is_numeric($nid)) {
+        $nids[$search_pager][] = $nid;
+      }
+      elseif(isset($item->reply)) {
+        foreach ($item->reply as $reply) {
+          $nid = (int) $reply->node->nid;
+          if (!empty($nid) && is_numeric($nid)) {
+            $nids[$search_pager][] = $nid;
+          }
+        }
+      }
+    }
+
+    if (!count($nids)) {
+      $nids = array();
+    }
+  }
+
+  // save additional information
+  $pager = new stdClass();
+  $pager->per_page = $search['data']['image_search'] ? $storage['search_pp_images'] : $storage['search_pp'];
+  $pager->count_pages = $system_pager_total + 1;
+  $pager->current_page = $search_pager;
+  $pager->get_page = $storage['search_pager'];
+  $pager->results = $antidot_result->content;
+  $pager->pager_list = $nids;
+  $pager->count_all_results = $antidot_result->total_cnt;
+  $pager->total = min(array($antidot_result->total_cnt, $count_search_docs));
+  $pager->filter = batire_antidot_search_result_filter_build($antidot_result->facets);
+  $pager->spell_checker = !empty($antidot_result->spell_checker) ? $antidot_result->spell_checker : '';
+  if (isset($antidot_result->feed)) {
+    $pager->feed = $antidot_result->feed;
+  }
+
+  //add pager to mongodb search collection
+  $search_data = mongodb_search_get_search_data($search['sid']);
+  $for_mongo = clone $pager;
+  unset($for_mongo->results);
+  $search_data['pager'] = $for_mongo;
+  $keys = array('sid' => $search['sid']);
+  mongodb_update(MONGODB_SEARCH_COLLECTION, $keys, $search_data);
+
+  return $pager;
+}
+
+/**
+ * Run search
+ * @param $sid Search id
+ * @param $r_sid Related search id
+ * @param $storage List of additional data for search
+ *
+ * @see batire_search_get_storage_data()
+ * @see mongodb_search_get_search_data()
+ * @see batire_search_results()
+ */
+function batire_search_run_search($sid, $r_sid = NULL, array $storage = array(), $hard_limit = NULL) {
+  global $user;
+
+  if (!$storage) {
+    $storage = batire_search_get_storage_data();
+  }
+  $storage['sid'] = $sid;
+  $storage['r_sid'] = $r_sid;
+
+  $search_data = mongodb_search_get_search_data($sid);
+  if (batire_search_is_only_tn($search_data)) {
+    $search_data['data']['tn_only'] = TRUE;
+    mongodb_search_save_search($sid, $search_data, 'update');
+  }
+  $selected_documents = array();
+
+  //Update search run time only for owner
+  if ($search_data['uid'] == $user->uid && $search_data['uid']) {
+    $flag = variable_get('batire_xml_parse_last_import', array());
+    if (!(isset($flag['have_new']) && $flag['have_new'])) {
+      $keys = array('sid' => $sid);
+      $search_data['last_run'] = time();
+      mongodb_update(MONGODB_SEARCH_COLLECTION, $keys, $search_data);
+    }
+    else {
+      if (!(isset($search_data['last_run']) && $search_data['last_run'])) {
+        $keys = array('sid' => $sid);
+        $search_data['last_run'] = $flag['import_time'] - 86400;
+        mongodb_update(MONGODB_SEARCH_COLLECTION, $keys, $search_data);
+      }
+    }
+  }
+
+  if (!is_null($r_sid)) {
+    $related_search_data = mongodb_search_get_search_data($r_sid);
+    if (isset($related_search_data['data'])) {
+      if ($related_search_data['data']['related_search'] == $sid) {
+        $selected_documents = $related_search_data['data']['documents'];
+      }
+    }
+  }
+  $pager = &drupal_static('batire_search_results', array());
+
+  $pager = batire_search_results($search_data, $selected_documents, $storage, $hard_limit);
+
+  if (!$pager) {
+    return FALSE;
+  }
+  $nid = $search_data['nid'];
+  $work_sdata = $search_data;
+  $w_sid = $sid;
+  if (!empty($r_sid) && isset($related_search_data)) {
+    $nid = !empty($related_search_data['nid']) ? $related_search_data['nid'] : NULL;
+    $work_sdata = $related_search_data;
+    $w_sid = $r_sid;
+  }
+
+  $pager->sid = $sid;
+  $pager->r_sid = $r_sid;
+
+  //$for_session = clone $pager;
+  //unset($for_session->results);
+  //_batire_site_set_var(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE, $sid, $for_session);  
+  return $pager;
+}
+
+/**
+ * Get request string and turns in array
+ * @param type $request
+ * @return boolean
+ */
+function _batire_search_get_search_id_from_request($request = array()) {
+  $get = $_GET;
+  if (!empty($request)) {
+    $get = $request;
+  }
+  if (isset($get['sl']) && $get['sl'] && is_string($get['sl'])) {
+    $parts = explode('-', $get['sl']);
+    return $parts;
+  }
+  return FALSE;
+}
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_search_init() {
+  $args = arg();
+
+  drupal_add_js(
+    array(
+      'batire_search' => array(
+        'popupUrl' => url('js/batire_user/popup'),
+      )
+    ), 'setting'
+  );
+
+  if ($args[0] == 'node' && isset($args[1]) && is_numeric($args[1])) {
+    $node = node_load($args[1]);
+    $node_type_list = batire_site_get_document_types_list();
+
+    if (isset($node->nid) && in_array($node->type, array_keys($node_type_list))) {
+
+      //add search keywords to the javascript settings
+      $sid = _batire_search_get_search_id_from_request();
+
+      if ($sid) {
+        $search_info = batire_search_load_search_criteries($sid[0]);
+
+        if ($search_info && $search_info['search_word']) {
+          //explode keywords
+          $parts = array();
+          $matches = array();
+          $search_word = htmlspecialchars_decode($search_info['search_word']);
+          preg_match_all("/(\"[^\"]+\")|(\w+|[ÀÂÄÈÉÊËÎÏÔŒÙÛÜŸàâäèéêëîïôœùûüÿÇç])+/", $search_word, $matches);
+          if (isset($matches[0]) && $matches[0]) {
+            foreach ($matches[0] as $match) {
+              $parts[] = trim($match, '"');
+            }
+          }
+          //filter excluded keywords
+          $excluded = _batire_search_get_excluded_words();
+          if (!empty($excluded)) {
+            foreach ($parts as $pk => $part) {
+              if (in_array($part, $excluded)) {
+                unset($parts[$pk]);
+              }
+            }
+            $parts = array_values($parts);
+
+            foreach ($parts as $key => $part) {
+              $part = trim($part);
+              if (mb_strlen($part) < 3) {
+                unset($parts[$key]);
+              }
+            }
+          }
+
+          $explode_chars = array(
+            'a' => array('à', 'â', 'a', 'ä', 'À', 'Â', 'Ä'),
+            'e' => array('è', 'é', 'e', 'ë', 'ê', 'È', 'É', 'Ê', 'Ë', 'E'),
+            'i' => array('î', 'i', 'ï', 'Î', 'Ï', 'I'),
+            'o' => array('ô', 'œ', 'o', 'Ô', 'Œ', 'O'),
+            'c' => array('ç', 'c', 'Ç', 'C'),
+            'u' => array('û', 'u', 'ù', 'ü', 'Ù', 'Û', 'Ü', 'U'),
+            'y' => array('ÿ', 'y', 'Ÿ', 'Y'),
+          );
+
+
+          $regex_chars = array(
+            'a' => "[à|â|a|ä|À|Â|Ä]{1}",
+            'e' => "[è|é|e|ë|ê|È|É|Ê|Ë|E]{1}",
+            'i' => "[î|i|ï|Î|Ï|I]{1}",
+            'o' => "[ô|œ|o|Ô|Œ|O]{1}",
+            'c' => "[ç|c|Ç|C]{1}",
+            'u' => "[û|u|ù|ü|Ù|Û|Ü|U]{1}",
+            'y' => "[ÿ|y|Ÿ|Y]{1}",
+          );
+
+          // Accenting functionality doesn't needed now,
+          // JS code is taking it over
+          /*$s_parts = array();
+          foreach ($parts as $p_key => $part) {
+            $s_parts[$p_key] = $part;
+            foreach ($explode_chars as $c_key => $chars) {
+              foreach ($chars as $char) {
+
+                if (stripos($s_parts[$p_key], $char) !== FALSE) {
+                  $s_parts[$p_key] = str_replace($char, '@@', $s_parts[$p_key]);
+                }
+              } if (stripos($s_parts[$p_key], '@@') !== FALSE) {
+                $s_parts[$p_key] = str_replace('@@', $regex_chars[$c_key], $s_parts[$p_key]);
+              }
+            }
+          }
+
+          if (count($s_parts)) {
+            foreach ($s_parts as $key => $s_part) {
+              $s_parts[$key] = '(' . str_replace(' ', '@@', $s_part) . ')';
+              $s_parts[$key] = '(' . str_replace(',', '@@', $s_parts[$key]) . ')';
+              $s_parts[$key] = '(' . str_replace('@@', '[\s|\r|,\s|,|\n]{0,2}', $s_parts[$key]) . ')';
+            }
+          }*/
+
+          $settings = array(
+            'batire_search' => array(
+              //'searchKeywords' => $s_parts
+              'searchKeywords' => $parts,
+            )
+          );
+
+          drupal_add_js($settings, 'setting');
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Get excluded words
+ * @return array
+ */
+function _batire_search_get_excluded_words() {
+  $excluded_words_string = variable_get('batire_search_excluded_words', BATIRE_SEARCH_EXCLUDED_WORDS);
+  if (!$excluded_words_string) {
+    return array();
+  }
+  return explode(',', $excluded_words_string);
+}
+
+/**
+ * Search results get storage data
+ */
+function batire_search_get_storage_data() {
+  $storage = &drupal_static(__FUNCTION__, array());
+  if (isset($storage) && !empty($storage)) {
+    return $storage;
+  }
+  $storage = array(
+    'search_pp' => (int) _batire_site_get_cookie('search_pp', 50),
+    'search_pp_images' => (int) _batire_site_get_cookie('search_pp_images', 21),
+    'search_previsualiser' => (bool) _batire_site_get_cookie('search_previsualiser', FALSE),
+    'search_show_keywords' => (bool) _batire_site_get_cookie('search_show_keywords', TRUE),
+    'search_pager' => (int) isset($_GET['page']) && $_GET['page'] > 0 ? $_GET['page'] : 0,
+    'search_sorts' => (string) isset($_GET['sort_by']) ? $_GET['sort_by'] : 'relevant',
+    'search_sort_order' => (string) isset($_GET['sort_order']) ? $_GET['sort_order'] : 'DESC',
+  );
+  // documents
+  $admin_search_count = variable_get('batire_search_count_searches_to_display', BATIRE_SEARCH_COUNT_SEARCH_TO_DISPLAY);
+  $count = ceil($admin_search_count / BATIRE_SEARCH_UI_COUNT_COOKIE_IDS);
+  $documents = array();
+  for ($i = 0; $i < $count; $i++) {
+    $cookie = _batire_site_get_cookie('search_documents_' . $i, array());
+    if (!empty($cookie)) {
+      $cookie = explode(',', $cookie);
+      $documents = array_merge($documents, $cookie);
+    }
+  }
+  $storage['documents'] = $documents;
+  return $storage;
+}
+
+/**
+ * Get request part from url
+ * @return string
+ */
+function batire_search_get_result_request_url() {
+  $sid = batire_search_ui_check_is_url_has_search_id();
+  $sub_sid = batire_search_ui_check_is_url_has_search_id(TRUE);
+  if ($sid) {
+    $query = $sid ? 'sl=' . $sid : '';
+    if ($sub_sid) {
+      $query .= $sub_sid ? '-' . $sub_sid : '';
+    }
+    return $query;
+  }
+  return '';
+}
+
+/**
+ * Implementation of hook_cronapi().
+ */
+function batire_search_cronapi($op, $job = NULL) {
+  switch ($op) {
+    case 'list':
+      return array(
+        'mongodb_search_cleanup_search' => t('Cleanup searches'),
+      );
+      break;
+
+    case 'rule':
+      if ($job == 'mongodb_search_cleanup_search') {
+        return '0 0 1 * *';
+      }
+      break;
+
+    case 'execute':
+      if ($job == 'mongodb_search_cleanup_search') {
+        mongodb_search_cleanup_search();
+      }
+      break;
+  }
+}
+
+/**
+ * Save | Remove search filters
+ * @param type $sid
+ */
+function batire_search_filter_search($sid) {
+  $s_data = mongodb_search_get_search_data($sid);
+  $criteries = $s_data['data'];
+  $criteries['refine_search'] = array();
+  if (isset($_GET['facet'])) {
+    $facet = $_GET['facet'];
+    $facet_array = explode(';', $facet);
+    foreach ($facet_array as $facet_group) {
+      $facet_group_array = explode('--', $facet_group);
+      if (is_array($facet_group_array) && count($facet_group_array) == 2) {
+        $criteries['refine_search'][$facet_group_array[0]] = $facet_group_array[1];
+      }
+    }
+  }
+  batire_search_save_search_criteria($sid, $criteries, $s_data['nid'], 'update', $s_data['status'], $s_data['undelete']);
+  return $criteries['refine_search'];
+}
+
+/**
+ * Return Active status of search
+ *    TRUE | FALSE
+ * @param type $sid
+ * @return boolean
+ */
+function batire_search_search_is_active($sid) {
+  $search_data = mongodb_search_get_search_data($sid);
+  if (!empty($search_data['status'])) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Get refactoring criteries as text
+ * @param $sid Search id
+ * @return string | array
+ */
+function batire_search_load_refine_criteries_as_text($sid, $string = FALSE, $nid = NULL, $static = FALSE) {
+  $criteries = batire_search_load_search_criteries($sid);
+  $refine_search = $criteries['refine_search'];
+  if ($static && !empty($criteries['static_refine_search'])) {
+    $refine_search = $criteries['static_refine_search'];
+  }
+  if (!empty($refine_search) && is_array($refine_search)) {
+    if ($string) {
+      $group_array = array();
+      foreach ($refine_search as $group_key => $group) {
+        if ($group_key == 'date' && $group == 1) {
+          $group_array[] = 'Plus d\'un an';
+        }
+        elseif ($group_key == 'date' && $group == 2) {
+          $group_array[] = 'Moins d\'un an';
+        }
+        elseif ($group_key == 'date' && $group == 3) {
+          $group_array[] = 'A venir';
+        }
+        else {
+          $el = explode('/', $group);
+          $tax = array_pop($el);
+          $term = taxonomy_get_term($tax);
+          if ($term->vid == BATIRE_SITE_VID_DOC_TYPE) {
+            $group_array[] = batire_antidot_json_key_title($term->name);
+          }
+          else {
+            $group_array[] = $term->name;
+          }
+        }
+      }
+      return implode(', ', $group_array);
+    }
+    return $refine_search;
+  }
+  return '';
+}
+
+/**
+ * Implementation of hook_user().
+ */
+function batire_search_user($op, &$edit, &$account, $category = NULL) {
+  switch ($op) {
+    case 'logout':
+      // clear all searchs
+      //_batire_site_set_session(BATIRE_SEARCH_SESSION_VIEWS_NAMESPACE);
+      break;
+  }
+}
+
+/**
+ * Function to filter incoming sid
+ * @param $sid
+ * @return string
+ */
+function batire_search_filter_sid(&$sid, $strip_length = TRUE) {
+  if ($strip_length) {
+    $sid = drupal_substr($sid, 0, variable_get("batire_search_id_length", 4));
+  }
+  $sid = preg_replace("/[^" . variable_get("batire_search_id_alphabet", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_") . "]/i", '', $sid);
+}
+
+/**
+ * Detect request types
+ */
+function batire_search_detect_request_types($criterias) {
+  $types = array();
+
+  //Sources
+  $sources = $criterias['sources'];
+  if (count($sources)) {
+    foreach ($sources as $source) {
+      $vid = taxonomy_get_term($source)->vid;
+      switch ($vid) {
+        case BATIRE_SITE_VID_FM:
+          $type = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM;
+          break;
+        case BATIRE_SITE_VID_LIVRES:
+          $type = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE;
+          break;
+        case BATIRE_SITE_VID_NORMATIF:
+          $type = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF;
+          break;
+        case BATIRE_SITE_VID_TO:
+          $type = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL;
+          break;
+        case BATIRE_SITE_VID_CODES:
+          $type = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE;
+          break;
+        case BATIRE_SITE_VID_TYPE_CT:
+          $type = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT;
+          break;
+        case BATIRE_SITE_VID_SUPPORT:
+          $type = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE;
+          break;
+        case BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE;
+          $type = BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE;
+          break;
+      }
+
+      if (!isset($types[$type])) {
+        $types[$type] = $type;
+      }
+    }
+  }
+
+  //typeSource
+  if (isset($criterias['refine_search']['typeSource']) && count($criterias['refine_search']['typeSource'])) {
+    if (!is_array($criterias['refine_search']['typeSource'])) {
+      $criterias['refine_search']['typeSource'] = array($criterias['refine_search']['typeSource']);
+    }
+    foreach ($criterias['refine_search']['typeSource'] as $t_source) {
+      $vid = explode('/', $t_source);
+      $type = $vid[0];
+
+      if (!isset($types[$type])) {
+        $types[$type] = $type;
+      }
+    }
+  }
+
+  return $types;
+}
+
+/**
+ * Detect is only TN
+ */
+function batire_search_is_only_tn($search_data) {
+  $data = $search_data['data'];
+  if ($data['reference'] == 'tn' && $data['reference_text']) {
+    return TRUE;
+  }
+
+  $sources = $data['sources'];
+  if (count($sources)) {
+    $sources_cnt = 0;
+    foreach ($sources as $source) {
+      $par = taxonomy_get_parents_all($source);
+      switch ($par[0]->vid) {
+        case BATIRE_SITE_VID_CODES:
+        case BATIRE_SITE_VID_TO:
+        case BATIRE_SITE_VID_FM:
+        case BATIRE_SITE_VID_LIVRES:
+          return FALSE;
+        case BATIRE_SITE_VID_NORMATIF:
+          $sources_cnt++;
+          break;
+      }
+    }
+
+    if (count($sources) == $sources_cnt) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+/**
+ * Apply product filtering criterias to search filters
+ *
+ * @param type $search Search to modify criterias for
+ * @param type $criteria Criterias to apply
+ */
+function _batire_search_apply_products_criterias_to_search(&$search, $criterias) {
+  // unwrap sources
+  $types = array(BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM => BATIRE_SITE_VID_FM, BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE => BATIRE_SITE_VID_LIVRES, BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT => BATIRE_SITE_VID_TYPE_CT);
+  foreach ($types as $type => $vid) {
+    if (in_array($type, $search['data']['sources'])) {
+      unset($search['data']['sources'][$type]);
+      $list = array_keys(batire_search_batire_taxonomy_get_tree($vid, 'list'));
+      foreach ($list as $tid) {
+        $search['data']['sources'][$tid] = $tid;
+      }
+    }
+  }
+  // apply filtering
+  $keys_to_apply = array('sources', 'types', 'trades', 'themes', 'cites');
+  foreach ($keys_to_apply as $key_to_apply) {
+    foreach ($search['data'][$key_to_apply] as $key => $source) {
+      if (!in_array($source, $criterias[$key_to_apply])) {
+        unset($search['data'][$key_to_apply][$key]);
+      }
+    }
+    if (empty($search['data'][$key_to_apply])) {
+      $search['data'][$key_to_apply] = $criterias[$key_to_apply];
+    }
+  }
+  // apply TN
+  $search['data']['tn'] = $criterias['tn'];
+}

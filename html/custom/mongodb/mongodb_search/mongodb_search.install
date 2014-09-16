@@ -1,0 +1,35 @@
+<?php
+
+/**
+ * @file
+ * MongoDB search install file.
+ */
+
+/**
+ * Implement hook_install().
+ */
+function mongodb_search_install() {
+  module_load_include('module', 'mongodb');
+  module_load_include('module', 'mongodb_search');
+
+  $mongo = mongodb();
+
+  if ($mongo) {
+    $mongo->createCollection(MONGODB_SEARCH_COLLECTION);
+
+    $collection = $mongo->selectCollection(MONGODB_SEARCH_COLLECTION);
+    $index = array(
+      'sid' => 1,
+      'uid' => 1,
+      'ts' => -1,
+    );
+    $collection->ensureIndex($index, array('background' => TRUE));
+  }
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function mongodb_search_uninstall() {
+
+}

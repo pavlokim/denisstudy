@@ -1,0 +1,86 @@
+<?php
+
+/**
+ * @file
+ * Batire implementations of the page title hooks
+ */
+
+/**
+ * Implementation of hook_page_title_api().
+ */
+function batire_page_title_page_title_api() {
+  return array(
+    'api' => 1,
+    'path' => drupal_get_path('module', 'batire_page_title') . '/includes/modules',
+  );
+}
+
+/**
+ * Implements hook_menu()
+ */
+function batire_page_title_menu() {
+  $items['admin/batire-site/settings/pagetitle-settings'] = array(
+    'title' => 'Page title settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('page_title_admin_settings'),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'page_title.admin.inc',
+    'file path' => drupal_get_path('module', 'page_title'),
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
+function batire_page_title_form_page_title_admin_settings_alter(&$form, &$form_state) {
+  $vocs = taxonomy_get_vocabularies();
+  // remove settings for vocabularies
+  foreach ($vocs as $voc) {
+    unset($form['patterns']['pattern']['page_title_vocab_' . $voc->vid]);
+    unset($form['patterns']['scope']['page_title_vocab_' . $voc->vid]);
+    unset($form['patterns']['showfield']['page_title_vocab_' . $voc->vid . '_showfield']);
+  }
+  unset($form['patterns']['pattern']['page_title_pager_pattern']);
+  unset($form['patterns']['scope']['page_title_pager_pattern']);
+  unset($form['patterns']['showfield']['page_title_pager_pattern_showfield']);
+  foreach ($form['patterns']['pattern'] as $key => &$item) {
+    $item['#size'] = 60;
+  }
+}
+
+/**
+ * Implements hook_token_values().
+ */
+function batire_page_title_token_values($type, $object = NULL, $options = array()) {
+  $tokens = array();
+  switch ($type) {
+    case 'node':
+      $tokens['node-human-type'] = _batire_site_get_humanreadable_node_type($object);
+      break;
+
+    case 'global':
+      $tokens['separator'] = variable_get('batire_page_title_separator', '-');
+      $tokens['page-title-suffix'] = variable_get('batire_page_title_suffix', '');
+      break;
+  }
+  return $tokens;
+}
+
+/**
+ * Implements hook_token_list().
+ */
+function batire_page_title_token_list($type = 'all') {
+  $tokens = array();
+
+  if ($type == 'node' || $type == 'all') {
+    $tokens['node']['node-human-type'] = t('Human node type');
+  }
+
+  if ($type == 'global' || $type == 'all') {
+    $tokens['global']['separator'] = t('Page title separator');
+    $tokens['global']['page-title-suffix'] = t('Page title suffix');
+  }
+  return $tokens;
+}

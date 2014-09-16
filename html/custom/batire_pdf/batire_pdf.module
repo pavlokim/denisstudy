@@ -1,0 +1,278 @@
+<?php
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_pdf_menu() {
+  $items['admin/batire-site/settings/pdf-image'] = array(
+    'title' => t('PDF image settings'),
+    'page callback'  => 'drupal_get_form',
+    'page arguments' => array('batire_pdf_settings_form'),
+    'access arguments' => array('access administration pages'),
+    'file' => 'includes/batire_pdf.admin.inc',
+    'position' => 'right',
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_menu_alter().
+ */
+function batire_pdf_menu_alter(&$items) {
+  if(isset($items['node/%node/norme-afnor'])) {
+    $items['node/%node/norme-afnor']['page callback'] = 'batire_pdf_norme_afnor_viewer';
+    $items['node/%node/norme-afnor']['file path'] = drupal_get_path('module', 'batire_pdf') . '/includes';
+    $items['node/%node/norme-afnor']['file'] = 'batire_pdf.page.inc';
+    $items['node/%node/norme-afnor']['access callback'] = 'batire_pdf_norme_afnor_access_callback';
+    $items['node/%node/norme-afnor']['access arguments'] = array(1);
+  }  
+}
+
+/**
+ * Access callback for norme-afnor page.
+ */
+function batire_pdf_norme_afnor_access_callback($node) {
+  $item = menu_get_item('node/' . $node->nid);
+  if(!$item || !$item['access']) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ *
+function batire_pdf_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  switch ($node->type) {
+    case 'resource':
+      if (module_exists('pdf_to_imagefield') && ($op == 'presave' || $op == 'insert')) {
+        // @see pdf_to_imagefield_nodeapi()
+        module_load_include('inc', 'batire_pdf', 'includes/batire_pdf');
+        // First check if this node has one of our widgets active.
+        $source_filefield_def = batire_pdf_source_filefield($node);
+        if (!$source_filefield_def) {
+          return;
+        }
+        switch ($op) {
+          case 'presave':
+            // Single operations happen at presave, 
+            // because then we can let filefield do the saving.
+            return batire_pdf_node_presave($node);
+            break;
+          case 'insert':
+            // Batch operations happen at postsave, because we need to have a nid.
+            // Batch ops trigger their own save (which by then is an update)
+            // Beware of cycles - don't set a batch in update, or it will loop.
+            return batire_pdf_node_insert($node);
+            break;
+        } // /switch
+      }
+      break;
+  }
+}*/
+
+/**
+ * Implementation of hook_theme().
+ */
+function batire_pdf_theme($existing, $type, $theme, $path) {
+  return array(
+    'batire_pdf_player' => array(
+      'arguments' => array('parameters' => NULL),
+      'template' => 'batire-pdf-player',
+      'path' => drupal_get_path('module', 'batire_pdf') . '/theme',
+     ),
+    'batire_pdf_player_controls_bar' => array(
+      'arguments' => array('full' => FALSE),
+      'template' => 'batire-pdf-player-controls-bar',
+      'path' => drupal_get_path('module', 'batire_pdf') . '/theme',
+     ),
+  );
+}
+
+function batire_pdf_player_parameters($node, $id) {
+  $parameters = array();
+  if (isset($node->page_data['pdf_images'])) {
+    $pdf_images = array();
+    foreach ($node->page_data['pdf_images'] as $title => $images) {
+      foreach($images as $path) {
+        $pdf_images[] = $path;
+      }
+      break;
+    }
+    $parameters += array(
+      'title' => truncate_utf8($title, 60, TRUE, TRUE),
+      'pdf_images' => $pdf_images,
+      'nid' => $node->nid,
+    );
+  }
+  
+  return $parameters;
+}
+
+/**
+ * Implementation of hook_preprocess_batire_pdf_player().
+ */
+function batire_pdf_preprocess_batire_pdf_player(&$vars) {
+  $vars['controls_bar'] = theme('batire_pdf_player_controls_bar');
+  $vars['controls_bar_full'] = theme('batire_pdf_player_controls_bar', TRUE);
+  $vars['pdf_images'] = '';
+  
+  $text = FALSE;
+  $node = node_load(arg(1));
+  if ($node && $node->nid && _batire_site_is_document($node->type)) {
+    global $user;
+    if (!$replace_user = batire_gc_ip_replace_user()) {
+      $replace_user = $user;
+    }
+    if ($replace_user->uid) {
+      $profile = batire_user_profile_load($replace_user->uid);
+      $node->profile = $profile;
+    }
+    $options = array(
+      'node' => $node,
+    );
+    batire_preprocess_batire_user_docs_pdf_footer($options);
+    if (!empty($options['text']) || !empty($options['date_anul'])) {
+      if (isset($options['date_anul']) && !empty($options['date_anul'])) {
+        $text = t('NORME ANNULEE LE @date', array('@date' => $options['date_anul']));
+      }
+      else {
+        $text = $options['text'];
+      }
+    }
+  }
+  
+  if($text) {
+    $image_generate_path = drupal_get_path('module', 'batire_pdf') . '/includes/batire_pdf.image_generate.php';
+    $query = array('text' => $text);
+    foreach ($vars['parameters']['pdf_images'] as $pdf_image) {
+      $query['image'] = $pdf_image;
+      $vars['pdf_images'] .= l(
+        $vars['parameters']['title'],
+        $image_generate_path,
+        array(
+          'attributes' => array(
+            "class" => "rsImg",
+          ),
+          'query' => $query, 
+        )
+      );
+    }
+  }
+  else {
+    foreach ($vars['parameters']['pdf_images'] as $pdf_image) {
+      $vars['pdf_images'] .= l(
+        $vars['parameters']['title'],
+        file_create_url($pdf_image),
+        array(
+          'attributes' => array(
+            "class" => "rsImg",
+          ),
+        )
+      );
+    }
+  }
+}
+
+/**
+ * Implementation of hook_theme_registry_alter().
+ *
+ * Make batire pdf's page preprocess function run *after* everything else's,
+ * so that a theme can't call drupal_get_js() and mess everything up.
+ */
+function batire_pdf_theme_registry_alter(&$theme_registry) {
+  if (isset($theme_registry['page'])) {
+    if (count($theme_registry['page']['preprocess functions']) > 0) {
+      // If jquery_update's preprocess function is there already, remove it.
+      if ($key = array_search('batire_pdf_preprocess_page', $theme_registry['page']['preprocess functions'])) {
+        unset($theme_registry['page']['preprocess functions'][$key]);
+      }
+    }
+    // Now tack it on at the end so it runs after everything else.
+    $theme_registry['page']['preprocess functions'][] = 'batire_pdf_preprocess_page';
+  }
+}
+
+/**
+ * Implementation of hook_preprocess_page().
+ */
+function batire_pdf_preprocess_page(&$vars) {
+  if(isset($vars['node'])) {
+    $node = $vars['node'];
+    if($node->type == BATIRE_SITE_CT_TN
+    && (arg(2) == 'norme-afnor' || batire_site_get_TN_content_type($node) == BATIRE_SITE_TN_TYPE_PDF)
+    && isset($node->page_data['pdf_images'])) {
+      // remove Drupal's standard jQuery and replace it with version from slicing
+      $scripts = drupal_add_js();
+      $new_core = array(drupal_get_path('module', 'batire_pdf') .'/js/jquery-1.8.3.min.js' => $scripts['core']['misc/jquery.js']);
+      unset($scripts['core']['misc/jquery.js']);
+      foreach ($scripts['core'] as $index => $value) {
+        $new_core[$index] = $value;
+      }
+      $scripts['core'] = $new_core;
+
+      // remove ui from theme
+      unset($scripts['theme'][path_to_theme() . '/scripts/ui.core.js']);
+      unset($scripts['theme'][path_to_theme() . '/scripts/ui.widget.js']);
+      unset($scripts['theme'][path_to_theme() . '/scripts/ui.mouse.js']);
+
+      // replace jscrolpane.js from theme
+      $scripts['theme'][drupal_get_path('module', 'batire_pdf') .'/js/jquery.jscrollpane.js']
+        = $scripts['theme'][path_to_theme() . '/scripts/jScrollPane.js'];
+      unset($scripts['theme'][path_to_theme() . '/scripts/jScrollPane.js']);
+      
+      $vars['scripts'] = drupal_get_js('header', $scripts);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_preprocess_node().
+ *
+function batire_pdf_preprocess_node(&$vars) {
+  $node = $vars['node'];
+  if($node->type == 'resource') {
+    $parameters = batire_pdf_player_parameters($node, $node->nid);
+    $vars['pdf_player'] = theme('batire_pdf_player', $parameters);
+
+    drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/jquery.royalslider.min.js');
+    drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/jquery.nicescroll.js');
+
+    // add jquery ui 1.8.23
+    drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/ui/jquery.ui.core.js');
+    drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/ui/jquery.ui.widget.js');
+    drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/ui/jquery.ui.mouse.js');
+    drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/ui/jquery.ui.slider.js');
+
+    drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/batire_pdf.js');
+
+    drupal_add_css(drupal_get_path('module', 'batire_pdf') . '/css/ui/jquery.ui.slider.css');
+    drupal_add_css(drupal_get_path('module', 'batire_pdf') . '/css/royalslider.css');
+    drupal_add_css(drupal_get_path('module', 'batire_pdf') . '/css/jquery.jscrollpane.css');
+  }
+}*/
+
+function batire_pdf_flash_viewer($node) {
+  if(isset($node->page_data['pdf_images'])) {
+    $parameters = batire_pdf_player_parameters($node, $node->nid);
+    if($parameters) {
+      drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/jquery.royalslider.min.js');
+      drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/jquery.nicescroll.js');
+
+      // add jquery ui 1.8.23
+      drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/ui/jquery.ui.core.js');
+      drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/ui/jquery.ui.widget.js');
+      drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/ui/jquery.ui.mouse.js');
+      drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/ui/jquery.ui.slider.js');
+
+      drupal_add_js(drupal_get_path('module', 'batire_pdf') . '/js/batire_pdf.js');
+
+      drupal_add_css(drupal_get_path('module', 'batire_pdf') . '/css/ui/jquery.ui.slider.css');
+      drupal_add_css(drupal_get_path('module', 'batire_pdf') . '/css/royalslider.css');
+      drupal_add_css(drupal_get_path('module', 'batire_pdf') . '/css/jquery.jscrollpane.css');
+
+      return theme('batire_pdf_player', $parameters);
+    }
+  }
+  return FALSE;
+}

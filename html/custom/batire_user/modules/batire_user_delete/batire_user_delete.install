@@ -1,0 +1,19 @@
+<?php
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_user_delete_install() {
+
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_user_delete_uninstall() {
+
+}

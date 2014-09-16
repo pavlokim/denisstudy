@@ -1,0 +1,237 @@
+<?php
+
+// $Id:$
+
+/**
+ * Implementation of hook_schema()
+ */
+function batire_xml_parse_schema() {
+  $schema = array();
+
+  $schema['batire_xml_parse_archives'] = array(
+    'fields' => array(
+      'archive_id'   => array('type' => 'serial', 'unsigned' => TRUE, 'not null' => TRUE),
+      'archive_name' => array('type' => 'varchar', 'length' => 100, 'not null' => TRUE),
+      'request_time' => array('type' => 'varchar', 'length' => 100, 'not null' => TRUE),
+      'status'       => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE),
+      'data'         => array('type' => 'varchar', 'serialize' => TRUE, 'length' => 255, 'not null' => TRUE),
+      'errors_count' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE)
+    ),
+    'primary key' => array('archive_id'),
+  );
+
+  $schema['batire_xml_parse_generation_queue'] = array(
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Node Id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE),
+      'queue_time' => array(
+        'description' => 'Time when node queued',
+        'type' => 'float',
+        'mysql_type' => 'decimal',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'precision' => 20,
+        'scale' => 6),
+      'data' => array(
+        'type' => 'text',
+        'size' => 'medium',
+        'not null' => FALSE,
+        'serialize' => TRUE),
+      'is_new' => array(
+        'description' => 'Node is new and not pulled to antidot',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0),
+    ),
+    'unique keys' => array(
+      'nid_time' => array('nid', 'queue_time')
+    )
+  );
+  return $schema;
+}
+
+/**
+ * @file
+ * Implementation of hook_install().
+ */
+function batire_xml_parse_install() {
+  drupal_install_schema('batire_xml_parse');
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_xml_parse_uninstall() {
+}
+
+/**
+ * Implementation of hook_requirements
+ */
+function batire_xml_parse_requirements($phase) {
+  $result = array();
+  switch ($phase) {
+    case 'runtime':
+      //check if all required folders exists and writable
+      $folders = array(
+        'Backup folder' => variable_get('batire_xml_parse_backup_folder', BATIRE_XML_PARSE_DEFAULT_BACKUP_FOLDER),
+        'Temporary folder' => variable_get('batire_xml_parse_backup_folder', BATIRE_XML_PARSE_DEFAULT_TEMPORARY_FOLDER)
+      );
+      $status = array();
+      foreach ($folders as $name => $path) {
+        if (!file_exists($path)) {
+          $status[$name] = t($name . ' @dir is not exists', array("@dir" => $path));
+        } elseif (!is_dir($path)) {
+          $status[$name] = t($name . ' @dir is not folder', array("@dir" => $path));
+        } elseif (!is_writable($path)) {
+          $status[$name] = t($name . ' @dir is not writable', array("@dir" => $path));
+        } else {
+
+        }
+      }
+      //check if DOM extension loaded
+      if (!extension_loaded('dom')) {
+        $status['dom'] = t('DOM extension is not loaded');
+      }
+
+      $result = array(
+        'batire_xml_parse' => array(
+          'title' => 'Batire XML Parse',
+          'severity' => $status ? REQUIREMENT_ERROR : REQUIREMENT_OK,
+          'value' => $status ? t('Error') : t('Ok')
+        )
+      );
+      if ($status) {
+        $result['batire_xml_parse']['description'] = implode('<br/>', $status);
+      }
+      return $result;
+      break;
+    case 'install':
+
+      break;
+  }
+  return $result;
+}
+
+/* Update functions will be below */
+
+function batire_xml_parse_update_1() {
+  drupal_get_schema(NULL, TRUE);
+  $ret = array();
+  db_create_table($ret, 'batire_abbreviation', drupal_get_schema('batire_abbreviation'));
+  db_create_table($ret, 'batire_cpid_hierarchy', drupal_get_schema('batire_cpid_hierarchy'));
+  return $ret;
+}
+
+function batire_xml_parse_update_2() {
+  drupal_get_schema(NULL, TRUE);
+  if (drupal_get_schema('batire_cpid_hierarchy')) {
+    $ret = array();
+    db_drop_table($ret, 'batire_cpid_hierarchy');
+  }
+  module_enable('batire_hierarchy');
+}
+
+function batire_xml_parse_update_3() {
+  $ret = array();
+  drupal_get_schema(NULL, TRUE);
+  if (db_table_exists('batire_cpid_hierarchy')) {
+    db_drop_table($ret, 'batire_cpid_hierarchy');
+  }
+
+  db_drop_primary_key($ret, 'batire_abbreviation');
+  db_drop_index($ret, 'batire_abbreviation', 'search_index');
+  $table_definition = drupal_get_schema('batire_abbreviation');
+  db_add_field($ret, 'batire_abbreviation', 'super_id', $table_definition['fields']['super_id']);
+  db_add_index($ret, 'batire_abbreviation', 'search_index', $table_definition['indexes']['search_index']);
+  db_add_primary_key($ret, 'batire_abbreviation', $table_definition['primary key']);
+  return $ret;
+}
+
+function batire_xml_parse_update_4() {
+  $ret = array();
+  if (db_table_exists('batire_abbreviation')) {
+    if (!db_column_exists('batire_abbreviation', 'super_bid')) {
+      db_drop_table($ret, 'batire_abbreviation');
+    }
+  }
+  return $ret;
+}
+
+function batire_xml_parse_update_5() {
+  $result = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('batire_xml_parse_archives');
+
+  db_create_table($result, 'batire_xml_parse_archives', $table_definition);
+
+  return $result;
+}
+
+function batire_xml_parse_update_6() {
+  $result = array();
+  drupal_get_schema(NULL, TRUE);
+  $table_definition = drupal_get_schema('batire_xml_parse_generation_queue');
+
+  db_create_table($result, 'batire_xml_parse_generation_queue', $table_definition);
+
+  return $result;
+}
+
+/**
+ * Change ID in the description of 'Plomberie sanitaire - Fluide spéciaux - Eaux pluviales' term
+ * @see #45986
+ */
+function batire_xml_parse_update_7() {
+  $term = (array)taxonomy_get_term(71);
+  $term['description'] = '50722';
+  $status = taxonomy_save_term($term);
+  $ret = array();
+  if ($status == SAVED_UPDATED) {
+    $ret[] = array('success' => TRUE, 'query' => 'Updated term description');
+  }
+  else {
+    $ret[] = array('success' => FALSE, 'query' => 'Term was not found');
+  }
+  return $ret;
+}
+
+/**
+ * Change parent for 'Plomberie sanitaire - Fluide spéciaux - Eaux pluviales' term
+ * @see #45986
+ */
+function batire_xml_parse_update_8() {
+  $term = (array)taxonomy_get_term(71);
+  $term['parent'] = 64;
+  $status = taxonomy_save_term($term);
+  $ret = array();
+  if ($status == SAVED_UPDATED) {
+    $ret[] = array('success' => TRUE, 'query' => 'Updated term parent');
+  }
+  else {
+    $ret[] = array('success' => FALSE, 'query' => 'Term was not found');
+  }
+  return $ret;
+}
+/**
+ * Implementation of hook_update_N().
+ * Export Images to Antidot
+ */
+function batire_xml_parse_update_9() {
+  $sql = "SELECT n.nid FROM {node} n
+          JOIN batire_hierarchy bh ON n.nid = bh.nid
+          WHERE n.type IN ('batire_texte_officiel', 'batire_feuillet_mobile', 'batire_livres', 'batire_texte_normatifs', 'batire_codes', 'batire_complement_technique', 'batire_actualite', 'batire_document_reference')";
+  $result = db_query($sql);
+  $nids = array();
+  while ($row = db_fetch_array($result)) {
+    $nids[] = $row['nid'];
+  }
+  $op = 'add';
+  $chunked_nids = array_chunk($nids, variable_get('batire_xml_parse_job_size', 10));
+  foreach ($chunked_nids as $nids) {
+    job_queue_add('batire_xml_parse_images_job_queue_run', 'Parse Images', array($nids, $op));
+  }
+}

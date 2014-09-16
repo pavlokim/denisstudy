@@ -1,0 +1,42 @@
+<?php
+/**
+ * User: Pavel Kim
+ * Date: 4/4/14
+ * Time: 3:39 PM
+ */
+
+function antidot_documents_reference_antidot_info() {
+  return array(
+    BATIRE_SITE_CT_DR => 'antidot_documents_reference',
+  );
+}
+
+function antidot_documents_reference_xml_preprocess($node, &$data) {
+  if (is_array($node->taxonomy)) {
+    $sous_types = batire_xml_parse_ddr_get_sous_types_tids();
+    $rubriques = batire_xml_parse_ddr_get_rubriques_tids();
+    foreach ($node->taxonomy as $tax) {
+      if (in_array($tax->tid, $sous_types)) {
+        $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+        continue;
+      }
+      if (in_array($tax->tid, $rubriques)) {
+        $data->type_rubrique = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+        continue;
+      }
+    }
+  }
+  if (!empty($node->page_data['liens']['lien_reference']) && isset($node->page_data['liens']['lien_reference'])) {
+    foreach ($node->page_data['liens']['lien_reference'] as $reference) {
+      $reference_data = mongodb_page_get_page_by_bid($reference['bid']);
+      $temp = explode('.', $reference_data['attached'][1]['filename']);
+      $file_type = end($temp);
+      if (in_array($file_type, array('doc', 'docx', 'pdf'))) {
+        $data->liens[] = array(
+          'href' => url('download/' . $node->page_data['bid']. '/' . $reference_data['attached'][1]['filename'], array('absolute' => TRUE)),
+          'type' => $file_type,
+        );
+      }
+    };
+  }
+}

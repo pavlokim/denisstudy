@@ -1,0 +1,15 @@
+<?php
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_svc_install() {}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_svc_uninstall() {}

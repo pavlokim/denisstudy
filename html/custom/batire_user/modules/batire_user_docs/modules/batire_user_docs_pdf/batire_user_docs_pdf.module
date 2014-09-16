@@ -1,0 +1,353 @@
+<?php
+
+/**
+ * @file
+ *  Enable functional for generating pdf version of documents
+ */
+define('BATIRE_USER_DOCS_PDF_PRINT_PDF_URL', 'xdTkPE590Yr');
+define('BATIRE_USER_DOCS_PDF_PRINT_PDF_FOOTER_URL', 'frywRmGTUq');
+define('BATIRE_USER_DOCS_PDF_PRINT_PDF_REFS_URL', 'triYfkEHDP94');
+define('BATIRE_USER_DOCS_PDF_PLAYER_WIDTH', 660);
+define('BATIRE_USER_DOCS_PDF_PLAYER_HEIGHT', 600);
+
+define('BATIRE_USER_DOCS_PDF_FOLDER', file_create_path() . '/batire_pdf');
+define('BATIRE_USER_DOCS_PDF_FLASH_FOLDER', file_create_path() . '/batire_pdf_flash');
+define('BATIRE_USER_DOCS_TMP_PDF_FOLDER', file_directory_temp() . '/batire_pdf');
+module_load_include('inc', 'batire_user_docs_pdf', 'includes/batire_user_docs_pdf');
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_user_docs_pdf_init() {
+  drupal_add_js(
+  array(
+    'batire_user_docs_pdf' => array(
+      'download_flash_pdf_url' => url('js/batire_user_docs_pdf/get-flash-url'),
+    )
+  ), 'setting'
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_user_docs_pdf_menu() {
+  $items = array();
+  $items[BATIRE_USER_DOCS_PDF_PRINT_PDF_URL] = array(
+    'page callback' => 'print_controller_html',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file' => 'print.pages.inc',
+    'file path' => drupal_get_path('module', 'print'),
+  );
+  $items[BATIRE_USER_DOCS_PDF_PRINT_PDF_FOOTER_URL . '/%node'] = array(
+    'page callback' => 'batire_user_docs_pdf_generate_footer',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file' => 'batire_user_docs_pdf.pages.inc',
+    'file path' => drupal_get_path('module', 'batire_user_docs_pdf') . '/includes',
+  );
+  $items[BATIRE_USER_DOCS_PDF_PRINT_PDF_REFS_URL . '/%node'] = array(
+    'page callback' => 'batire_user_docs_pdf_generate_refs',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file' => 'batire_user_docs_pdf.pages.inc',
+    'file path' => drupal_get_path('module', 'batire_user_docs_pdf') . '/includes',
+  );
+
+  $items['admin/batire-site/settings/batire-pdf'] = array(
+    'title' => '!site_name PDF Settings',
+    'title arguments' => array('!site_name' => SITE_NAME_FS),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_docs_pdf_settings_form'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user_docs_pdf.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user_docs_pdf') . '/includes',
+    'description' => t('!site_name PDF module settings', array('!site_name' => SITE_NAME_FS)),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 1,
+  );
+
+  $items['batire-pdf-generate/%node'] = array(
+    'page callback' => 'batire_user_docs_pdf_generate',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'file' => 'batire_user_docs_pdf.pages.inc',
+    'file path' => drupal_get_path('module', 'batire_user_docs_pdf') . '/includes',
+    'type' => MENU_CALLBACK
+  );
+
+  $items['batire-pdf-generate-tn-flash/%node'] = array(
+    'page callback' => 'batire_user_docs_pdf_generate_tn_flash',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'file' => 'batire_user_docs_pdf.pages.inc',
+    'file path' => drupal_get_path('module', 'batire_user_docs_pdf') . '/includes',
+    'type' => MENU_CALLBACK
+  );
+
+  $items['document/pdf/%node'] = array(
+    'page callback' => 'batire_user_docs_pdf_download',
+    'page arguments' => array(2),
+    'access arguments' => array('access content'),
+    'file' => 'batire_user_docs_pdf.pages.inc',
+    'file path' => drupal_get_path('module', 'batire_user_docs_pdf') . '/includes',
+    'type' => MENU_CALLBACK
+  );
+  $items['js/batire_user_docs_pdf/get-flash-url'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_docs_pdf_get_flash_url_js',
+    'access arguments' => array('access content'),
+    'file' => 'batire_user_docs_pdf.pages.inc',
+    'file path' => drupal_get_path('module', 'batire_user_docs_pdf') . '/includes',
+  );
+
+  return $items;
+}
+
+/**
+ * PDF flash viewer function
+ * @param $node Node(TN document)
+ */
+function batire_user_docs_add_pdf_flash_viewer($node) {
+  $output = '';
+
+  $path = drupal_get_path('module', 'batire_user_docs_pdf');
+
+  drupal_add_js($path . '/scripts/swfobject.js');
+  drupal_add_js($path . '/scripts/pdf_insert.js'); // Inserting JS of PDF Viewer inserting Tool
+  $result = batire_user_docs_pdf_get_ready_flash_today($node);
+  drupal_add_js(array(
+    'batire_user_docs_pdf' => array(
+      'viewerpath' => url($path . '/pdf/viewer.swf', array('absolute' => TRUE)),
+      'i_element_id' => 'flash-viewer',
+      'pdf_file_path' => $result,
+      'width' => BATIRE_USER_DOCS_PDF_PLAYER_WIDTH,
+      'height' => BATIRE_USER_DOCS_PDF_PLAYER_HEIGHT,
+  )), 'setting');
+
+  $output .= '<div class="pdf-viewer">';
+  $output .= '<div id ="flash-viewer" class="flash-viewer"><div id="flashContent"></div></div>';
+  $output .= '</div>';
+  return $output;
+}
+
+/**
+ * Get absolute file to file if file have been created today.
+ * @param $node
+ * @return Url to file or FALSE
+ */
+function batire_user_docs_pdf_get_ready_flash_today($node) {
+  global $user;
+  $options = array(
+    'user' => $user->uid
+  );
+  if (!$node && !$node->nid && !_batire_site_is_document($node->type)) {
+    return FALSE;
+  }
+  $base_dir = _batire_user_docs_pdf_get_basedir();
+  $pdf_directory = _batire_user_docs_pdf_get_directory($node);
+
+  if (!$pdf_directory) {
+    return FALSE;
+  }
+  $pdf_file = _batire_user_docs_pdf_get_file_path($node, TRUE, $options, FALSE);
+
+  if (!$pdf_file) {
+    return FALSE;
+  }
+  $url_flash_file = batire_user_docs_pdf_get_flash_file($node, $user->uid);
+
+  $flash_file = $base_dir . $url_flash_file;
+  $abs_url_flash_file = url($url_flash_file, array('absolute' => TRUE));
+  if (file_exists($pdf_file)) {
+    if (file_exists($flash_file)) {
+      return $abs_url_flash_file;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Start generating pdf file for node
+ * @param $node Node(document)
+ * @param $data Aditional params
+ * @return Bool TRUE | FALSE
+ */
+function batire_user_docs_pdf_start_generating($node, $options = array()) {
+  global $base_url;
+
+  if (!$node && !$node->nid && !_batire_site_is_document($node->type)) {
+    return FALSE;
+  }
+
+  $pdf_directory = _batire_user_docs_pdf_get_directory($node);
+  if (!$pdf_directory) {
+    return FALSE;
+  }
+
+  $pdf_file = _batire_user_docs_pdf_get_file_path($node, TRUE, $options);
+  if (!$pdf_file) {
+    return FALSE;
+  }
+  if (file_exists($pdf_file)) {
+    return TRUE;
+  }
+
+  $filename = _batire_user_docs_pdf_get_tmp_file_name($node, $options);
+
+  $lock_file = $pdf_directory . '/' . $filename . '.lock';
+  if (file_exists($lock_file)) {
+    return TRUE;
+  }
+
+  $error_file = $pdf_directory . '/' . $filename . '.error';
+  if (file_exists($error_file)) {
+    return FALSE;
+  }
+
+  $base_dir = _batire_user_docs_pdf_get_basedir();
+  $priority = (int) variable_get('batire_pdf_process_priority', 5);
+  $path_to_php = escapeshellcmd(variable_get('batire_pdf_php', '/usr/bin/php'));
+
+  $url = $base_url . '/batire-pdf-generate/' . (int) $node->nid;
+  $query = _batire_user_docs_pdf_get_url_query($options);
+  if (isset($query)) {
+    $url .= $query;
+  }
+  // create unix command for calling url for generating pdf file
+  $command = 'nice -n ' . $priority . ' ' . $path_to_php . ' -d display_errors=\'on\' ';
+  $command .= realpath($base_dir) . '/scripts/drupal.sh --root ' . $base_dir . ' "';
+  $command .= $url . '" > /dev/null';
+  $command .= ' &';
+  exec($command);
+  return TRUE;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function batire_user_docs_pdf_theme() {
+  return array(
+    'batire_user_docs_pdf_footer' => array(
+      'arguments' => array('node' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_docs_pdf_refs' => array(
+      'arguments' => array('params' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_cronapi().
+ */
+function batire_user_docs_pdf_cronapi($op, $job = NULL) {
+  switch ($op) {
+    case 'list':
+      return array(
+        'batire_user_docs_pdf_clean_directory' => t('Cleanup pdf directories'),
+      );
+      break;
+
+    case 'rule':
+      if ($job == 'batire_user_docs_pdf_clean_directory') {
+        return '0 23 * * *';
+      }
+      break;
+
+    case 'execute':
+      if ($job == 'batire_user_docs_pdf_clean_directory') {
+        batire_user_docs_pdf_clean_directory();
+      }
+      break;
+  }
+}
+
+/**
+ * Cleand pdf directory.
+ */
+function batire_user_docs_pdf_clean_directory() {
+  $base_dir = _batire_user_docs_pdf_get_basedir();
+  $directories = array($base_dir . BATIRE_USER_DOCS_PDF_FOLDER, $base_dir . BATIRE_USER_DOCS_PDF_FLASH_FOLDER, BATIRE_USER_DOCS_TMP_PDF_FOLDER);
+  foreach ($directories as $dir) {
+    $files = glob($dir . '/*');
+    if (count($files)) {
+      foreach ($files as $file) {
+        file_delete($file);
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_ctools_plugin_api().
+ */
+function batire_user_docs_pdf_ctools_plugin_api($owner, $api) {
+  if ($owner == 'panels' && $api == 'styles') {
+    return array('version' => 2.0);
+  }
+
+  if (module_exists('panels_everywhere') && $owner == 'page_manager' && $api == 'pages_default') {
+    return array('version' => 1);
+  }
+}
+
+/**
+ * Implementation of hook_ctools_plugin_directory().
+ */
+function batire_user_docs_pdf_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'plugins/' . $plugin;
+  }
+  if ($module == 'page_manager' && $plugin == 'tasks') {
+    return 'plugins/' . $plugin;
+  }
+}
+
+/**
+ * Start generate flash for TN
+ * @param $node Node(document)
+ * @param $options List of options
+ */
+function _batire_user_docs_pdf_start_generating_flash($node, $options = array()) {
+  global $base_url;
+  if (!$node && !$node->nid && $node->type != BATIRE_SITE_CT_TN) {
+    return FALSE;
+  }
+
+  $flash_file = batire_user_docs_pdf_get_flash_file($node, $options['user'], TRUE, TRUE);
+  if (!$flash_file) {
+    return FALSE;
+  }
+
+  $lock_file = $flash_file . '.lock';
+  if (file_exists($lock_file)) {
+    return TRUE;
+  }
+
+  $error_file = $flash_file . '.error';
+  if (file_exists($error_file)) {
+    return FALSE;
+  }
+
+  $base_dir = _batire_user_docs_pdf_get_basedir();
+  $priority = (int) variable_get('batire_pdf_process_priority', 5);
+  $path_to_php = escapeshellcmd(variable_get('batire_pdf_php', '/usr/bin/php'));
+
+  $url = $base_url . '/batire-pdf-generate-tn-flash/' . (int) $node->nid;
+  $query = _batire_user_docs_pdf_get_url_query($options);
+  if (isset($query)) {
+    $url .= $query;
+  }
+  // create unix command for calling url for generating pdf file
+  $command = 'nice -n ' . $priority . ' ' . $path_to_php . ' -d display_errors=\'on\' ';
+  $command .= realpath($base_dir) . '/scripts/drupal.sh --root ' . $base_dir . ' "';
+  $command .= $url . '" > /dev/null';
+  $command .= ' &';
+  exec($command);
+  return TRUE;
+}

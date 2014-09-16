@@ -1,0 +1,6 @@
+;$Id$
+name = Batire User Excel Import
+description = Allows to import users from excel file in one click.
+core = 6.x
+package = Batire
+version = "6.x-1.0"

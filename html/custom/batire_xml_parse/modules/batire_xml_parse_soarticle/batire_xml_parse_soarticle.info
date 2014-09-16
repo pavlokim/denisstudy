@@ -1,0 +1,7 @@
+; $Id$
+name = TO Plugin
+description = Batire XML Parser Plugin for Texte officiel and Code
+package = Batire
+core = 6.x
+version = "6.x-1.0"
+dependencies[] = batire_xml_parse

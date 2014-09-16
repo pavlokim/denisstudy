@@ -1,0 +1,1008 @@
+<?php
+
+/**
+ * Implementation of hook_batire_xml_parseapi()
+ *
+ * @param $op
+ *   Operation
+ * @param array &$data
+ *   Result of parse process, if already processed
+ * @param DOMDocument &$dom
+ *   DOM object parsed from XML
+ * @return
+ *   Result of parse process, if already processed
+ */
+function batire_xml_parse_normative_batire_xml_parseapi($op, &$data, $dom = NULL) {
+  switch ($op) {
+    case 'suggest types':
+      $xpath = batire_xml_get_xpath($dom);
+      $product = strtoupper(batire_xml_node_value_get($xpath, "/qc:doc-root/qc:doc-meta/xms:product"));
+      if ($product == 'NORME_UD') {
+        return 'NORME_UD';
+      }
+      if ($product == 'NORME_SOMMAIRE') {
+        return 'NORME_SOMMAIRE';
+      }
+      break;
+    case 'process':
+      if ($data['type'] == 'NORME_UD') {
+        _batire_xml_parse_normative_parse($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process NORME_UD:");
+          drush_print_r($data);
+        }
+      }
+      if ($data['type'] == 'NORME_SOMMAIRE') {
+        _batire_xml_parse_normative_som_parse($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we process NORME_UD:");
+          drush_print_r($data);
+        }
+      }
+      break;
+    case 'postprocess':
+      if ($data['type'] == 'NORME_UD') {
+        _batire_xml_parse_normative_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      }
+      if ($data['type'] == 'NORME_SOMMAIRE') {
+        _batire_xml_parse_normative_som_store($data, $dom);
+        if (variable_get("batire_xml_parse_drush_verbose", FALSE)) {
+          drush_print("Here we must create node based on:");
+          drush_print_r($data);
+        }
+      }
+      break;
+
+    case 'postgeneration':
+      $args = func_get_args();
+      $nid = $args[2];
+      $page_data = mongodb_page_get_node_page($nid);
+      if ($page_data && $page_data['doc_type'] == BATIRE_HIERARCHY_DT_TEXTE_NORMATIF) {
+        if(isset($page_data['pdf_images'])) {
+          unset($page_data['pdf_images']);
+          mongodb_page_save($page_data);
+        }
+        if (isset($page_data['attached']) && !empty($page_data['attached'])) {
+          batire_xml_parse_normative_pdf_to_image($nid, $page_data['attached']);
+        }
+      }
+      break;
+  }
+}
+
+/**
+ * Parse elementnorme document
+ *
+ * @param DOMDocument $dom
+ * @param array $data
+ */
+function _batire_xml_parse_normative_parse(&$data, $dom) {
+  $xpath = batire_xml_get_xpath($dom);
+
+  $data['doc_type'] = BATIRE_HIERARCHY_DT_TEXTE_NORMATIF;
+
+  // '*' is articleglm or texteglm tag
+  $parsed = batire_xml_multiple_node_value_get($xpath, array(
+    'type_doc' => '/qc:doc-root/qc:doc-meta/ns0:type-doc | /qc:doc-root/qc:doc-meta/ns1:type-doc | /qc:doc-root/qc:doc-meta/gm:type-doc',
+    'sir_id' => '/qc:doc-root/qc:doc-content/*/idsir',
+    'id' => '/qc:doc-root/qc:doc-meta/ns0:id | /qc:doc-root/qc:doc-meta/ns1:id | /qc:doc-root/qc:doc-meta/gm:id',
+    'nature' => '/qc:doc-root/qc:doc-meta/ns0:nature | /qc:doc-root/qc:doc-meta/ns1:nature | /qc:doc-root/qc:doc-meta/gm:nature',
+    'title' => '/qc:doc-root/qc:doc-meta/xms:title',
+    'creation_date' => '/qc:doc-root/qc:doc-meta/xms:creation-date',
+    'reference' => '/qc:doc-root/qc:doc-meta/ns0:reference | /qc:doc-root/qc:doc-meta/ns1:reference | /qc:doc-root/qc:doc-meta/gm:reference',
+    'date_time_flow' => '/qc:doc-root/qc:doc-meta/ns0:dateTimeFlow | /qc:doc-root/qc:doc-meta/ns1:dateTimeFlow | /qc:doc-root/qc:doc-meta/gm:dateTimeFlow',
+    'date_document' => '/qc:doc-root/qc:doc-meta/ns0:date-document | /qc:doc-root/qc:doc-meta/ns1:date-document | /qc:doc-root/qc:doc-meta/gm:date-document',
+    'datepub' => '/qc:doc-root/qc:doc-meta/ns0:datepub | /qc:doc-root/qc:doc-meta/ns1:datepub | /qc:doc-root/qc:doc-meta/gm:datepub',
+    'fa_num' => '/qc:doc-root/qc:doc-meta/ns0:faNum | /qc:doc-root/qc:doc-meta/ns1:faNum | /qc:doc-root/qc:doc-meta/gm:faNum',
+    'super_id' => '/qc:doc-root/qc:doc-meta/ns0:faNum | /qc:doc-root/qc:doc-meta/ns1:faNum | /qc:doc-root/qc:doc-meta/gm:faNum',
+    'voiraussi' => '/qc:doc-root/qc:doc-content/*/noticeglm/voiraussi',
+    'etat' => '/qc:doc-root/qc:doc-content/*/noticeglm/etat',
+    'indice' => '/qc:doc-root/qc:doc-content/*/noticeglm/indice',
+    'dateann' => '/qc:doc-root/qc:doc-content/*/noticeglm/dateann',
+    'docid' => '/qc:doc-root/qc:doc-content/*/noticeglm/docid',
+    // Changed by task 40652
+    //'norma_type' => '/qc:doc-root/qc:doc-content/*/noticeglm/type | /qc:doc-root/qc:doc-content/normeglm/noticeglm/type',
+    'etat_juridique' => '/qc:doc-root/qc:doc-meta/ns0:etatJuridique',
+    'norma_type' => '/qc:doc-root/qc:doc-meta/ns0:typeNorme | /qc:doc-root/qc:doc-meta/ns1:typeNorme | /qc:doc-root/qc:doc-meta/gm:typeNorme',
+    'type_norme' => '/qc:doc-root/qc:doc-meta/ns0:typeNorme | /qc:doc-root/qc:doc-meta/ns1:typeNorme | /qc:doc-root/qc:doc-meta/gm:typeNorme',
+    'notice_seule' => '/qc:doc-root/qc:doc-meta/ns0:noticeSeule | /qc:doc-root/qc:doc-meta/ns1:noticeSeule | /qc:doc-root/qc:doc-meta/gm:noticeSeule',
+    'indice_meta' => '/qc:doc-root/qc:doc-meta/ns0:indice | /qc:doc-root/qc:doc-meta/ns1:indice | /qc:doc-root/qc:doc-meta/gm:indice',
+    'h1_titre' => '//elementnorme/*[name() != "meta" and name() != "noticeglm"]/multi_ht/ht',
+    'h1_gtext' => '//elementnorme/*[name() != "meta" and name() != "noticeglm"]/@gtext'
+    ));
+  $sub_type = $xpath->query("/qc:doc-root/qc:doc-content/elementnorme/*[name()!='meta' and name()!='noticeglm' and name() != 'section']");
+  if (is_object($sub_type) && $sub_type->length > 0) {
+    $parsed['sub_type'] = $sub_type->item(0)->nodeName;
+  } else {
+    $parsed['sub_type'] = 'Summary';
+  }
+
+
+  if (array_key_exists('h1_titre', $parsed)) {
+    $parsed['h1_titre'] = strip_tags($parsed['h1_titre']);
+  }
+  $parsed['h1_titre'] = _batire_xml_get_common_title($xpath, $parsed['h1_titre']);
+  $sub_title = $xpath->query("/qc:doc-root/qc:doc-content/elementnorme/*[name()!='meta' and name()!='noticeglm' and name() != 'section']/multi_ht/ht");
+  if (is_object($sub_title) && $sub_title->length > 0) {
+    if (empty($sub_title->item(0)->nodeValue)) {
+      $sub_title->item(0)->nodeValue = $parsed['h1_titre'];
+    }
+  }
+
+
+  $data['remplace'] = array();
+  $remplaces = $xpath->query('/qc:doc-root/qc:doc-meta/remplace');
+  if (is_object($remplaces) && $remplaces->length > 0) {
+    foreach ($remplaces as $remplace) {
+      $data['remplace'][] = $remplace->nodeValue;
+    }
+  }
+
+  //@TODO remplacepar is link
+
+  $data['remplacepar'] = array();
+  $remplaces = $xpath->query('/qc:doc-root/qc:doc-meta/ns0:remplacePar | /qc:doc-root/qc:doc-meta/ns1:remplacePar | /qc:doc-root/qc:doc-meta/gm:remplacePar');
+  if (is_object($remplaces) && $remplaces->length > 0) {
+    foreach ($remplaces as $remplace) {
+      $elem = $remplace->nodeValue;
+      if (!empty($elem)) {
+        $arr_elem = explode(':', $elem);
+        $elem = array_shift($arr_elem);
+        $data['remplacepar'][] = $elem;
+      }
+    }
+  }
+
+  $data['inner_structure'] = array();
+  $inner_structure = $xpath->query('//elementnorme/*[name() != "meta" and name() != "noticeglm"]');
+  if (is_object($inner_structure) && $inner_structure->length > 0 ) {
+    foreach($inner_structure as $element) {
+
+      $values = batire_xml_multiple_node_value_get($xpath, array(
+        'gtext' => './@gtext',
+        'title' => './multi_ht/ht'
+        ), $element);
+
+      $values['title'] = strip_tags($values['title']);
+            if (empty($values['gtext'])) {
+        $subtitle = $values['title'];
+      } else {
+        $subtitle = '§ ' . $values['gtext'];
+        if (!empty($values['title'])) {
+          $subtitle .= ' - ' . $values['title'];
+        }
+      }
+      unset($values['gtext']);
+      $values['title'] = $subtitle;
+
+      $new_id = md5($values['title'].rand(1,100));
+      $element->setAttribute('id', $new_id);
+      $values['id'] = $new_id;
+      $values['content'] = _batire_xml_inner_structure_recursive($xpath, $element);
+      $data['inner_structure'][] = $values;
+    }
+  }
+  $data['attached'] = array();
+  $file_nodes = $xpath->query('//xms:attached-to');
+  if (is_object($file_nodes) && $file_nodes->length > 0) {
+    foreach ($file_nodes as $file_node) {
+      $data['attached'][] = basename($file_node->nodeValue);
+    }
+  }
+
+  if ($parsed['notice_seule'] == 'true') {
+    $parsed['notice_seule'] = TRUE;
+  } else {
+    $parsed['notice_seule'] = FALSE;
+  }
+
+
+  $parsed['body'] = array(
+    'content' => '<elementnorme>' . implode("\n", batire_xml_node_xml_inner_get($xpath, '/qc:doc-root/qc:doc-content/elementnorme', NULL, array('meta', 'NOTICEGLM'))) . '</elementnorme>',
+    'resume' => '<resume>' . implode("\n", batire_xml_node_xml_inner_get($xpath, '/qc:doc-root/qc:doc-content/elementnorme/noticeglm/resume')) . '</resume>'
+  );
+  foreach ($parsed as $name => $value) {
+    if (substr($name, 0, 5) == 'date_') {
+      $date = batire_xml_parse_convert_date($value);
+      if ($date) {
+        $parsed[$name] = $date;
+      }
+    }
+  }
+
+  $data['bid'] = batire_hierarchy_get_document_bid($parsed['id'], $data['doc_type']);
+  $data['super_bid'] = batire_hierarchy_get_document_bid($parsed['super_id'], $data['doc_type']);
+
+  $data['page_version'] = $parsed['date_document'];
+
+  $data['taxonomy'] = batire_xml_get_taxonomy($xpath);
+
+  $data = array_merge($data, $parsed);
+}
+
+function _batire_xml_inner_structure_recursive($xpath, $element) {
+  $result = array();
+  $inner_structure = $xpath->query('./*[name() = "h1" or name() = "h2" or name() = "h3"]', $element);
+  if (is_object($inner_structure) && $inner_structure->length > 0) {
+    foreach ($inner_structure as $element) {
+      $values = batire_xml_multiple_node_value_get($xpath, array(
+        'gtext' => './@gtext',
+        'title' => './multi_ht/ht'
+        ), $element);
+      $values['title'] = strip_tags($values['title']);
+      if (empty($values['gtext'])) {
+        $subtitle = $values['title'];
+      } else {
+        $subtitle = '§ ' . $values['gtext'];
+        if (!empty($values['title'])) {
+          $subtitle .= ' - ' . $values['title'];
+        }
+      }
+      unset($values['gtext']);
+      $values['title'] = $subtitle;
+
+      $new_id = md5($values['title'] . rand(1, 100));
+      $element->setAttribute('id', $new_id);
+      $values['id'] = $new_id;
+      $values['content'] = _batire_xml_inner_structure_recursive($xpath, $element);
+      $result[] = $values;
+    }
+  }
+  return $result;
+}
+
+/**
+ * Parse summery document
+ *
+ * @param DOMDocument $dom
+ * @param array $data
+ */
+function _batire_xml_parse_normative_som_parse(&$data, $dom) {
+  $xpath = batire_xml_get_xpath($dom);
+
+  $data['doc_type'] = BATIRE_HIERARCHY_DT_TEXTE_NORMATIF;
+
+
+  // '*' is articleglm or texteglm tag
+  $parsed = batire_xml_multiple_node_value_get($xpath, array(
+    'type_doc' => '/qc:doc-root/qc:doc-meta/ns0:type-doc | /qc:doc-root/qc:doc-meta/ns1:type-doc | /qc:doc-root/qc:doc-meta/gm:type-doc',
+    'sir_id' => '/qc:doc-root/qc:doc-content/*/idsir',
+    'id' => '/qc:doc-root/qc:doc-meta/ns0:id | /qc:doc-root/qc:doc-meta/ns1:id | /qc:doc-root/qc:doc-meta/gm:id',
+    'super_id' => '/qc:doc-root/qc:doc-meta/ns0:faNum | /qc:doc-root/qc:doc-meta/ns1:faNum | /qc:doc-root/qc:doc-meta/gm:faNum',
+    'nature' => '/qc:doc-root/qc:doc-meta/ns0:nature | /qc:doc-root/qc:doc-meta/ns1:nature | /qc:doc-root/qc:doc-meta/gm:nature',
+    'title' => '/qc:doc-root/qc:doc-meta/xms:title',
+    'creation_date' => '/qc:doc-root/qc:doc-meta/xms:creation-date',
+    'reference' => '/qc:doc-root/qc:doc-meta/ns0:reference | /qc:doc-root/qc:doc-meta/ns1:reference | /qc:doc-root/qc:doc-meta/gm:reference',
+    'date_time_flow' => '/qc:doc-root/qc:doc-meta/ns0:dateTimeFlow | /qc:doc-root/qc:doc-meta/ns1:dateTimeFlow | /qc:doc-root/qc:doc-meta/gm:dateTimeFlow',
+    'date_document' => '/qc:doc-root/qc:doc-meta/ns0:date-document | /qc:doc-root/qc:doc-meta/ns1:date-document | /qc:doc-root/qc:doc-meta/gm:date-document',
+    'datepub' => '/qc:doc-root/qc:doc-meta/ns0:datepub | /qc:doc-root/qc:doc-meta/ns1:datepub | /qc:doc-root/qc:doc-meta/gm:datepub',
+    'fa_num' => '/qc:doc-root/qc:doc-meta/ns0:faNum | /qc:doc-root/qc:doc-meta/ns1:faNum | /qc:doc-root/qc:doc-meta/gm:faNum',
+    'resume' => '/qc:doc-root/qc:doc-content/*/noticeglm/resume',
+    'voiraussi' => '/qc:doc-root/qc:doc-content/*/noticeglm/voiraussi',
+    'etat' => '/qc:doc-root/qc:doc-content/*/noticeglm/etat',
+    'etat_juridique' => '/qc:doc-root/qc:doc-meta/ns0:etatJuridique',
+    'indice' => '/qc:doc-root/qc:doc-content/*/noticeglm/indice',
+    'dateann' => '/qc:doc-root/qc:doc-content/*/noticeglm/dateann',
+    'docid' => '/qc:doc-root/qc:doc-content/*/noticeglm/docid',
+    'notice_seule' => '/qc:doc-root/qc:doc-meta/ns0:noticeSeule | /qc:doc-root/qc:doc-meta/ns1:noticeSeule | /qc:doc-root/qc:doc-meta/gm:noticeSeule',
+
+    // Changed by task 40652
+    //'norma_type' => '/qc:doc-root/qc:doc-content/*/noticeglm/type'
+    'norma_type' => '/qc:doc-root/qc:doc-meta/ns0:typeNorme | /qc:doc-root/qc:doc-meta/ns1:typeNorme | /qc:doc-root/qc:doc-meta/gm:typeNorme',
+    ));
+  $sub_type = $xpath->query("/doc-root/doc-content/elementnorme/*[name()!='meta' and name()!='noticeglm'] and name() != 'section'");
+  if (is_object($sub_type) && $sub_type->length > 0) {
+    $parsed['sub_type'] = $sub_type->item(0)->nodeName;
+  } else {
+    $parsed['sub_type'] = 'Summary';
+  }
+  if ($parsed['notice_seule'] == 'true') {
+    $parsed['notice_seule'] = TRUE;
+  } else {
+    $parsed['notice_seule'] = FALSE;
+  }
+
+  $data['remplace'] = array();
+  $remplaces = $xpath->query('/qc:doc-root/qc:doc-content/*/noticeglm/remplace');
+  if (is_object($remplaces) && $remplaces->length > 0) {
+    foreach ($remplaces as $remplace) {
+      $data['remplace'][] = $remplace->nodeValue;
+    }
+  }
+
+  $data['remplacepar'] = array();
+  $remplaces = $xpath->query('/qc:doc-root/qc:doc-meta/ns0:remplacePar | /qc:doc-root/qc:doc-meta/ns1:remplacePar | /qc:doc-root/qc:doc-meta/gm:remplacePar');
+  if (is_object($remplaces) && $remplaces->length > 0) {
+    foreach ($remplaces as $remplace) {
+      $elem = $remplace->nodeValue;
+      if (!empty($elem)) {
+        $arr_elem = explode(':', $elem);
+        $elem = array_shift($arr_elem);
+        $data['remplacepar'][] = $elem;
+      }
+    }
+  }
+
+  $parsed_body = batire_xml_node_xml_inner_get($xpath, '/qc:doc-root/qc:doc-content/normeglm', NULL, array('meta', 'NOTICEGLM', 'section'));
+  if (!$parsed_body) {
+    $parsed_body = array();
+  }
+  $parsed['body'] = array('content' => '<normeglm>' . join("\n", $parsed_body) . '</normeglm>');
+
+  $links = $xpath->query('/qc:doc-root/qc:doc-content/normeglm/section');
+  $parsed['links'] = array();
+  if (is_object($links) && $links->length > 0) {
+    foreach ($links as $link) {
+      $link = batire_xml_multiple_node_value_get($xpath, array(
+        'id' => './lien/@id',
+        'title' => './titre_section'
+        ), $link);
+      $link['bid'] = batire_hierarchy_get_document_bid($link['id'], $data['doc_type']);
+
+      $parsed['links'][] = $link;
+    }
+  }
+  //$parsed['links'] = batire_xml_node_xml_inner_get($xpath, '/qc:doc-root/qc:doc-content/normeglm', NULL, array('meta', 'NOTICEGLM','prebody'));
+  foreach ($parsed as $name => $value) {
+    if (substr($name, 0, 5) == 'date_') {
+      $date = batire_xml_parse_convert_date($value);
+      if ($date) {
+        $parsed[$name] = $date;
+      }
+    }
+  }
+
+  $data['attached'] = array();
+  $file_nodes = $xpath->query('//xms:attached-to');
+  if (is_object($file_nodes) && $file_nodes->length > 0) {
+    foreach ($file_nodes as $file_node) {
+      $data['attached'][] = basename($file_node->nodeValue);
+    }
+  }
+
+  $data['bid'] = batire_hierarchy_get_document_bid($parsed['id'], $data['doc_type']);
+  $data['super_bid'] = batire_hierarchy_get_document_bid($parsed['super_id'], $data['doc_type']);
+
+  $data['parent_id'] = $parsed['super_id'];
+  $data['parent_bid'] = batire_hierarchy_get_document_bid($parsed['super_id'], $data['doc_type']);
+  $data['position'] = -1;
+
+
+
+  $data['page_version'] = $parsed['date_document'];
+
+  $data['taxonomy'] = batire_xml_get_taxonomy($xpath);
+
+  // prebody start
+
+  $prebody_content = $xpath->query('/qc:doc-root/qc:doc-content/*/prebody');
+
+  if (is_object($prebody_content) && $prebody_content->length > 0) {
+
+     $prebody_map = array(
+      'id' => './profile/docid',
+      'reference' => './ptitrefr/reference',
+      'indiceclasst' => './ptitrefr/indiceclasst',
+      'titre1fr' => './ptitrefr/titre1fr',
+      'titre2fr' => './ptitrefr/titre2fr',
+      'titre3fr' => './ptitrefr/titre3fr',
+      'titrege' => './ptitrefr/titrege',
+      'titreen' => './ptitrefr/titreen',
+      'codesics' => './ptitrefr/codesics',
+      'statut' => './ptitrefr/statut',
+      'corres' => './ptitrefr/corres',
+      'analyse' => './ptitrefr/analyse',
+      'descripteurs' => './ptitrefr/descripteurs',
+      'modifications' => './ptitrefr/modifications',
+      'corrections' => './ptitrefr/corrections',
+      'commission' => './ptitrefr/commission',
+      'avtpropnat' => './ptitrefr/avtpropnat',
+      'avtpropen' => './avtpropen',
+      'ptitreen' => './ptitreen'
+      );
+     foreach ($prebody_map as $key => $path) {
+       $inner = batire_xml_node_xml_inner_get($xpath, $path, $prebody_content->item(0), array(), FALSE, TRUE);
+       if ($inner) {
+        $prebody[$key] = implode("\n", $inner);
+       }
+     }
+
+//    $prebody = batire_xml_multiple_node_value_get($xpath, array(
+//      'id' => './profile/docid',
+//      'reference' => './ptitrefr/reference',
+//      'indiceclasst' => './ptitrefr/indiceclasst',
+//      'titre1fr' => './ptitrefr/titre1fr',
+//      'titre2fr' => './ptitrefr/titre2fr',
+//      'titre3fr' => './ptitrefr/titre3fr',
+//      'titrege' => './ptitrefr/titrege',
+//      'titreen' => './ptitrefr/titreen',
+//      'codesics' => './ptitrefr/codesics',
+//      'statut' => './ptitrefr/statut',
+//      'corres' => './ptitrefr/corres',
+//      'analyse' => './ptitrefr/analyse',
+//      'descripteurs' => './ptitrefr/descripteurs',
+//      'modifications' => './ptitrefr/modifications',
+//      'corrections' => './ptitrefr/corrections',
+//      'commission' => './ptitrefr/commission',
+//      'avtpropnat' => './ptitrefr/avtpropnat',
+//      'avtpropen' => './avtpropen',
+//      'ptitreen' => './ptitreen'
+//      ), $prebody_content->item(0), TRUE);
+    $prebody['bid'] = batire_hierarchy_get_document_bid($prebody['id'], $data['doc_type']) . '-prebody';
+    $prebody['parent_bid'] = $data['parent_bid'];
+    $prebody['page_version'] = $data['page_version'];
+    $prebody['parent_id'] = $data['parent_id'];
+    $prebody['title'] = $parsed['title'];
+    $prebody['file'] = $data['file'];
+    $prebody['dir'] = $data['dir'];
+    $dateeff = batire_xml_multiple_node_value_get($xpath, array(
+      'year' => './ptitrefr/dateeff/@an',
+      'month' => './ptitrefr/dateeff/@mois',
+      'day' => './ptitrefr/dateeff/@jour'
+      ), $prebody_content->item(0));
+    $dateeff['year'] = !empty($dateeff['year']) ? $dateeff['year'] : '1970';
+    $dateeff['month'] = !empty($dateeff['month']) ? $dateeff['month'] : '01';
+    $dateeff['day'] = !empty($dateeff['day']) ? $dateeff['day'] : '01';
+    $prebody['dateeff'] = new DateTime($dateeff['year'] . '-' . $dateeff['month'] . '-' . $dateeff['day']);
+    if (is_object($prebody['dateeff'])) {
+      $prebody['dateeff_text'] = drupal_ucfirst(format_date($prebody['dateeff']->format('U'), 'custom', 'F Y'));
+    } else {
+     $prebody['dateeff_text'] = '';
+    }
+    $prebody['doc_type'] = BATIRE_HIERARCHY_DT_TEXTE_NORMATIF;
+    $parsed['prebody'] = $prebody;
+  }
+  // prebody end
+  // multypart sommaries begin
+  $arr_indice = explode('-', $parsed['indice']);
+  if (count($arr_indice) > 2) {
+    // this is part of multypart sommarie
+    $parsed['indice_group'] = $arr_indice[0] . '-' . $arr_indice[1];
+  }
+  // multypart sommaries end
+
+  $data = array_merge($data, $parsed);
+}
+
+/**
+ * Save stored data
+ *
+ * @param array &$data
+ * @param DOMDocument $dom
+ */
+function _batire_xml_parse_normative_store(&$data, $dom) {
+  $doc_type = batire_hierarchy_get_doc_type($data['doc_type']);
+
+  //Check if document already exists
+  $hierarchy = batire_hierarchy_get_by_bid($data['bid']);
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+    $data['date_editoriale'] = $node->created;
+    if ($node->page_data['remplacepar'] == $data['remplacepar'] && $data['etat_juridique'] == 'Annulée') {
+      $data['alerted'] = 0;
+    }
+  } else {
+    //create new document
+    $node = new stdClass();
+    $data['date_editoriale'] = time();
+    if (!empty($data['remplacepar']) && $data['etat_juridique'] == 'Annulée') {
+      $data['alerted'] = 0;
+    }
+    $node->type = $doc_type['content_type'];
+    $node->uid = 1; //@TODO: use some user from settings
+  }
+  $node->title = $data['title'];
+
+  $data_map = array(
+    'datepub' => 'field_tn_date_pub date',
+    'dateann' => 'field_date_anul date',
+    'indice' => 'field_classification_index',
+    'remplace' => 'field_remplace_num',
+  );
+  foreach ($data_map as $from => $to) {
+    $arr_to = explode(' ', $to);
+    $to = $arr_to[0];
+
+    if (is_numeric($from)) {
+      $from = $to;
+      $to = 'field_' . $to;
+    }
+    if (!empty($data[$from])) {
+      if (isset($arr_to[1]) && $arr_to[1] = 'date') {
+        $node->{$to} = array(array('value' => batire_xml_parse_convert_date($data[$from])));
+      } else {
+        $node->{$to} = array(array('value' => $data[$from]));
+      }
+    } elseif (isset($node->{$to})) {
+      unset($node->{$to});
+    }
+  }
+  if (empty($data['h1_gtext'])) {
+    $subtitle = $data['h1_titre'];
+  } else {
+    $subtitle = '§ ' . $data['h1_gtext'];
+    if (!empty($data['h1_titre'])) {
+      $subtitle .= ' - ' . $data['h1_titre'];
+    }
+  }
+  $node->field_subtitle = array(array('value' => $subtitle));
+  if (!empty($data['content']['resume'])) {
+    $node->field_resume = array(array('value' => $data['content']['resume']));
+  }
+  $node->language = 'fr';
+  $node->parsed_data = $data;
+  $node->field_import_date = array(array('value' => time()));
+  $node->field_doc_number = array(array('value' => $data['reference']));
+
+  if (isset($data['notice_seule']) && $data['notice_seule']) {
+    $node->field_tn_detailed = array(array('value' => 1));
+  } else {
+    $node->field_tn_detailed = array(array('value' => 0));
+  }
+  $taxonomy = array();
+  $taxonomy[] = $doc_type['tid'];
+  $type_doc_term = batire_get_tid_by_description($data['norma_type'], BATIRE_SITE_VID_NORMATIF);
+  if ($type_doc_term) {
+    $taxonomy[] = $type_doc_term;
+  } else {
+      $type_doc_term = batire_get_tid_by_name($data['norma_type'], BATIRE_SITE_VID_NORMATIF);
+      if ($type_doc_term) {
+            $taxonomy[] = $type_doc_term;
+      }
+  }
+
+  $indice_taxonomy = _batire_xml_parse_nomative_get_taxonomy($data['indice']);
+  if ($indice_taxonomy) {
+    $taxonomy[] = $indice_taxonomy;
+  }
+  $node->taxonomy = array_unique(array_merge($data['taxonomy'], $taxonomy));
+
+  $cites = batire_antidot_export_get_cites($data['bid']);
+  $node->field_cites = array();
+  foreach ($cites as $cite) {
+    $node->field_cites[]['value'] = $cite;
+  }
+
+  node_save($node);
+
+
+  $data['node'] = $node;
+  $data['op'] = $node->is_new ? 'add' : 'edit';
+
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+}
+
+/**
+ * Save stored data
+ *
+ * @param array &$data
+ * @param DOMDocument $dom
+ */
+function _batire_xml_parse_normative_som_store(&$data, $dom) {
+  $doc_type = batire_hierarchy_get_doc_type($data['doc_type']);
+
+  //Check if document already exists
+  $hierarchy = batire_hierarchy_get_by_bid($data['bid']);
+  $data['alerted'] = 1;
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+    $data['date_editoriale'] = $node->created;
+    if ($node->page_data['remplacepar'] == $data['remplacepar'] && $data['etat_juridique'] == 'Annulée') {
+      $data['alerted'] = 0;
+    }
+  } else {
+    //create new document
+    $node = new stdClass();
+    $node->type = $doc_type['content_type'];
+    $data['date_editoriale'] = time();
+    if (!empty($data['remplacepar']) && $data['etat_juridique'] == 'Annulée') {
+      $data['alerted'] = 0;
+    }
+    $node->uid = 1; //@TODO: use some user from settings
+  }
+//  if (!$hierarchy) {
+//    $hierarchy = new stdClass();
+//    $hierarchy->id = $data['id'];
+//    $hierarchy->bid = $data['bid'];
+//    $hierarchy->super_id = $data['super_id'];
+//    $hierarchy->super_bid = $data['super_bid'];
+//    $hierarchy->title = $data['title'];
+//    $hierarchy->position = 0;
+//    batire_hierarchy_insert($hierarchy);
+//  }
+  $node->title = $data['title'];
+
+  $data_map = array(
+    'datepub' => 'field_tn_date_pub date',
+    'dateann' => 'field_date_anul date',
+    'indice' => 'field_classification_index',
+    'remplace' => 'field_remplace_num',
+    'resume' => 'field_resume'
+  );
+  foreach ($data_map as $from => $to) {
+    $arr_to = explode(' ', $to);
+    $to = $arr_to[0];
+
+    if (is_numeric($from)) {
+      $from = $to;
+      $to = 'field_' . $to;
+    }
+    if (!empty($data[$from])) {
+      if (isset($arr_to[1]) && $arr_to[1] = 'date') {
+        $node->{$to} = array(array('value' => batire_xml_parse_convert_date($data[$from])));
+      } else {
+        $node->{$to} = array(array('value' => $data[$from]));
+      }
+    } elseif (isset($node->{$to})) {
+      unset($node->{$to});
+    }
+  }
+  $node->language = 'fr';
+  $node->parsed_data = $data;
+
+  $data_map = array(
+    'datepub' => 'field_tn_date_pub date',
+    'dateann' => 'field_date_anul date',
+    'indice' => 'field_classification_index',
+    'remplace' => 'field_remplace_num',
+    'resume' => 'field_resume'
+  );
+  foreach ($data_map as $from => $to) {
+    $arr_to = explode(' ', $to);
+    $to = $arr_to[0];
+
+    if (is_numeric($from)) {
+      $from = $to;
+      $to = 'field_' . $to;
+    }
+    if (!empty($data[$from])) {
+      if (isset($arr_to[1]) && $arr_to[1] = 'date') {
+        $node->{$to} = array(array('value' => batire_xml_parse_convert_date($data[$from])));
+      } else {
+        $node->{$to} = array(array('value' => $data[$from]));
+      }
+    } elseif (isset($node->{$to})) {
+      unset($node->{$to});
+    }
+  }
+
+  $node->field_import_date = array(array('value' => time()));
+  $node->field_doc_number = array(array('value' => $data['reference']));
+  $taxonomy = array();
+  $taxonomy[] = $doc_type['tid'];
+  $type_doc_term = batire_get_tid_by_description($data['norma_type'], BATIRE_SITE_VID_NORMATIF);
+  if ($type_doc_term) {
+    $taxonomy[] = $type_doc_term;
+  } else {
+      $type_doc_term = batire_get_tid_by_name($data['norma_type'], BATIRE_SITE_VID_NORMATIF);
+      if ($type_doc_term) {
+            $taxonomy[] = $type_doc_term;
+      }
+  }
+
+  $indice_taxonomy = _batire_xml_parse_nomative_get_taxonomy($data['indice']);
+  if ($indice_taxonomy) {
+    $taxonomy[] = $indice_taxonomy;
+  }
+
+  $node->taxonomy = array_unique(array_merge($data['taxonomy'], $taxonomy));
+  if (isset($data['notice_seule']) && $data['notice_seule'] ) {
+    $node->field_tn_detailed = array(array('value' => 1));
+  } else {
+    $node->field_tn_detailed = array(array('value' => 0));
+  }
+
+  $cites = batire_antidot_export_get_cites($data['bid']);
+  $node->field_cites = array();
+  foreach ($cites as $cite) {
+    $node->field_cites[]['value'] = $cite;
+  }
+
+  node_save($node);
+
+
+  foreach ($data['links'] as $position => $link) {
+    $child_row = (object) $link;
+    $child_row->super_id = $data['super_id'];
+    $child_row->super_bid = $data['super_bid'];
+    $hierarchy_row = batire_hierarchy_get_by_bid($child_row->bid, 'nid');
+    if ($hierarchy_row && !empty($hierarchy_row))  {
+      $node_obj = node_load($hierarchy_row);
+      $title = @$node_obj->field_subtitle[0]['value'];
+      if (!empty($title)) {
+        $child_row->title = $title;
+      }
+    }
+    batire_hierarchy_update_smart($child_row);
+    batire_hierarchy_attach_children($data['super_bid'], $child_row->bid, $position + 1, $data['super_id']);
+  }
+
+  if (array_key_exists('prebody', $data) && is_array($data['prebody'])) {
+    _batire_xml_parse_store_prebody($data);
+  }
+
+
+  $data['node'] = $node;
+  $data['op'] = $node->is_new ? 'add' : 'edit';
+
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+}
+
+function _batire_xml_parse_store_prebody(&$data) {
+  $doc_type = batire_hierarchy_get_doc_type($data['doc_type']);
+  $prebody = array_merge($data, $data['prebody']);
+  unset($prebody['prebody']);
+  unset($prebody['indice_group']);
+  _batire_xml_parse_generate_prebody_content($prebody);
+  $prebody['from_prebody'] = TRUE;
+  $prebody['sub_type'] = "Prebody";
+  //Check if document already exists
+  $hierarchy = batire_hierarchy_get_by_bid($prebody['bid']);
+  if ($hierarchy && $hierarchy->nid) {
+    $node = node_load($hierarchy->nid);
+  } else {
+    //create new document
+    $node = new stdClass();
+    $node->type = $doc_type['content_type'];
+    $node->uid = 1; //@TODO: use some user from settings
+  }
+  //$node->title = $prebody['titre1fr'] . ' - ' . $prebody['titre2fr'] . ' - ' . $prebody['titre3fr'];
+
+  // copied from sommaire
+
+  $node->language = 'fr';
+  $data_map = array(
+    'datepub' => 'field_tn_date_pub date',
+    'dateann' => 'field_date_anul date',
+    'indice' => 'field_classification_index',
+    'remplace' => 'field_remplace_num',
+    'resume' => 'field_resume'
+  );
+  foreach ($data_map as $from => $to) {
+    $arr_to = explode(' ', $to);
+    $to = $arr_to[0];
+
+    if (is_numeric($from)) {
+      $from = $to;
+      $to = 'field_' . $to;
+    }
+    if (!empty($data[$from])) {
+      if (isset($arr_to[1]) && $arr_to[1] = 'date') {
+        $node->{$to} = array(array('value' => batire_xml_parse_convert_date($data[$from])));
+      } else {
+        $node->{$to} = array(array('value' => $data[$from]));
+      }
+    } elseif (isset($node->{$to})) {
+      unset($node->{$to});
+    }
+  }
+  $node->field_import_date = array(array('value' => time()));
+  $node->field_doc_number = array(array('value' => $data['reference']));
+
+  $taxonomy = array();
+  $taxonomy[] = $doc_type['tid'];
+  $type_doc_term = batire_get_tid_by_description($data['norma_type'], BATIRE_SITE_VID_NORMATIF);
+  if ($type_doc_term) {
+    $taxonomy[] = $type_doc_term;
+  }
+
+  $indice_taxonomy = _batire_xml_parse_nomative_get_taxonomy($data['indice']);
+  if ($indice_taxonomy) {
+    $taxonomy[] = $indice_taxonomy;
+  }
+
+  $node->taxonomy = array_unique(array_merge($data['taxonomy'], $taxonomy));
+  if (isset($data['notice_seule']) && $data['notice_seule'] ) {
+    $node->field_tn_detailed = array(array('value' => 1));
+  } else {
+    $node->field_tn_detailed = array(array('value' => 0));
+  }
+
+  // sommaire
+
+  $node->title = $prebody['title'];
+  $prebody['doc_type'] = $data['doc_type'];
+  $prebody['super_bid'] = $data['super_bid'];
+  $node->parsed_data = $prebody;
+  $node->parsed_data['position'] = -1;
+  $node->field_subtitle[0]['value'] = 'Généralités';
+  node_save($node);
+  batire_xml_parse_queue_content($node->nid, NULL, $node->is_new);
+  $data['prebody']['nid'] = $node->nid;
+}
+
+function _batire_xml_parse_nomative_get_taxonomy($indice) {
+  $indice = array_shift(explode('-', $indice));
+  while (mb_strlen($indice)) {
+    $taxonomy_tid = batire_get_tid_by_description($indice, BATIRE_SITE_VID_TN_INDICE);
+    if ($taxonomy_tid) {
+      return $taxonomy_tid;
+    }
+    $indice = mb_substr($indice, 0, -1);
+  }
+  return NULL;
+}
+
+function _batire_xml_parse_generate_prebody_content(&$prebody) {
+
+
+  /*   'reference' => './ptitrefr/reference',
+      'indiceclasst' => './ptitrefr/indiceclasst',
+      'titre1fr' => './ptitrefr/titre1fr',
+      'titre2fr' => './ptitrefr/titre2fr',
+      'titre3fr' => './ptitrefr/titre3fr',
+      'titrege' => './ptitrefr/titrege',
+      'codesics' => './ptitrefr/codesics',
+      'statut' => './ptitrefr/statut',
+      'corres' => './ptitrefr/corres',
+      'analyse' => './ptitrefr/analyse',
+      'descripteurs' => './ptitrefr/descripteurs',
+      'modifications' => './ptitrefr/modifications',
+      'corrections' => './ptitrefr/corrections',
+      'commission' => './ptitrefr/commission',
+      'avtpropnat' => './ptitrefr/avtpropnat',
+      'ptitreen' => './ptitreen'
+  */
+
+  $f_tag = '_batire_xml_add_tag_if_exists';
+
+  $content =
+  '<prebody>'.
+    '<prebody-generalites>' .
+      '<prebody-description>'.
+        $f_tag($prebody['reference'], 'reference').
+        $f_tag($prebody['dateeff_text'], 'dateeff').
+        $f_tag($prebody['indiceclasst'], 'indice').
+        $f_tag($prebody['codesics'], 'codesics').
+        $f_tag($prebody['titre2fr'], 'titre2').
+        $f_tag($prebody['titre3fr'], 'titre3').
+        $f_tag($prebody['titreen'], 'titreen').
+        $f_tag($prebody['titrege'], 'titrege').
+      '</prebody-description>'.
+       $f_tag($prebody['statut'], 'statut').
+       $f_tag($prebody['corres'], 'corres').
+       $f_tag($prebody['descripteurs'], 'descripteurs').
+       $f_tag($prebody['modifications'], 'modifications').
+       $f_tag($prebody['corrections'], 'corrections').
+       $f_tag($prebody['commission'], 'commission').
+       $f_tag($prebody['avtpropnat'], 'avtpropnat').
+       $f_tag($prebody['ptitreen'], 'ptitreen').
+       $f_tag($prebody['avtpropen'], 'avtpropen').
+    '</prebody-generalites>'.
+    '</prebody>';
+
+  $prebody['body']['content'] = $content;
+//  echo $content; die;
+  return $content;
+//
+//
+//    $description_tags = array(
+//        'reference' => 'reference',
+//        'dateeff_text' => 'dateeff',
+//        'indiceclasst' => 'indice',
+//        'codesics' =>  'codesics',
+//        'titre2fr' => 'titre2',
+//        'titre3fr' => 'titre3',
+//        'titreen' => 'titreen',
+//        'titrege' => 'titrege'
+//  );
+//  $generalites_tags = array(
+//       'statut' => 'statut',
+//       'corres' => 'corres',
+//       'descripteurs' => 'descripteurs',
+//       'modifications' => 'modifications',
+//       'corrections' => 'corrections',
+//       'commission' => 'commission',
+//       'avtpropnat' => 'avtpropnat',
+//       'ptitreen' => 'ptitreen',
+//       'avtpropen' => 'avtpropen'
+//  );
+//  $doc = new DOMDocument();
+//  $prebody = $doc->createElement('prebody');
+//  $doc->appendChild($prebody);
+//  $prebody_generalities = $doc->createElement('prebody-generalites');
+//  $prebody->appendChild($prebody_generalities);
+//  $prebody_description = $doc->createElement('prebody-description');
+//  $prebody_generalities->appendChild($prebody_description);
+//  foreach ($description_tags as $key => $tag_name) {
+//    if (!empty($data[$key])) {
+//      $prebody_description->appendChild($doc->createElement('prebody-' . $tag_name, $data[$key]));
+//    }
+//  }
+//  foreach ($generalites_tags as $key => $tag_name) {
+//    if (!empty($data[$key])) {
+//      $prebody_generalities->appendChild($doc->createElement('prebody-' . $tag_name, $data[$key]));
+//    }
+//  }
+//  $data['body']['content'] = $doc->saveXML($prebody);
+}
+
+function _batire_xml_add_tag_if_exists($data, $tag) {
+  if (!empty($data)) {
+    return '<prebody-'.$tag.'>'. str_replace('&', '&amp;', $data) .'</prebody-'.$tag.'>';
+  } else {
+    return '';
+  }
+}
+
+function _batire_xml_get_common_title($xpath, $default) {
+  static $common_titles = array(
+    'intro' => 'Introduction dans le corps de la norme',
+    'hwarning' => 'Remarque de niveau 1',
+    'scope' => 'Domaine d\'application de la norme',
+    'refs' => 'Références normatives',
+    'defs' => 'Partie definition',
+    'annex' => 'Annexe',
+    'annexbl' => 'Annexe bibliographique',
+    'annexi' => 'Annexe informative',
+    'annexn' => 'Annexe normative',
+    'annexz' => 'Autre annexe',
+    'index' => 'Index'
+    );
+  if (!empty($default)) {
+    return $default;
+  }
+  $common_title = $xpath->query('//elementnorme/*[name() != "meta" and name() != "noticeglm"]');
+  if (is_object($common_title) && $common_title->length > 0) {
+     $common_title = $common_title->item(0)->nodeName;
+     if (array_key_exists($common_title, $common_titles)) {
+       return $common_titles[$common_title];
+     }
+  }
+  return $default;
+}
+
+function batire_xml_parse_normative_pdf_to_image($nid, $page_data_attached) {
+  $batire_pdf_path = drupal_get_path('module', 'batire_pdf') . '/includes/batire_pdf.inc';
+//  module_load_include('inc', 'batire_pdf', 'includes/batire_pdf');
+//  $page_data = mongodb_page_get_node_page($nid);
+  $update = FALSE;
+
+  foreach($page_data_attached as &$attached) {
+    if(file_exists($attached['filepath'])) {
+      if(!isset($attached['filemime'])) {
+        $finfo = new finfo();
+        list($strType) = explode(';', $finfo->file($attached['filepath'], FILEINFO_MIME));
+        $attached['filemime'] = $strType;
+        $update = TRUE;
+      }
+      if($attached['filemime'] == 'application/pdf') {
+/*        if($images = batire_pdf_to_image_generate_pages($attached)) {
+          $page_data['pdf_images'][$attached['filename']] = $images;
+          $update = TRUE;
+        }*/
+        job_queue_add(
+          'batire_xml_parse_normative_pdf_to_image_job',
+          "Breakdown pdf '" . $attached['filename'] . "' to images",
+          array($nid, $attached),
+          $batire_pdf_path
+        );
+      }
+    }
+  }
+  if($update) {
+    $page_data = mongodb_page_get_node_page($nid);
+    $page_data['attached'] = $page_data_attached;
+    mongodb_page_save($page_data);
+  }
+}
+
+function batire_xml_parse_normative_pdf_to_image_job($nid, $attached) {
+  if($images = batire_pdf_to_image_generate_pages($attached)) {
+    $page_data = mongodb_page_get_node_page($nid);
+    $page_data['pdf_images'][$attached['filename']] = $images;
+    mongodb_page_save($page_data);
+  }
+  else {
+    watchdog(
+      'batire_pdf_pdftoppm',
+      'Pdf !pdf_name do not convert to images: <pre>@attached node nid: !nid</pre>',
+      array('!pdf_name' =>$attached['filename'],  '@attached' => print_r($attached, TRUE), '!nid' => $nid),
+      WATCHDOG_ERROR
+    );
+  }
+}

@@ -1,0 +1,24 @@
+<?php
+function antidot_codes_antidot_info() {
+  return array(
+    BATIRE_SITE_CT_CODE => 'antidot_codes',
+  );
+}
+
+function antidot_codes_xml_preprocess($node, &$data) {
+  if (is_array($node->taxonomy)) {
+    foreach ($node->taxonomy as $tax) {
+      switch ($tax->vid) {
+        case BATIRE_SITE_VID_CODES:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+      }
+    }
+  }
+
+  $data->numero_ref  = $node->page_data['num_art'];
+
+  if (isset($node->field_cites[0]['value'])) {
+    $data->cites = $node->field_cites;
+  }
+}

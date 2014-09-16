@@ -1,0 +1,171 @@
+<?php
+/**
+ * User: Pavel Kim
+ * Date: 4/23/14
+ * Time: 6:48 PM
+ */
+
+function antidot_images_antidot_info() {
+  return array(
+    BATIRE_SITE_IMAGES => 'antidot_images',
+  );
+}
+
+function antidot_images_xml_preprocess($node, &$data, $additional_data) {
+  if (is_array($node->taxonomy)) {
+    foreach ($node->taxonomy as $tax) {
+      switch ($tax->vid) {
+        case BATIRE_SITE_VID_CODES:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+        case BATIRE_SITE_VID_FM:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+        case BATIRE_SITE_VID_LIVRES:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+        case BATIRE_SITE_VID_SUPPORT:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+        case BATIRE_SITE_VID_TYPE_CT:
+          $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          break;
+        case BATIRE_SITE_CT_DR:
+          $sous_types = batire_xml_parse_ddr_get_sous_types_tids();
+          $rubriques = batire_xml_parse_ddr_get_rubriques_tids();
+          if (in_array($tax->tid, $sous_types)) {
+            $data->type_source_off = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+            continue;
+          }
+          if (in_array($tax->tid, $rubriques)) {
+            $data->type_rubrique = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+            continue;
+          }
+      }
+    }
+  }
+
+  switch ($node->type) {
+    case 'batire_complement_technique' :
+      $data->numero_ref  = $node->page_data['reference'];
+      $data->niveau      = $node->field_rubric[0]['value'];
+      $data->sous_niveau = $node->field_sub_rubric[0]['value'];
+      $data->date        = date_format_date(date_make_date($node->field_release_date[0]['value'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+      break;
+    case 'batire_actualite' :
+      $data->rubrique    = $node->page_data['taxonomy']['presse_rubrique'];
+      break;
+    case 'batire_livres' :
+      $data->numero_ref  = $node->page_data['reference'];
+      $data->niveau      = $node->field_section_title[0]['value'];
+      $data->sous_niveau = $node->field_part_title[0]['value'];
+      break;
+    case 'batire_feuillet_mobile' :
+      $data->numero_ref  = $node->field_doc_number[0]['value'];
+      $data->niveau      = $node->field_sublayer_level_title[0]['value'];
+      $data->sous_niveau = $node->field_sublayer_sublevel_title[0]['value'];
+
+      $arr = explode('-', $node->page_data['bid']);
+      if (count($arr) > 2) {
+        $data->version = 0;
+        if (!empty($node->field_date_archive[0]['value'])) {
+          $data->date_archive = date_format_date(date_make_date($node->page_data['page_version'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+        }
+      }
+
+      $versions = batire_hierarchy_get_versions($node->page_data['id'], $node->page_data['doc_type']);
+      if (count($versions) > 1) {
+        $data->version_ante = 1;
+      }
+      break;
+    case 'batire_texte_normatifs' :
+      $data->numero_ref    = $node->page_data['reference'];
+      $data->etat_norme    = $node->page_data['etat'];
+      $data->sub_title     = '';
+      $data->notice_detail = 0;
+      $data->out_db        = 0;
+
+      if (isset($node->page_data['h1_gtext']) && !empty($node->page_data['h1_gtext'])) {
+        $data->sub_title = '§ ' . $node->page_data['h1_gtext'];
+        if (isset($node->page_data['h1_titre']) && !empty($node->page_data['h1_titre'])) {
+          $data->sub_title .=  ' - ' . $node->page_data['h1_titre'];
+        }
+      }
+      else {
+        $data->sub_title = $node->page_data['h1_titre'];
+      }
+
+      $data->sub_title = batire_antidot_export_xml_escape($data->sub_title);
+
+      if (isset($node->page_data['notice_seule']) && $node->page_data['notice_seule']) {
+        $data->notice_detail = 1;
+      }
+
+      if (isset($node->page_data['attached']) && count($node->page_data['attached']) == 0 && $data->notice_detail) {
+        $data->out_db = 1;
+      }
+
+      foreach ($node->taxonomy as $term) {
+        if ($term->vid == BATIRE_SITE_VID_NORMATIF) {
+          $data->type_source_off = array('name' => $term->name, 'id' => $term->tid, 'priorite' => 0);
+          break;
+        }
+      }
+
+      $data->indice = $node->field_classification_index[0]['value'];
+
+      $data->version = 1;
+
+      if (isset($node->field_cites[0]['value'])) {
+        $data->cites = $node->field_cites;
+      }
+      break;
+    case 'batire_texte_officiel' :
+      $data->nor_num     = $node->field_number_nor[0]['value'];
+      $data->numero_ref  = $node->page_data['num_art'];
+      $data->fondamental = $node->field_document_fundamental[0]['value'];
+
+      $data->date_sign   = date_format_date(date_make_date($node->page_data['date_texte'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+      $data->date_pub    = date_format_date(date_make_date($node->page_data['date_publi'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+
+      foreach ($node->taxonomy as $term) {
+        if ($term->vid == BATIRE_SITE_VID_TO) {
+          $data->type_source_off = array('name' => $term->name, 'id' => $term->tid, 'priorite' => $term->weight);
+          break;
+        }
+      }
+
+      if (isset($node->field_cites[0]['value'])) {
+        $data->cites = $node->field_cites;
+      }
+      break;
+  }
+
+  if (isset($additional_data['image_id'])) {
+    $data->image_id = $additional_data['image_id'];
+  }
+  if (isset($additional_data['image_path'])) {
+    $data->image_path = $additional_data['image_path'];
+  }
+  if (isset($additional_data['image_title'])) {
+    $data->image_title = $additional_data['image_title'];
+  }
+  if (isset($additional_data['image_legend'])) {
+    $data->image_legend = $additional_data['image_legend'];
+  }
+  if (isset($additional_data['document_id'])) {
+    $data->document_id = $additional_data['document_id'];
+  }
+  if (isset($additional_data['document_url'])) {
+    $data->document_url = $additional_data['document_url'];
+  }
+  if (isset($additional_data['document_title'])) {
+    $data->document_title = $additional_data['document_title'];
+  }
+  if (isset($additional_data['other_title'])) {
+    $data->other_title = $additional_data['other_title'];
+  }
+  if (isset($additional_data['image_type'])) {
+    $data->image_type = $additional_data['image_type'];
+  }
+}

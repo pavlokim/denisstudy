@@ -1,0 +1,9 @@
+; $Id: batire_page_title.info
+name = Batire Page titles
+description = "Batire page titles functionallity."
+package = Batire
+core = 6.x
+
+dependencies[] = batire_site
+dependencies[] = page_title
+dependencies[] = mongodb_search

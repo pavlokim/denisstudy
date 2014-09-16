@@ -1,0 +1,1014 @@
+<?php
+
+/**
+ * @file
+ *  batire_user_searches.module
+ * User searches related functionality
+ */
+module_load_include('inc', 'batire_user_searches', 'includes/batire_user_searches.admin');
+module_load_include('inc', 'batire_user_searches', 'includes/views');
+define('BATIRE_USER_SEARCHES_MAXIMUM_SAVED_SEARCHES', variable_get('batire_user_searches_maximum_saved_searches', 50));
+define('BATIRE_USER_SEARCHES_THRESHOLD_SAVED_SEARCHES', variable_get('batire_user_searches_threshold_saved_searches', 40));
+define('BATIRE_USER_SEARCHES_MAXIMUM_SENT_ALERTS_RECORDS', variable_get('batire_user_searches_maximum_sent_alerts_records', 100));
+define('BATIRE_USER_SEARCHES_SEND_ALERTS_TIME', '07:00:00');
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_user_searches_init() {
+
+  drupal_add_js(
+  array(
+    'batire_user_searches' => array(
+      'popup_create_alert_url' => url('js/batire_user_searches/create-alert'),
+      'popup_create_send_mail_url' => url('js/batire_user_searches/create-send-mail-form'),
+      'popup_create_send_mail_group_url' => url('js/batire_user_searches/create-send-mail-group-form'),
+      'my_account_remove_alert_url' => url('js/batire_user_searches/remove-alert'),
+      'default_search_profile' => url('js/batire_user_searches/default_search'),
+      'popup_create_alert_search_url' => url('js/batire_user_searches/create-alert-search')
+    )
+  ), 'setting'
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_user_searches_menu() {
+  $items = array();
+
+  $items['js/batire_user_searches/create-alert'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_searches_create_alert_js',
+    'access arguments' => array('access content'),
+  );
+
+  $items['js/batire_user_searches/create-send-mail-form'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_searches_create_send_mail_js',
+    'access arguments' => array('access content'),
+  );
+
+  $items['js/batire_user_searches/remove-alert'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_searches_remove_alert_js',
+    'access arguments' => array('access content'),
+  );
+
+  $items['js/batire_user_searches/default_search'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_searches_default_search_js',
+    'access arguments' => array('access content'),
+  );
+
+  $items['js/batire_user_searches/create-alert-search'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_searches_create_alert_search_js',
+    'access arguments' => array('access content'),
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function batire_user_searches_theme() {
+  return array(
+    'batire_user_searches_popup_alert' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme.inc',
+    ),
+    'batire_user_searches_create_alert_form' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_create_send_mail_form' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_send_mail_group_form' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_user_searches_popup_report' => array(
+      'arguments' => array('nids' => NULL, 'action' => NULL),
+      'file' => 'theme.inc',
+    ),
+    'batire_user_searches_save_search_form' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme.inc',
+    ),
+  );
+}
+
+/**
+ * Implements hook_mailkeys().
+ */
+function batire_user_searches_mailkeys() {
+  return array(
+    'batire_user_searches_search_alert' => t('Email d\'alerte nouveautés'),
+    'batire_user_searches_doc_alert' => t('Email d\'alerte document'),
+  );
+}
+
+function batire_user_searches_mail_edit_tokens_value($mailkey, $mail) {
+  $tokens = array();
+
+  $tokens['!site_name_uc'] = SITE_NAME_UC;
+
+  switch ($mailkey) {
+    case 'batire_user_searches_search_alert':
+      $tokens['!name']          = $mail['params']['data']['name'];
+      $tokens['!surname']       = $mail['params']['data']['surname'];
+      $tokens['!salutation']    = $mail['params']['data']['salutation'];
+      $tokens['!alert_name']    = $mail['params']['data']['alert_name'];
+      $tokens['!new_docs_num']  = $mail['params']['data']['new_docs_num'];
+      $tokens['!docs_list']     = $mail['params']['data']['docs_list'];
+      $tokens['!link_to_alert'] = $mail['params']['data']['link_to_alert'];
+      break;
+    case 'batire_user_searches_doc_alert':
+      $tokens['!name']            = $mail['params']['data']['name'];
+      $tokens['!surname']         = $mail['params']['data']['surname'];
+      $tokens['!salutation']      = $mail['params']['data']['salutation'];
+      $tokens['!alert_date']      = $mail['params']['data']['alert_date'];
+      $tokens['!doc_title']       = $mail['params']['data']['doc_title'];
+      $tokens['!link_to_doc']     = $mail['params']['data']['link_to_doc'];
+      $tokens['!teaser']          = $mail['params']['data']['teaser'];
+      $tokens['!additional_text'] = $mail['params']['data']['additional_text'];
+      break;
+  }
+
+  return $tokens;
+}
+
+/**
+ * Implements hook_tokens_list().
+ */
+function batire_user_searches_mail_edit_tokens_list($mailkey, $options = array()) {
+  $tokens = array();
+
+  $tokens['!name'] = t('Name');
+  $tokens['!surname'] = t('Surname');
+  $tokens['!salutation'] = t('Salutation');
+
+  switch ($mailkey) {
+    case 'batire_user_searches_search_alert':
+      $tokens['!alert_name'] = t('Name of the alert');
+      $tokens['!new_docs_num'] = t('XX');
+      $tokens['!docs_list'] = t('Nous vous invitons à prendre connaissance des premiers documents de cette alerte : + docs');
+      $tokens['!link_to_alert'] = t('CONSULTER TOUS LES DOCUMENTS DE CETTE ALERTE');
+      break;
+
+    case 'batire_user_searches_doc_alert':
+      $tokens['!doc_title'] = t('Document title');
+      $tokens['!teaser'] = t('Teaser of the document (as on list of search results)');
+      $tokens['!alert_date'] = t('DD/MM/YYYY');
+      $tokens['!link_to_doc'] = t('CONSULTER LE DOCUMENT ACTUALISE');
+      break;
+  }
+
+  return $tokens;
+}
+
+/**
+ * Implementation of hook_batire_site_popups_info().
+ */
+function batire_user_searches_batire_site_popups_info($type) {
+  switch ($type) {
+    case 'alert':
+    case 'report':
+    case 'save_search':
+      return 'batire_user_searches';
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_batire_site_popups().
+ */
+function batire_user_searches_batire_site_popups($type, $nids) {
+  global $user;
+
+  $result = array(
+    'error' => FALSE,
+    'data' => ''
+  );
+  if (!user_access('access user docs')) {
+    $result['error'] = TRUE;
+    return $result;
+  }
+
+  switch ($type) {
+    case 'alert' :
+      $result['data'] = theme('batire_user_searches_popup_alert', $nids); //@todo - change it to theme of the module
+      break;
+
+    case 'report':
+      $result['data'] = theme('batire_user_searches_popup_report', $nids);
+      break;
+
+    case 'save_search':
+      $action = batire_site_check_text($_GET['action']);
+
+      $result['data'] = theme('batire_user_searches_popup_save_search', $nids, $action);
+      break;
+  }
+
+  if (!$result['data']) {
+    return array();
+  }
+
+  return $result;
+}
+
+/**
+ * Create new alert for document
+ */
+function batire_user_searches_create_alert_js() {
+  global $user;
+  $message = array(
+    'status' => 0,
+    'message' => ''
+  );
+  try {
+    $nid = (int) batire_site_check_text($_POST['nid']);
+    $title = $_POST['title'];
+
+    if (batire_user_searches_is_has_alert($nid)) {
+      throw new Exception(t('Node alredy has alert'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if (empty($nid) || !is_numeric($nid)) {
+      throw new Exception(t('Nid is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    $doc = node_load($nid);
+    if (!isset($doc->nid) || !$doc->nid) {
+      throw new Exception(t('Node is not loaded.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if (empty($title)) {
+      $title = $doc->title . ': ' . t('Alerte');
+    }
+    $node = new stdClass();
+    $node->title = $title;
+    $node->status = 1;
+    $node->uid = $user->uid;
+    $node->type = 'batire_user_search_profile';
+    $node->field_search_new[0]['value'] = -1;
+    $node->field_alert_document[0]['nid'] = $nid;
+    $node->field_profile_type[0]['value'] = 2;
+    $node = node_submit($node);
+    $node->uid = $user->uid;
+    node_save($node);
+    if (!$node->nid) {
+      throw new Exception(t("Can't save the node: @title.", array('@title' => $title)), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    _batire_site_set_cookie('document-' . $nid . '-alert', TRUE);
+    $message['status'] = 1;
+    $message['message'] = t('Votre alerte a été enregistré');
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Check if user has alert for selected document.
+ *
+ * @global $user
+ *   If user id is empty get it from global data.
+ * @param $nid
+ *   Node Id
+ * @param $uid
+ *   User id
+ * @return
+ *   TRUE or FALSE
+ */
+function batire_user_searches_is_has_alert($nid, $uid = NULL) {
+  if (is_null($uid)) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $result = db_query(
+  'SELECT node.nid
+      FROM {node} node
+      JOIN {content_type_batire_user_search_profile} usp ON node.vid = usp.vid
+      WHERE
+        node.uid = %d AND
+        node.status = %d AND
+        usp.field_alert_document_nid = %d', $uid, 1, $nid
+  );
+  return (bool) db_result($result);
+}
+
+/**
+ * Builds the form to send mail to external user.
+ *
+ * @ingroup forms
+ */
+function batire_user_searches_create_send_mail_signaler_form(&$form_state, $nid) {
+  $form['field_recipient'] = array(
+    '#type' => 'textfield',
+    '#size' => 40
+  );
+  $form['field_description'] = array(
+    '#type' => 'textarea',
+    '#cols' => 40,
+    '#rows' => 5,
+    '#resizable' => FALSE,
+    '#wysiwyg' => FALSE
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => !empty($nid) ? $nid : NULL
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+
+  $form['#theme'] = 'batire_create_send_mail_form';
+
+  return $form;
+}
+
+/**
+ * Build the form to create an alert
+ *
+ * @ingroup forms.
+ */
+function batire_user_searches_create_alert_form(&$form_state, $nid) {
+  $form['title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Nom de cette alerte (facultatif)'),
+    '#attributes' => array('title' => t('Nom')),
+    '#maxlength' => BATIRE_SITE_MAX_NAME_LENGTH
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => !empty($nid) ? $nid : NULL
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+
+  $form['#theme'] = 'batire_user_searches_create_alert_form';
+  return $form;
+}
+
+/**
+ * Builds the form to send mail to group users.
+ *
+ * @ingroup forms
+ */
+function batire_user_searches_create_send_mail_group_users_form(&$form_state, $nid) {
+  global $user;
+
+  $options = array();
+  $options['group'] = t("Tous les membres");
+  $list_members = mongodb_user_get_members($user->uid);
+  foreach ($list_members as $value) {
+    if ($user->uid != $value['uid']) {
+      $options[$value['uid']] = $value['surname'];
+    }
+  }
+
+  $form['group_users'] = array(
+    '#type' => 'checkboxes',
+    '#options' => $options
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => !empty($nid) ? $nid : NULL
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+
+  $form['#theme'] = 'batire_send_mail_group_form';
+
+  return $form;
+}
+
+/**
+ * Handler for send mail form
+ */
+function batire_user_searches_create_send_mail_js() {
+  global $user;
+  global $language;
+
+  $message = array(
+    'status' => 0,
+    'message' => '',
+  );
+
+  try {
+    $nid = (int) batire_site_check_text($_POST['nid']);
+    $current_user = mongodb_user_get_user($user->uid);
+
+    if (empty($nid) || !is_numeric($nid)) {
+      throw new Exception(t('Nid is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    $document = node_load($nid);
+    if (!isset($document->nid) || !$document->nid) {
+      throw new Exception(t("Document is not loaded."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    // check group or single user
+    if (isset($_POST['field_recipient'])) {
+      // validate email
+      $recipient = batire_site_check_text($_POST['field_recipient']);
+      $body = batire_site_check_text($_POST['field_description']);
+
+      if (!batire_site_validate_email_address($recipient)) {
+        throw new Exception(t("L'adresse email de destination est invalide. Nous vous invitons à vérifier sa syntaxe."), BATIRE_SITE_ERROR_USER);
+      }
+
+      $options_friend_send = array(
+        'module' => 'batire_site',
+        'mailkey' => 'batire_site_friend_send',
+        'recipient' => $recipient,
+        'subject' => '',
+        'data' => array(
+          'nid' => $nid,
+          'body' => $body,
+          'name' => $current_user['name'],
+          'surname' => $current_user['surname'],
+          'salut' => $current_user['salut'],
+          'mail' => $current_user['mail'],
+        ),
+        'plaintext' => FALSE
+      );
+
+      $options_friend_send_confirm = array(
+        'module' => 'batire_site',
+        'mailkey' => 'batire_site_friend_send_confirm',
+        'recipient' => $user->mail,
+        'subject' => '',
+        'data' => array(
+          'nid' => $nid,
+          'body' => $body,
+          'save_recipient' => $recipient,
+          'name' => $current_user['name'],
+          'surname' => $current_user['surname'],
+          'salut' => $current_user['salut'],
+          'mail' => $current_user['mail'],
+        ),
+        'plaintext' => FALSE
+      );
+
+      if (!batire_site_send_mail($options_friend_send, variable_get('site_mail', 'batire@adyax.com'))) {
+        throw new Exception(t("Cann't send email."), BATIRE_SITE_ERROR_SYSTEM);
+      }
+      if (!batire_site_send_mail($options_friend_send_confirm, variable_get('site_mail', 'batire@adyax.com'))) {
+        throw new Exception(t("Cann't send confirmation email."), BATIRE_SITE_ERROR_SYSTEM);
+      }
+      $message['status'] = 1;
+      $message['message'] = t("Votre message a été envoyé à l'adresse email indiquée.");
+    }
+    elseif (is_array($_POST['group_users'])) {
+      $save_mem_recipient = '';
+      $group_users = $_POST['group_users'];
+
+      if (isset($group_users['group'])) {
+        $list_members = mongodb_user_get_members($user->uid);
+
+        $group_users = array();
+        foreach ($list_members as $value) {
+          if ($user->uid != $value['uid']) {
+            $group_users[$value['uid']] = $value['surname'];
+          }
+        }
+      }
+
+      foreach ($group_users as $uid => $surname) {
+        if (isset($uid) && is_numeric($uid)) {
+          $member = mongodb_user_get_user($uid);
+
+          if (!empty($member)) {
+            $options_group_send = array(
+              'module' => 'batire_site',
+              'mailkey' => 'batire_site_friend_send',
+              'recipient' => $member['mail'],
+              'subject' => '',
+              'data' => array(
+                'nid' => $nid,
+                'name' => $current_user['name'],
+                'surname' => $current_user['surname'],
+                'salut' => $current_user['salut'],
+                'mail' => $current_user['mail']
+              ),
+              'plaintext' => FALSE
+            );
+
+            $save_mem_recipient .= $member['mail'] . ', ';
+            if (!batire_site_send_mail($options_group_send, variable_get('site_mail', 'batire@adyax.com'))) {
+              throw new Exception(t("Cann't send email."), BATIRE_SITE_ERROR_SYSTEM);
+            }
+          }
+          else {
+            throw new Exception(t("Cann't find data of user."), BATIRE_SITE_ERROR_SYSTEM);
+          }
+        }
+      }
+
+      $options_group_send_confirm = array(
+        'module' => 'batire_site',
+        'mailkey' => 'batire_site_friend_send_confirm',
+        'recipient' => $current_user['mail'],
+        'subject' => '',
+        'data' => array(
+          'nid' => $nid,
+          'name' => $current_user['name'],
+          'surname' => $current_user['surname'],
+          'salut' => $current_user['salut'],
+          'mail' => $current_user['mail'],
+          'save_recipient' => $save_mem_recipient,
+        ),
+        'plaintext' => FALSE
+      );
+
+      if (!batire_site_send_mail($options_group_send_confirm, variable_get('site_mail', 'batire@adyax.com'))) {
+        throw new Exception(t("Cann't send confirmation email."), BATIRE_SITE_ERROR_SYSTEM);
+      }
+      $message['status'] = 1;
+      $message['message'] = t("Votre message a été envoyé aux membres du groupe selectionés.");
+    }
+    else {
+      throw new Exception(t("Vous devez sélectionner les membres du groupe à qui vous souhaitez envoyer ce document."), BATIRE_SITE_ERROR_USER);
+    }
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter();
+ * Alter site settings form.
+ */
+function batire_user_searches_form_batire_search_search_settings_alter(&$form, &$form_state) {
+  $form['user_search'] = batire_user_searches_admin_form();
+  $form['#validate'][] = 'batire_user_searches_admin_form_validate';
+}
+
+function batire_user_searches_admin_form_validate($form, $form_state) {
+  $values = $form_state['values'];
+  if ($values['batire_user_searches_threshold_saved_searches'] > $values['batire_user_searches_maximum_saved_searches']) {
+    form_set_error('batire_user_searches_threshold_saved_searches', t('Threshold can not exceed the maximum value')
+    );
+  }
+}
+
+/**
+ * Removes old alerts stats....
+ */
+function _batire_user_searches_cleanup_old_alert($uid = FALSE) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $count = db_result(db_query("SELECT COUNT(nid) FROM {node} WHERE type = '%s' AND uid = %d ORDER BY created DESC", 'batire_user_sent_alert', $uid));
+  $max = variable_get('batire_user_searches_maximum_sent_alerts_records', 100);
+  if ($count >= $max) {
+    $sql = "SELECT nid FROM {node} WHERE type = '%s' AND uid = %d ORDER BY created DESC";
+    $res = db_query_range($sql, 'batire_user_sent_alert', $uid, $max, 1000);
+    while ($nid = db_fetch_object($res)) {
+      node_delete($nid->nid);
+    }
+    drupal_get_messages();
+  }
+}
+
+/**
+ * Get user by sent alert from search profile
+ * @param type $aid
+ * @return boolean
+ */
+function _batire_user_search_get_uid_by_sent_alert($aid) {
+  $sql = "
+    SELECT u.uid
+    FROM {users} u
+    LEFT JOIN {node} node ON node.uid = u.uid
+    LEFT JOIN {content_type_batire_user_sent_alert} ctbusa ON ctbusa.field_sent_alert_alert_nid = node.nid
+    LEFT JOIN {node} node2 ON node2.vid = ctbusa.vid
+    WHERE node2.nid = %d";
+  $search_q = db_query($sql, $aid);
+  $user_id = db_fetch_object($search_q);
+  if (!empty($user_id)) {
+    return $user_id->uid;
+  }
+  return FALSE;
+}
+
+/**
+ * Find search alerts;
+ * @param $did
+ */
+function _batire_user_searches_get_alerts_for_search($sid) {
+  $alerts = array();
+
+  $sql = "SELECT n.nid
+          FROM {node} n
+          JOIN {content_type_batire_user_search_profile} a USING(nid)
+          WHERE
+            n.type = '%s' AND
+            a.field_search_id_value = '%s' AND
+            a.field_profile_type_value = 1";
+
+  $res = db_query($sql, 'batire_user_search_profile', $sid);
+
+  while ($nid = db_fetch_object($res)) {
+    $alerts[$nid->nid] = node_load($nid->nid);
+  }
+  if (!empty($alerts)) {
+    return $alerts;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Returns date of last alert sent
+ * @param $alert_id
+ */
+function _batire_user_searches_get_last_alert_sent_date($alert_id, $plain = FALSE) {
+  $sql = "SELECT n2.created FROM {node} n
+          JOIN {content_type_batire_user_sent_alert} a ON(n.nid = a.field_sent_alert_alert_nid)
+          JOIN {node} n2 ON (a.nid = n2.nid)
+          WHERE n2.type = '%s' AND n.nid = %d
+          ORDER BY n2.created DESC";
+
+  $created = db_result(db_query_range($sql, 'batire_user_sent_alert', $alert_id, 0, 1));
+
+  if ($created) {
+    if ($plain) {
+      return $created;
+    }
+    return format_date($created, 'custom', "m/d/Y à h:i");
+  }
+  return FALSE;
+}
+
+/**
+ * Creates sent alert record..
+ * @param $alert
+ */
+function _batire_user_searches_create_notification_record($alert, $search_id = NULL) {
+  $sent_alert = (object)array(
+    'type'   => 'batire_user_sent_alert',
+    'uid'    => $alert->uid,
+    'status' => 1,
+    'title'  => $alert->title,
+    'field_sent_alert_alert' => array(
+      array('nid' => $alert->nid)
+    ),
+    'field_sent_alert_new' => $alert->field_search_new,
+    'field_sent_alert_total' => $alert->field_search_total,
+    'field_sent_alert_sid' => isset($search_id) ? array(array('value' => $search_id)) : NULL,
+  );
+
+  node_save($sent_alert);
+
+  _batire_user_searches_cleanup_old_alert($alert->uid);
+
+  cache_clear_all('batire_user::menu::'. $alert->uid, BATIRE_USER_CACHE_TABLE);
+}
+
+/**
+ * Removing alert(search/search alert/document alert) or sent alert
+ */
+function batire_user_searches_remove_alert_js() {
+  global $user;
+
+  $message = array(
+    'status' => 0,
+    'message' => ''
+  );
+
+  try {
+    $aid = (int) batire_site_check_text($_POST['aid']);
+
+    if (!$aid) {
+      throw new Exception(t('Alert id is empty.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    $alert = node_load($aid);
+    if (!isset($alert->nid) || !$alert->nid) {
+      throw new Exception(t("Alert is not loaded."), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    if ($alert->type == 'batire_user_sent_alert') {
+      if ($user->uid != _batire_user_search_get_uid_by_sent_alert($aid)) {
+        throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+      }
+    }
+    else {
+      if ($user->uid != $alert->uid) {
+        throw new Exception(t('Une erreur s\'est produite: vous n\'êtes pas autorisé'), BATIRE_SITE_ERROR_USER);
+      }
+    }
+    $did = $alert->field_alert_document[0]['nid'];
+    $search_data = mongodb_search_get_search_data($alert->field_search_id[0]['value']);
+
+    switch ($alert->field_profile_type[0]['value']) {
+      case 0:
+        mongodb_search_delete_search($alert->field_search_id[0]['value']);
+//        if ($search_data['undelete']) {
+//          $search_data['status'] = FALSE;
+//        }
+//        batire_search_save_search_criteria($alert->field_search_id[0]['value'], $search_data['data'], NULL, 'update', $search_data['status'], $search_data['undelete']);
+        break;
+
+      case 1:
+        if ($search_data['undelete']) {
+          $search_data['undelete'] = FALSE;
+          batire_search_save_search_criteria($alert->field_search_id[0]['value'], $search_data['data'], $alert->nid, 'update', $search_data['status'], $search_data['undelete']);
+
+          if (!$search_data['undelete'] && !$search_data['status']) {
+            mongodb_search_delete_search($search_data['sid']);
+          }
+        }
+        break;
+    }
+
+    node_delete($aid);
+    _batire_site_set_cookie('document-' . $did . '-alert', FALSE);
+    cache_clear_all('batire_user_docs_infobar:' . $did . ':' . $user->uid, BATIRE_USER_CACHE_TABLE);
+    $message['status'] = 1;
+    drupal_get_messages();
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Build the form to create an save search
+ *
+ * @ingroup forms.
+ */
+function batire_user_searches_create_save_search_form(&$form_state, $data) {
+  $field = content_fields('field_alert_period', 'batire_user_search_profile');
+  $field_week = content_fields('field_alert_period_week', 'batire_user_search_profile');
+  $field_month = content_fields('field_alert_period_month', 'batire_user_search_profile');
+
+  $allowed_values = content_allowed_values($field);
+  $allowed_values_week = content_allowed_values($field_week);
+  $allowed_values_month = content_allowed_values($field_month);
+
+  $form['alert_title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Nom de cette alerte'),
+    '#maxlength' => BATIRE_SITE_MAX_NAME_LENGTH,
+    '#attributes' => array('title' => t('Saisir le nom donné à cette alerte'))
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => !empty($data['nids'][0]) ? $data['nids'][0] : ''
+  );
+  $form['alert_period_day'] = array(
+    '#type' => 'radios',
+    '#options' => $allowed_values,
+  );
+  $form['alert_period_week'] = array(
+    '#type' => 'radios',
+    '#options' => $allowed_values_week,
+    '#attributes' => array('class' => 'period-week')
+  );
+  $form['alert_period_month'] = array(
+    '#type' => 'radios',
+    '#options' => $allowed_values_month,
+    '#attributes' => array('class' => 'period-month')
+  );
+  $form['alert_action'] = array(
+    '#type' => 'hidden',
+    '#value' => $data['action']
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+
+  $form['#theme'] = 'batire_user_searches_save_search_form';
+  return $form;
+}
+
+/**
+ * Saving search as default search to user profile.
+ */
+function batire_user_searches_default_search_js() {
+  global $user;
+
+  $message = array(
+    'status' => 0,
+    'message' => '',
+    'title' => '',
+    'criterias' => array()
+  );
+
+  try {
+    $nid = (int) batire_site_check_text($_POST['nid']);
+
+    $profile = batire_user_profile_load($user->uid);
+
+    if (!$profile) {
+      throw new Exception(t('User is not exist.'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    $profile->field_default_search[0]['nid'] = $nid;
+
+    node_save($profile);
+
+    $node = node_load(array('nid' => $nid, 'type' => 'batire_user_search_profile'));
+    if (!isset($node->nid) || !$node->nid) {
+      throw new Exception(t('Node is not loaded'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+    $message['title'] = l(batire_site_truncate_utf8($node->title, 25, FALSE, TRUE), 'mon-compte/mes-recherches/mes-profils-enregistres');
+    $nid ? $message['status'] = 1 : $message['status'] = 0;
+
+    $criteries = batire_search_ui_return_default_search();
+    $message['criterias'] = batire_search_ui_clear_criteries_for_default_profile($criteries, TRUE);
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function batire_user_searches_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  global $user;
+  switch ($op) {
+    case 'delete':
+      switch ($node->type) {
+        case 'batire_user_search_profile':
+          //Check case deleting default profile
+          $profile = batire_user_profile_load($node->uid);
+
+          if (isset($profile) && $profile) {
+            if ($profile->field_default_search[0]['nid'] == $node->nid) {
+              $profile->field_default_search[0]['nid'] = '';
+              node_save($profile);
+            }
+          }
+
+          $sql = "SELECT ctbusa.nid
+                    FROM {content_type_batire_user_sent_alert} AS ctbusa
+                    LEFT JOIN {node} AS node ON node.vid = ctbusa.vid
+                    WHERE node.uid = %d AND node.type = 'batire_user_sent_alert' AND ctbusa.field_sent_alert_alert_nid = %d";
+
+          $search_q = db_query($sql, $user->uid, $node->nid);
+
+          while ($sent_alert = db_fetch_object($search_q)) {
+            node_delete($sent_alert->nid);
+          }
+          break;
+      }
+      break;
+
+    case 'insert':
+      switch ($node->type) {
+        case 'batire_user_sent_alert':
+          $alerts_record = BATIRE_USER_SEARCHES_MAXIMUM_SENT_ALERTS_RECORDS;
+
+          $sql = "SELECT COUNT(ctbusa.nid)
+                    FROM content_type_batire_user_sent_alert AS ctbusa
+                    LEFT JOIN node AS node ON node.vid = ctbusa.vid
+                    WHERE node.uid = %d AND node.type = 'batire_user_sent_alert'";
+
+          $alerts_q = db_query($sql, $user->uid);
+          $alerts_count = db_result($alerts_q);
+
+          if ($alerts_count > $alerts_record) {
+
+            $sql = "SELECT node.vid
+                    FROM content_type_batire_user_sent_alert AS ctbusa
+                    LEFT JOIN node AS node ON node.vid = ctbusa.vid
+                    WHERE node.uid = %d AND node.type = 'batire_user_sent_alert'
+                    ORDER BY node.`created` ASC";
+
+            $alert_q = db_query($sql, $user->uid);
+            $last_alert = db_result($alert_q);
+
+            node_delete($last_alert);
+          }
+          break;
+      }
+      break;
+  }
+}
+
+/**
+ * Handler form of create alert search
+ */
+function batire_user_searches_create_alert_search_js() {
+  global $user;
+
+  $message = array(
+    'status' => 0,
+    'message' => ''
+  );
+
+  try {
+    $title = $_POST['alert_title'];
+    $nid = (int) batire_site_check_text($_POST['nid']);
+    $action = batire_site_check_text($_POST['alert_action']);
+
+    if (!$title) {
+      throw new Exception(t("Vous devez donner un nom à cette alerte pour l'enregistrer."), BATIRE_SITE_ERROR_USER);
+    }
+
+    $type_period = (int) batire_site_check_text($_POST['alert_period_day']);
+
+    if (!isset($type_period)) {
+      throw new Exception(t("Vous devez indiquer une périodicité pour enregistrer cette alerte."), BATIRE_SITE_ERROR_USER);
+    }
+
+    if (isset($_POST['alert_period_week'])) {
+      $period_week = (int) batire_site_check_text($_POST['alert_period_week']);
+      $period_month = '';
+    }
+    elseif (isset($_POST['alert_period_month'])) {
+      $period_month = (int) batire_site_check_text($_POST['alert_period_month']);
+      $period_week = '';
+    }
+    else {
+      $period_week = '';
+      $period_month = '';
+    }
+
+    $search = node_load(array('nid' => $nid, 'type' => 'batire_user_search_profile'));
+    if (!isset($search->nid) || !$search->nid) {
+      throw new Exception(t('Node is not loaded'), BATIRE_SITE_ERROR_SYSTEM);
+    }
+
+    if ($action == 'create') {
+      $node = new stdClass();
+      $node->title = $title;
+      $node->status = 1;
+      $node->uid = $user->uid;
+      $node->type = 'batire_user_search_profile';
+      $node->field_alert_document[0]['nid'] = $nid;
+      $node->field_search_new[0]['value'] = -1;
+      $node->field_profile_type[0]['value'] = 1;
+      $node->field_alert_period[0]['value'] = $type_period;
+      $node->field_alert_period_week[0]['value'] = $period_week;
+      $node->field_alert_period_month[0]['value'] = $period_month;
+      $node->field_search_id[0]['value'] = $search->field_search_id[0]['value'];
+      $node->field_last_run[0]['value'] = strtotime(date('Y-m-d', time()) .' ' . BATIRE_USER_SEARCHES_SEND_ALERTS_TIME);
+
+      $search_data = mongodb_search_get_search_data($search->field_search_id[0]['value']);
+      batire_search_save_search_criteria($search->field_search_id[0]['value'], $search_data['data'], $search->nid, 'update', TRUE, TRUE);
+      node_save($node);
+      if (!$node->nid) {
+        throw new Exception(t("Can't save the node: @title.", array('@title' => $title)), BATIRE_SITE_ERROR_SYSTEM);
+      }
+    }
+    elseif ($action == 'edit') {
+      $search->title = $title;
+      $search->field_alert_period[0]['value'] = $type_period;
+      $search->field_alert_period_week[0]['value'] = $period_week;
+      $search->field_alert_period_month[0]['value'] = $period_month;
+      node_save($search);
+    }
+
+    $message['status'] = 1;
+    $message['message'] = 'Votre alerté a été enregistré';
+  }
+  catch (Exception $e) {
+    $message['message'] = batire_site_show_message($e->getMessage(), $e->getCode());
+  }
+  drupal_json($message);
+  return NULL;
+}
+
+/**
+ * Implementation of hook_views_query_alter().
+ */
+function batire_user_searches_views_query_alter(&$view, &$query) {
+  switch ($view->name) {
+    case 'batire_user_searches':
+      switch ($view->current_display) {
+        case 'my_profile':
+          if (!empty($_GET['sort_by']) && ($_GET['sort_by'] == 'created')) {
+            ($_GET['sort_order'] == 'ASC') ? $query->add_orderby('node', 'title', 'ASC') : $query->add_orderby('node', 'title', 'DESC');
+          }
+          break;
+      }
+      break;
+  }
+}

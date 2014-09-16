@@ -1,0 +1,102 @@
+<?php
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_user_products_install() {
+  //Insert Base user product
+  $query = 'SELECT vid FROM {vocabulary} WHERE name ="Type de produit"';
+  $result = db_query($query);
+  $vid = db_fetch_object($result);
+  variable_set('batire_user_products_types_vid', $vid->vid);
+
+  $term = array(
+    'name' => 'Toute la base KHEOX',
+    'description' => 'Toute la base KHEOX',
+    'vid' => $vid->vid,
+  );
+  taxonomy_save_term($term);
+
+  $product = new stdClass();
+
+  $product->title = 'Toute la base KHEOX';
+  $product->type = 'batire_product_module_1_2';
+  $product->uid = 1;
+  $product->status = 1;
+  $product->language = 'fr';
+
+  $product->field_product_enabled = array(
+    array("value" => "1"),
+  );
+  $product->field_product_acroche = array(
+    array("value" => "La base technique réglementaire en version intégrale Profitez d’un concentré de connaissances"),
+  );
+  $product->field_product_description = array(
+    array("value" => "Code de l’urbanisme + Code de l'environnement + Code de la construction et de l'habitation + Code des marchés publics + Code de l'énergie"),
+  );
+  $product->field_product_tarif = array(
+    array("value" => "1600"),
+  );
+  $product->field_svc_code = array(
+    array("value" => "BTC"),
+  );
+
+  $node_term = taxonomy_get_term($term['tid']);
+  $product->taxonomy = array(
+    $term['tid'] => $node_term,
+  );
+
+  node_save($product);
+  variable_set('batire_user_products_base_product', $product->nid);
+
+  // update paid and free users with toute la base product
+  $query = "SELECT u.uid FROM {users} u
+    INNER JOIN {users_roles} ur ON ur.uid = u.uid
+    WHERE ur.rid IN (%d, %d, %d)";
+  $result = db_query($query, array(BATIRE_USER_FREEACCOUNT, BATIRE_USER_PAIDACCOUNT, BATIRE_USER_TRIALTNACCOUNT));
+
+  while ($row = db_fetch_object($result))  {
+    $profile = batire_user_profile_load($row->uid);
+    $profile->field_user_products = array(array('nid' => $product->nid));
+    node_save($profile);
+  }
+
+  $query = 'SELECT vid FROM {vocabulary} WHERE name ="Codes d\'espaces"';
+  $result = db_query($query);
+  $vid = db_fetch_object($result);
+  variable_set('batire_user_products_codes_vid', $vid->vid);
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_user_products_uninstall() {
+
+}
+
+/**
+ * Implementation of hook_update_N().
+ * Update cites of full Normes and antidot re-export with modification
+ * task #68092
+ */
+function batire_user_products_update_6001() {
+  $sql = "SELECT n.nid, bh.bid FROM {node} n
+          INNER JOIN {batire_hierarchy} bh ON bh.nid = n.nid
+          WHERE n.type = '%s' AND bh.bid LIKE '%s'";
+  $query = db_query($sql, 'batire_texte_normatifs', '%-SOMMAIRE%');
+  while ($row = db_fetch_object($query)) {
+    $summary_nids = batire_hierarchy_get_hierarchy_list($row->bid);
+    if (count($summary_nids) > 1) {
+      $full_cites = array();
+      foreach($summary_nids as $nid) {
+        $summary_hierarchy = batire_hierarchy_get_by_nid($nid);
+        $summary_node_cites = batire_antidot_export_get_cites($summary_hierarchy->bid);
+        $full_cites = array_merge($full_cites, $summary_node_cites);
+      }
+      if (!empty($full_cites) && isset($full_cites)) {
+        $full_summary_cites = array_unique($full_cites);
+        job_queue_add('_batire_user_products_update_tn_cites', 'Update TN cites', array($summary_nids, $full_summary_cites));
+      }
+    }
+  }
+}

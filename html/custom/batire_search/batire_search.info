@@ -1,0 +1,7 @@
+; $Id: batire_search.info
+name = Batire search
+description = "Batire search functionallity."
+package = Batire
+core = 6.x
+
+dependencies[] = batire_site

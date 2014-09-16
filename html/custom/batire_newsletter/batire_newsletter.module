@@ -1,0 +1,445 @@
+<?php
+
+define('BATIRE_NEWSLETTER_EXPORT_FILEPATH', file_create_path() . '/' .variable_get('batire_newsletter_export_path', 'newsletter/newsletter_subscribers.csv'));
+define('BATIRE_NEWSLETTER_ITEMS_PER_PAGE', 50);
+define('BATIRE_NEWSLETTER_PAGE_URL', 'toute-la-veille-des-6-derniers-mois');
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_newsletter_init() {
+  drupal_add_js(
+    array(
+      'batire_newsletter' => array(
+        'popupUrl' => url('js/batire_user/popup'),
+        'popupType' => 'newsletter-unsubscribe',
+        'showPopup' => 1,
+        'showPopupRedirect' => '/',
+        'unsubscribeUrl' => url('js/batire_newsletter/unsubscribe'),
+      )
+    ), 'setting'
+  );
+  if (drupal_get_path_alias(arg(0)) == BATIRE_NEWSLETTER_PAGE_URL) {
+    drupal_add_js(
+      array(
+        'batire_newsletter' => array(
+          'itemToOpen' => intval($_GET['item']),
+        )
+      ), 'setting'
+    );
+    drupal_add_js(drupal_get_path('module', 'batire_newsletter') . '/scripts/newsletter_item_open.js', 'module', 'footer');
+  }
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_newsletter_menu() {
+  $items = array();
+
+  $items['admin/batire-site/users/newsletter'] = array(
+    'title' => 'Newsletter settings',
+    'description' => 'Newsletter module administrative settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_newsletter_admin_settings_form'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_newsletter.admin.inc'
+  );
+  $items['get-newsletter/%'] = array(
+    'type' => MENU_CALLBACK,
+    'title' => 'Get newsletter',
+    'page callback' => 'batire_newsletter_generate',
+    'page arguments' => array(1, 2, 3),
+    'access arguments' => array('access content'),
+  );
+  $items['batire_user/newsletter-unsubscribe'] = array(
+    'page callback' => 'batire_newsletter_unsubscribe',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['js/batire_newsletter/unsubscribe'] = array(
+    'page callback' => 'batire_newsletter_unsubscribe_js',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['newsletter/lire-la-suite/%'] = array(
+    'page callback' => 'batire_newsletter_lire_la_suite',
+    'page arguments' => array(2),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Generate newsletter menu callback
+ *
+ * @param type $key
+ * @param type $date
+ * @param type $period
+ * @return boolean
+ */
+function batire_newsletter_generate($key, $date = NULL, $period = NULL) {
+  if ($key != variable_get('batire_newsletter_key', 'DEADBEEF')) {
+    drupal_set_header("HTTP/1.0 403 Forbidden");
+    die;
+  }
+  $date = !empty($date) ? $date : time();
+  $period = !empty($period) ? $period : variable_get('batire_newsletter_period', 700);
+
+  $short_content_length = variable_get('batire_newsletter_shorttext_length', 150);
+
+  $path = file_create_path() . '/newsletter';
+
+  if (!file_check_directory($path, FILE_CREATE_DIRECTORY)) {
+    return FALSE;
+  }
+
+  $path = file_create_path($path . '/' . md5($date . $period) . '.xml');
+  $filename = file_check_path($path);
+  $dom = new DOMDocument('1.0', 'utf-8');
+  /*if (empty($reset) && file_exists($_SERVER['DOCUMENT_ROOT'] . $path . '/' . $filename)) {
+    $dom->load($_SERVER['DOCUMENT_ROOT'] . $path . '/' . $filename);
+    $dom->saveXML();
+    exit;
+  }*/
+  $created = $date - $period * 24 * 3600;
+
+  $sql = "SELECT n.nid, IF(v.field_veille_date_value, UNIX_TIMESTAMP(v.field_veille_date_value), n.created) AS v_date FROM {node} n
+          JOIN {content_type_batire_last_documents} v USING (vid)
+          WHERE type = 'batire_last_documents' AND n.created > %s ORDER BY v_date DESC";
+
+  $result = db_query($sql, $created);
+  $veille_nods = array();
+  while ($doc = db_fetch_array($result)) {
+    $veille_nods[] = node_load($doc['nid']);
+  }
+  //ar_dump($veille_nods);
+
+  $dom = new DOMDocument('1.0', 'utf-8');
+  $xml_batire_newsletter = $dom->createElement('kheox_newsletter');
+
+  $xml_date = $dom->createElement('date');
+  $xml_date->appendChild($dom->createTextNode(format_date($date, 'custom', 'd/m/Y')));
+  $xml_batire_newsletter->appendChild($xml_date);
+
+  $xml_sujet = $dom->createElement('sujet');
+  $xml_sujet->appendChild($dom->createTextNode(variable_get('batire_newsletter_sujet', NULL)));
+  $xml_batire_newsletter->appendChild($xml_sujet);
+
+  $xml_items = $dom->createElement('items');
+
+  $id = 1;
+  foreach ($veille_nods as $node) {
+    $item = $dom->createElement('item');
+    $item->setAttribute('id', $id);
+
+    $xml_title = $dom->createElement('title');
+    $xml_title->appendChild($dom->createTextNode($node->title));
+    $item->appendChild($xml_title);
+
+    /**
+     * We need to remove <p> out of content;
+     */
+    $content = str_replace(array('<p>', '</p>'), '', $node->field_content[0]['value']);
+
+    $xml_content = $dom->createElement('content');
+    $xml_content->appendChild($dom->createCDATASection($content));
+    $item->appendChild($xml_content);
+
+    /**
+     * We need to cut first $short_content_length symbols of content;
+     */
+    $short_content = truncate_utf8(strip_tags($content), $short_content_length, TRUE, TRUE);
+
+    $xml_content = $dom->createElement('shortcontent');
+    $xml_content->appendChild($dom->createCDATASection($short_content));
+    $item->appendChild($xml_content);
+
+    $xml_for_abonents = $dom->createElement('forAbonents');
+    $xml_for_abonents->appendChild($dom->createTextNode($node->field_show_to_anon[0]['value']));
+    $item->appendChild($xml_for_abonents);
+
+    $xml_document = $dom->createElement('document');
+    $xml_document->appendChild($dom->createTextNode($node->field_veille_document[0]['url']));
+    $item->appendChild($xml_document);
+
+    $link_to_item = url('newsletter/lire-la-suite/'. $node->nid, array('absolute' => TRUE));
+    $xml_document = $dom->createElement('link');
+    $xml_document->appendChild($dom->createTextNode($link_to_item));
+    $item->appendChild($xml_document);
+
+    $xml_item_date = $dom->createElement('itemDate');
+
+    $item_date = $node->created;
+    if ($node->field_veille_date[0]['value']) {
+      $item_date = strtotime($node->field_veille_date[0]['value']);
+    }
+    $xml_item_date->appendChild($dom->createTextNode(format_date($item_date, 'custom', 'd/m/y')));
+    $item->appendChild($xml_item_date);
+
+    $taxonomy_type = is_array($node->taxonomy) ? array_shift($node->taxonomy) : NULL;
+
+    if ($taxonomy_type) {
+      $taxonomy_type = $taxonomy_type->name;
+    }
+
+    $xml_item_type = $dom->createElement('type');
+    $xml_item_type->appendChild($dom->createTextNode($taxonomy_type));
+    $item->appendChild($xml_item_type);
+
+    $xml_drupal = $dom->createElement('drupal');
+
+    $xml_drupal_nid = $dom->createElement('nid');
+    $xml_drupal_nid->appendChild($dom->createTextNode($node->nid));
+    $xml_drupal->appendChild($xml_drupal_nid);
+
+    $xml_drupal_created = $dom->createElement('dateAdd');
+    $xml_drupal_created->appendChild($dom->createTextNode($node->created));
+    $xml_drupal->appendChild($xml_drupal_created);
+
+    $xml_drupal_changed = $dom->createElement('dateMod');
+    $xml_drupal_changed->appendChild($dom->createTextNode($node->changed));
+    $xml_drupal->appendChild($xml_drupal_changed);
+
+    $item->appendChild($xml_drupal);
+
+    $xml_items->appendChild($item);
+    ++$id;
+  }
+
+  $xml_batire_newsletter->appendChild($xml_items);
+  $dom->appendChild($xml_batire_newsletter);
+
+  $dom->saveXML();
+  $dom->save($_SERVER['DOCUMENT_ROOT'] . $path . '/' . $filename);
+
+  echo $dom->saveXML();
+}
+
+/**
+ * Implementation of hook_user_operations
+ */
+function batire_newsletter_user_operations() {
+  $operations = array(
+    'batire_newsletter_subscribe' => array(
+      'label' => t('Subscribe selected users to newsletter.'),
+      'callback' => 'batire_newsletter_subscribe_user_operation',
+    ),
+    'batire_newsletter_unsubscribe' => array(
+      'label' => t('Unsubscribe selected users from newsletter.'),
+      'callback' => 'batire_newsletter_unsubscribe_user_operation',
+    ),
+  );
+  return $operations;
+}
+
+/**
+ * Subscribe users to newsletter operation handler.
+ */
+function batire_newsletter_subscribe_user_operation($uids) {
+  foreach ($uids as $uid) {
+    $profile = batire_user_profile_load($uid);
+    $profile->field_subscribed_to_newsletter[0]['value'] = 1;
+    node_save($profile);
+  }
+}
+
+/**
+ * Unsubscribe users from newsletter operation handler.
+ */
+function batire_newsletter_unsubscribe_user_operation($uids) {
+  foreach ($uids as $uid) {
+    $profile = batire_user_profile_load($uid);
+    $profile->field_subscribed_to_newsletter[0]['value'] = 0;
+    node_save($profile);
+  }
+}
+
+/**
+ * Unsubscribe menu link callback.
+ */
+function batire_newsletter_unsubscribe() {
+  global $user;
+  $front_page = 'http://' . $_SERVER['HTTP_HOST'];
+  if ($user->uid) {
+    _batire_user_drupal_logout();
+  }
+  setcookie('newsletter_unsubscribe', '1', NULL, '/');
+  _batire_site_set_cookie('newsletter_unsubscribe', '1');
+  drupal_goto($front_page);
+}
+
+/**
+ * Unsubscribe callback for JS.
+ */
+function batire_newsletter_unsubscribe_js() {
+  global $user;
+  $response = array(
+    'status' => 0,
+    'message' => t('Error: User is not logged in.')
+  );
+  if ($user->uid) {
+    $profile = batire_user_profile_load($user->uid);
+    $profile->field_subscribed_to_newsletter[0]['value'] = 0;
+    node_save($profile);
+    $response['status'] = 1;
+    $response['message'] = t('Votre demande de désabonnement à la newsletter de Kheox a été prise en compte.');
+  }
+  print drupal_json($response);
+}
+
+/**
+ * Export all active and subscribed users to CSV file.
+ */
+function batire_newsletter_export_subscribers() {
+  try {
+    if (!_batire_newsletter_file_check_directory()) {
+      throw new Exception();
+    }
+    $filepath = BATIRE_NEWSLETTER_EXPORT_FILEPATH;
+    if (file_exists($filepath)) {
+      file_delete($filepath);
+    }
+
+    $sql = "SELECT u.uid FROM {users} u
+    LEFT JOIN {node} n ON n.uid = u.uid
+    LEFT JOIN {content_type_batire_user_profile} ctup ON n.vid = ctup.vid
+  WHERE n.type = 'batire_user_profile' AND u.status = 1 AND ctup.field_subscribed_to_newsletter_value = 1";
+
+    $result = db_query($sql);
+    $users_uids = array();
+    while ($row = db_fetch_object($result)) {
+      $users_uids[] = $row->uid;
+    }
+
+    $data = batire_webmaster_export_users_get_data($users_uids);
+    if (empty($data)) {
+      throw new Exception();
+    }
+    if (batire_newsletter_export_newsletter_generate_csv_file($data, $filepath)) {
+      $furl = file_create_url($filepath);
+    }
+    else {
+      throw new Exception();
+    }
+  }
+  catch (Exception $e) {
+  }
+}
+
+/**
+ * Check that the directory exists
+ * @param $directory
+ * @return boolean
+ */
+function _batire_newsletter_file_check_directory() {
+  $directory = dirname(BATIRE_NEWSLETTER_EXPORT_FILEPATH);
+  echo $directory;
+  if (!file_check_directory($directory, FILE_CREATE_DIRECTORY)) {
+    return FALSE;
+  }
+  drupal_get_messages();
+  return TRUE;
+}
+
+/**
+ * Save export users data to csv file
+ * @param $data Report data
+ * @param $filepath Path to report file
+ */
+function batire_newsletter_export_newsletter_generate_csv_file($data, $filepath) {
+  $map = _batire_newsletter_export_newsletter_get_map();
+  $titles = _batire_newsletter_export_newsletter_get_file_header();
+  return batire_site_generate_csv_file($filepath, $map, $data, $titles);
+}
+
+/**
+ * Get map for export newsletter
+ * @return Array List of keys
+ */
+function _batire_newsletter_export_newsletter_get_map() {
+  return array(
+    'A' => 'svc_id',
+    'B' => 'name',
+    'C' => 'surname',
+    'D' => 'email',
+  );
+}
+
+/**
+ * Get header for export newsletter
+ * @return Array List of column names
+ */
+function _batire_newsletter_export_newsletter_get_file_header() {
+  return array(
+    'A' => t('SVC ID'),
+    'B' => t('Prénom'),
+    'C' => t('Nom'),
+    'D' => 'Email',
+  );
+}
+
+/**
+ * Lire la suite special callback to calcutate curent node position in
+ * the 'latest docs' view and point user to correct page and item.
+ */
+function batire_newsletter_lire_la_suite($nid) {
+  // Get current view of 'latest documents' to determine actual position of given node
+  $view = views_get_view_result('batire_last_docs_view', 'block_2');
+  $number = 0;
+  $found = FALSE;
+  foreach ($view as $entry) {
+    if ($entry->nid == $nid) {
+      $found = TRUE;
+      break;
+    }
+    $number++;
+  }
+  $query = array(
+    'page' => 0,
+  );
+  // This $found check is needed to prevent incorrect pointing if given nid is too old or does not exist.
+  if ($found) {
+    $page = floor($number / BATIRE_NEWSLETTER_ITEMS_PER_PAGE);
+    $item_on_page = ($number + 1) % BATIRE_NEWSLETTER_ITEMS_PER_PAGE;
+    $query = array(
+      'page' => $page,
+      'item' => $item_on_page,
+    );
+  }
+  drupal_goto(BATIRE_NEWSLETTER_PAGE_URL, $query);
+}
+
+/**
+ * Run cron
+ */
+function batire_newsletter_run_cron() {
+  batire_newsletter_export_subscribers();
+}
+
+/**
+ * Implementation of hook_cronapi().
+ */
+function batire_newsletter_cronapi($op, $job = NULL) {
+  switch ($op) {
+    case 'list':
+      return array(
+        'batire_newsletter_run_cron' => t('Export newsletter'),
+      );
+      break;
+
+    case 'rule':
+      if ($job == 'batire_newsletter_run_cron') {
+        return '0 0 * * *';
+      }
+      break;
+
+    case 'execute':
+      if ($job == 'batire_newsletter_run_cron') {
+        batire_newsletter_run_cron();
+      }
+      break;
+  }
+}

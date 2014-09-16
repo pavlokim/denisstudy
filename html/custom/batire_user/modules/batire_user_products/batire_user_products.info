@@ -1,0 +1,6 @@
+; $Id$
+name = Batire User Products
+description = Paid user products
+package = Batire
+core = 6.x
+version = "6.x-1.0"

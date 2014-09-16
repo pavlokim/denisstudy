@@ -1,0 +1,1341 @@
+<?php
+
+/**
+ * @file
+ * User related stuff to mongodb.
+ */
+define('MONGODB_USER_COLLECTION', 'user');
+define('MONGODB_USER_MAIL_COLLECTION', 'user_mail');
+
+/**
+ * Implementation of hook_user().
+ */
+function mongodb_user_user($op, &$edit, &$account, $category = NULL) {
+  switch ($op) {
+    case 'insert' :
+      //Get profile
+//      $profile = batire_user_profile_load($edit['uid']);
+      //add new user
+      $data = array(
+        'uid' => (int) $edit['uid'],
+//        'name'     => $profile->field_user_name[0]['value'],
+//        'surname'  => $profile->field_user_surname[0]['value'],
+//        'salut'    => $profile->field_user_salut[0]['value'],
+        'roles' => $edit['roles'],
+        'mail' => $edit['mail'],
+      );
+
+      //If multi post -> is admin?
+      if (array_key_exists(BATIRE_USER_MULTIADMIN, $edit['roles']) || array_key_exists(BATIRE_USER_SUBACCOUNT, $edit['roles'])) {
+        $data['is_admin'] = array_key_exists(BATIRE_USER_MULTIADMIN, $edit['roles']) ? TRUE : FALSE;
+      }
+
+      $folders = array(
+        'stat' => array(
+          'f_cnt' => 0,
+          'f_pcnt' => 0,
+          'f_scnt' => 0,
+          'd_cnt' => 0,
+          'd_pcnt' => 0,
+          'd_scnt' => 0,
+        ),
+      );
+
+      //mongodb_update(MONGODB_USER_COLLECTION, array('data.uid' => 0), array('data' => $data, 'folders' => $folders));
+      mongodb_user_update(array('data.uid' => 0), array('data' => $data, 'folders' => $folders), __FUNCTION__ . '-insert');
+      break;
+    case 'update' :
+      //edit user
+      $keys = array('data.uid' => (int) $account->uid);
+      $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+      if (isset($edit['roles']) && $edit['roles']) {
+        $data['data']['roles'] = $edit['roles'];
+        //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+        mongodb_user_update($keys, $data, __FUNCTION__ . '-update-1');
+      }
+
+      if (isset($edit['mail']) && $edit['mail']) {
+        $data['data']['mail'] = $edit['mail'];
+        //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+        mongodb_user_update($keys, $data, __FUNCTION__ . '-update-2');
+
+        //If multi - update in members
+        if (array_key_exists(BATIRE_USER_MULTIADMIN, $account->roles) || array_key_exists(BATIRE_USER_SUBACCOUNT, $account->roles)) {
+          $admin_id = mongodb_user_get_admin($account->uid);
+          $akeys = array('data.uid' => (int) $admin_id);
+          $adata = mongodb_select_one(MONGODB_USER_COLLECTION, $akeys);
+          $adata['members']['u' . $account->uid]['mail'] = $edit['mail'];
+          //mongodb_update(MONGODB_USER_COLLECTION, $akeys, $adata);
+          mongodb_user_update($akeys, $adata, __FUNCTION__ . '-update-3');
+        }
+      }
+      break;
+    case 'login' :
+      //Invalidate cache
+      cache_clear_all('mongodb_user_get_user_last_login:' . $account->uid, BATIRE_USER_CACHE_TABLE);
+
+      $profile = batire_user_profile_load($account->uid);
+      if (isset($profile->uid) && $profile->uid) {
+        $profile->field_user_last_login_date = $profile->field_user_login_date;
+        $profile->field_user_login_date[0]['value'] = time();
+        node_save($profile);
+      }
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function mongodb_user_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  global $user;
+  if ($op == 'insert' || $op == 'update' || $op == 'presave' || $op == 'delete') {
+    if (_batire_site_is_document($node->type)) {
+      //Docs related publish/unpublish updates
+      $published_state = &drupal_static(__FUNCTION__ . 'ps');
+      switch ($op) {
+        case 'presave' :
+          $published_state = _mongodb_user_docs_presave($node);
+          break;
+
+        case 'update' :
+          if ($published_state) {
+            _mongodb_user_docs_update($published_state, $node->nid);
+            drupal_static_reset(__FUNCTION__ . 'ps');
+          }
+          break;
+      }
+    }
+    switch ($node->type) {
+      case 'batire_user_search_profile' :
+        switch ($op) {
+          case 'insert' :
+            //Invalidate infobar cache
+            cache_clear_all('batire_user_docs_infobar:' . $node->field_alert_document[0]['nid'] . ':' . $node->uid, BATIRE_USER_CACHE_TABLE);
+            break;
+        }
+      case 'batire_user_profile' :
+        switch ($op) {
+          case 'insert' :
+            $new_user = user_load($node->uid);
+            $profile = batire_user_profile_load($node->uid, TRUE);
+            $keys = array('data.uid' => (int) $node->uid);
+            $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+            $data['data']['name']    = $profile->field_user_name[0]['value'];
+            $data['data']['surname'] = $profile->field_user_surname[0]['value'];
+            $data['data']['salut']   = $profile->field_user_salut[0]['value'];
+
+            if (isset($data['data']['roles']) && $data['data']['roles']) {
+              if (array_key_exists(BATIRE_USER_MULTIADMIN, $data['data']['roles'])) {
+                $data['admin_id'] = (int) $node->uid;
+                $data['members'] = array(
+                  'u' . $node->uid => array(
+                    'is_admin'      => TRUE,
+                    'uid'           => (int) $node->uid,
+                    'name'          => $profile->field_user_name[0]['value'],
+                    'surname'       => $profile->field_user_surname[0]['value'],
+                    'mail'          => $new_user->mail,
+                    'last_doc_add'  => array(
+                      'nid'  => 0,
+                      'date' => 0,
+                    ),
+                    'last_anno_add' => array(
+                      'did'  => 0,
+                      'aid'  => 0,
+                      'date' => 0,
+                    ),
+                  ),
+                );
+                //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+                mongodb_user_update($keys, $data, __FUNCTION__ . '-insert-profile-2');
+              }
+              elseif (array_key_exists(BATIRE_USER_SUBACCOUNT, $data['data']['roles'])) {
+                $admin_query = db_query('
+                  SELECT uid FROM node
+                    WHERE nid
+                    IN (
+                      SELECT nid FROM content_field_user_subacc
+                        WHERE field_user_subacc_uid = %d
+                    )
+                ', $node->uid);
+                $admin_uid = db_result($admin_query);
+
+                $akeys = array('data.uid' => (int) $admin_uid);
+                $adata = mongodb_select_one(MONGODB_USER_COLLECTION, $akeys);
+                if (isset($adata['members']) && $adata['members']) {
+                  //Get members uids
+                  $m_uids = array();
+                  foreach ($adata['members'] as $member_uid) {
+                    $m_uids[] = $member_uid['uid'];
+                  }
+
+                  //Fill member in admin profile
+                  $profile = batire_user_profile_load($node->uid);
+                  $adata['members']['u' . $node->uid] = array(
+                    'is_admin'     => FALSE,
+                    'uid'          => (int) $node->uid,
+                    'name'         => $profile->field_user_name[0]['value'],
+                    'surname'      => $profile->field_user_surname[0]['value'],
+                    'mail'         => $new_user->mail,
+                    'last_doc_add' => array(
+                      'nid'  => 0,
+                      'date' => 0,
+                    ),
+                    'last_anno_add' => array(
+                      'did'  => 0,
+                      'aid'  => 0,
+                      'date' => 0,
+                    ),
+                  );
+                  //mongodb_update(MONGODB_USER_COLLECTION, $akeys, $adata);
+                  mongodb_user_update($akeys, $adata, __FUNCTION__ . '-insert-profile-1');
+
+                  //Fill new user with shared folders
+                  //Get shared folder list of group members
+                  $folders = db_query("
+                    SELECT n.nid FROM {node} n
+                      LEFT JOIN {content_field_folder_shared} USING (vid)
+                      WHERE type = 'batire_user_folder' AND status = 1 AND field_folder_shared_value = 1 AND uid IN (" . db_placeholders($m_uids) . ")",
+                    $m_uids
+                  );
+
+                  //Insert folders
+                  while ($nid = db_result($folders)) {
+                    $fnode = node_load($nid);
+                    $fname = $fnode->title;
+                    $data_add                  = array();
+                    $data_add['d_cnt']         = $fnode->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($fnode->field_folder_documents) : 0;
+                    $data_add['name']          = $fname;
+                    $data_add['nid']           = (int) $fnode->nid;
+                    $data_add['shared']        = (int) $fnode->field_folder_shared[0]['value'];
+                    $data_add['owner']['uid']  = (int) $fnode->uid;
+                    $data_add['owner']['name'] = mongodb_user_get_user_fullname($fnode->uid);
+
+                    $fkeys = array('data.uid' => (int) $new_user->uid);
+                    $fdata = mongodb_select_one(MONGODB_USER_COLLECTION, $fkeys);
+
+                    $fdata = _folders_get_all_parents_tree($fdata, $data_add, $fnode);
+                    //Stat stuff
+                    $fdata['folders']['stat']['f_cnt']++;
+                    $fdata['folders']['stat']['f_scnt']++;
+                    mongodb_update(MONGODB_USER_COLLECTION, $fkeys, $fdata);
+
+                    //Insert documents of folder
+                    foreach ($fnode->field_folder_documents as $document) {
+                      $did     = $document['nid'];
+                      $adddate = $document['added'];
+                      //Check is user have any doc
+                      $dkeys = array('uid' => (int) $new_user->uid);
+                      $ddata = mongodb_select_one(MONGODB_DOCS_COLLECTION, $dkeys);
+                      if (!(isset($ddata) && $ddata)) {
+                        $ddata = array(
+                          'uid'   => (int) $new_user->uid,
+                          'docs'  => array(),
+                        );
+                        mongodb_update(MONGODB_DOCS_COLLECTION, $dkeys, $ddata);
+                      }
+
+                      //Check is user have this doc
+                      $ukeys = array('data.uid' => (int) $new_user->uid);
+                      $udata = mongodb_select_one(MONGODB_USER_COLLECTION, $ukeys);
+                      if (!(isset($ddata['docs']['d' . $did]) && $ddata['docs']['d' . $did])) {
+                        $ddata['docs']['d' . $did] = array(
+                          'nid'              => (int) $did,
+                          'last_access_date' => time(),
+                          'folders'          => array(),
+                          'anno_cnt'         => 0,
+                          'anno_s_cnt'       => 0,
+                          'anno_p_cnt'       => 0,
+                          'anno'             => array(
+                            'p' => array(),
+                            's' => array(),
+                          ),
+                        );
+                        mongodb_update(MONGODB_DOCS_COLLECTION, $dkeys, $ddata);
+
+                        //Stat update
+                        if ((isset($udata) && $udata)) {
+                          $udata['folders']['stat']['d_cnt']++;
+                          $udata['folders']['stat']['d_scnt']++;
+                          //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+                          mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-1');
+                        }
+                      }
+                      else {
+                        //Stat update
+                        if ((isset($udata) && $udata)) {
+                          $doc_folders = mongodb_docs_folders_list($new_user->uid, $did);
+                          $folder_shared = FALSE;
+                          foreach ($doc_folders as $doc_folder) {
+                            //@todo isset
+                            if (isset($doc_folder['nid'])) {
+                              if (mongodb_user_folder_shared($doc_folder['nid'], $new_user->uid)) {
+                                $folder_shared = TRUE;
+                                break;
+                              }
+                            }
+                          }
+
+                          if (!$folder_shared) {
+                            $udata['folders']['stat']['d_scnt']++;
+                          }
+
+                          //mongodb_update(MONGODB_USER_COLLECTION, $ukeys, $udata);
+                          mongodb_user_update($ukeys, $udata, __FUNCTION__ . '-2');
+                        }
+                      }
+
+                      //Check is user have this doc in this folders
+                      if (!(isset($ddata['docs']['d' . $did]['folders']['f' . $nid]) && $ddata['docs']['d' . $did]['folders']['f' . $nid])) {
+                        $ddata['docs']['d' . $did]['folders']['f' . $nid] = array(
+                          'nid'    => (int) $nid,
+                          'name'   => $fname,
+                          'shared' => (int) 1,
+                          'date'   => (int) $adddate,
+                        );
+                        mongodb_update(MONGODB_DOCS_COLLECTION, $dkeys, $ddata);
+                      }
+                    }
+                  }
+                  //Get shared annotations list of group members
+                  $annos = db_query("
+                    SELECT n.nid FROM {node} n
+                      LEFT JOIN {content_field_annotation_shared} USING (vid)
+                      WHERE type = 'batire_user_annotation' AND status = 1 AND field_annotation_shared_value = 1 AND uid IN (" . db_placeholders($m_uids) . ")",
+                    $m_uids
+                  );
+
+                  //Insert annotations
+                  while ($nid = db_result($annos)) {
+                    $anode    = node_load($nid);
+                    $adate    = $anode->changed;
+                    $atext    = $anode->field_annotation_text_value;
+                    $owner_id = $anode->uid;
+                    $ankeys   = array('uid' => (int) $new_user->uid);
+                    $andata   = mongodb_select_one(MONGODB_DOCS_COLLECTION, $ankeys);
+                    if (isset($andata) && $andata) {
+                      $andata['docs']['d' . $did]['anno_cnt']++;
+                      if (!isset($owner_id)) {
+                        $owner    = mongodb_user_get_user_fullname($new_user->uid);
+                        $owner_id = $new_user->uid;
+                      }
+                      else {
+                        $owner = mongodb_user_get_user_fullname($owner_id);
+                      }
+
+                      $andata['docs']['d' . $did]['anno_s_cnt']++;
+                      $andata['docs']['d' . $did]['anno']['s']['a' . $nid] = array(
+                        'date'   => (int) $adate,
+                        'text'   => $atext,
+                        'owner'  => array(
+                          'name' => $owner,
+                          'uid'  => (int) $owner_id,
+                        ),
+                      );
+                      mongodb_update(MONGODB_DOCS_COLLECTION, $ankeys, $andata);
+                    }
+                  }
+                }
+                $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+                $data['admin_id'] = (int) $admin_uid;
+                //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+                mongodb_user_update($keys, $data, __FUNCTION__ . '-insert-profile-2');
+              }
+            }
+            break;
+          case 'update' :
+            $keys = array('data.uid' => (int) $node->uid);
+            $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+            //Get profile
+            $profile                               = batire_user_profile_load($node->uid, TRUE);
+            $data['data']['name']                  = $profile->field_user_name[0]['value'];
+            $data['data']['surname']               = $profile->field_user_surname[0]['value'];
+            $data['data']['salut']                 = $profile->field_user_salut[0]['value'];
+            $data['data']['last_date']             = (int) $profile->field_user_last_login_date[0]['value'];
+            $data['data']['search_profile']['nid'] = (int) $profile->field_default_search[0]['nid'];
+            if ($data['data']['search_profile']['nid']) {
+              $sp = node_load($data['data']['search_profile']['nid']);
+              if ($sp && is_object($sp)) {
+                $data['data']['search_profile']['title'] = $sp->title;
+              }
+            }
+            else {
+              $data['data']['search_profile']['title'] = '';
+            }
+
+            //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+            mongodb_user_update($keys, $data, __FUNCTION__ . '-update-profile-1');
+            //If multi - update in members, folders and annotations
+            $muser = user_load($node->uid);
+            if (array_key_exists(BATIRE_USER_MULTIADMIN, $muser->roles) || array_key_exists(BATIRE_USER_SUBACCOUNT, $muser->roles)) {
+              //Update in members
+              $admin_id = mongodb_user_get_admin($node->uid);
+              $keys = array('data.uid' => (int) $admin_id);
+              $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+              $data['members']['u' . $node->uid]['name'] = $profile->field_user_name[0]['value'];
+              $data['members']['u' . $node->uid]['surname'] = $profile->field_user_surname[0]['value'];
+              //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+              mongodb_user_update($keys, $data, __FUNCTION__ . '-update-profile-2');
+
+              //Get members
+              $members = mongodb_user_get_members($node->uid);
+
+              //Update folders
+              $sql = "SELECT n.nid
+                      FROM {node} n
+                      LEFT JOIN {content_field_folder_shared} USING (vid)
+                      WHERE type = '%s' AND uid = %d AND status = 1 AND field_folder_shared_value = 1";
+              $folders_id = db_query($sql, 'batire_user_folder', $node->uid);
+              $fullname = mongodb_user_get_user_fullname($node->uid);
+              while ($folder_id = db_result($folders_id)) {
+                //Build path with value
+                $upd_path = _array_key_path('f' . $folder_id, $data);
+                $upd_data_path = "\$mdata";
+                if (isset($upd_path) && $upd_path && is_array($upd_path)) {
+                  foreach ($upd_path as $part) {
+                    $upd_data_path .= "['" . $part . "']";
+                  }
+                  $upd_data_path .= "['owner']['name'] = \$fullname;";
+                  //Update each folder to all members, including me
+                  foreach ($members as $member) {
+                    $mkeys = array('data.uid' => (int) $member['uid']);
+                    $mdata = mongodb_select_one(MONGODB_USER_COLLECTION, $mkeys);
+                    eval($upd_data_path);
+                    //mongodb_update(MONGODB_USER_COLLECTION, $mkeys, $mdata);
+                    mongodb_user_update($mkeys, $mdata, __FUNCTION__ . '-update-profile-3');
+                  }
+                }
+              }
+
+              //Update annotations
+              //Get from MySQL my shared annos
+              $sql = "SELECT n.nid
+                      FROM {node} n
+                      LEFT JOIN {content_field_annotation_shared} USING (vid)
+                      WHERE type = '%s' AND uid = %d AND status = 1 AND field_annotation_shared_value = 1";
+              $annos_id = db_query($sql, 'batire_user_annotation', $node->uid);
+              while ($anno_id = db_result($annos_id)) {
+                $anno = node_load($anno_id);
+                $did = $anno->field_annotation_doc[0]['nid'];
+                //Update each anno to all members, including me
+                foreach ($members as $member) {
+                  $mkeys = array('uid' => (int) $member['uid']);
+                  $mdata = mongodb_select_one(MONGODB_DOCS_COLLECTION, $mkeys);
+                  $mdata['docs']['d' . $did]['anno']['s']['a' . $anno_id]['owner']['name'] = $fullname;
+                  mongodb_update(MONGODB_DOCS_COLLECTION, $mkeys, $mdata);
+                }
+              }
+            }
+            break;
+        }
+        break;
+      case 'batire_user_folder' :
+        $changed_docs = &drupal_static(__FUNCTION__);
+        $become_shared = &drupal_static(__FUNCTION__ . 'bs');
+
+        //Invalidate folders cache @todo remove from there
+        cache_clear_all('batire_user_docs_folders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+        cache_clear_all('batire_user_docs_folders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+        cache_clear_all('batire_user_docs_folders:s:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+        cache_clear_all('batire_user_docs_myfolders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+        cache_clear_all('batire_user_docs_myfolders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+        cache_clear_all('batire_user_docs_myfolders:s:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+
+        $keys = array('data.uid' => (int) $node->uid);
+        $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+        switch ($op) {
+          case 'insert' :
+            cache_clear_all('batire_user_docs_folders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+            cache_clear_all('batire_user_docs_myfolders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+
+            $data_add['d_cnt'] = $node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($node->field_folder_documents) : 0;
+            $data_add['name'] = $node->title;
+            $data_add['nid'] = (int) $node->nid;
+            $data_add['shared'] = (int) $node->field_folder_shared[0]['value'];
+            if ($node->field_folder_shared[0]['value']) {
+              //Shared folder
+              $data_add['owner']['uid'] = (int) $node->uid;
+              $data_add['owner']['name'] = mongodb_user_get_user_fullname($node->uid);
+              mongodb_user_add_shared_folder($data_add, $node);
+            }
+            else {
+              //Invalidate folders cache
+              cache_clear_all('batire_user_docs_folders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+              cache_clear_all('batire_user_docs_myfolders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+
+              $data = _folders_get_all_parents_tree($data, $data_add, $node);
+              //Stat stuff
+              $data['folders']['stat']['f_cnt']++;
+              $data['folders']['stat']['f_pcnt']++;
+              //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+              mongodb_user_update($keys, $data, __FUNCTION__ . '-insert-folder-1');
+            }
+            //If have docs - add them
+            if ($data_add['d_cnt']) {
+              foreach ($node->field_folder_documents as $doc) {
+                mongodb_docs_add_doc($doc['nid'], $doc['added'], $node->nid, $node->title, (int) $node->field_folder_shared[0]['value'], $doc['owner']);
+              }
+            }
+            break;
+          case 'update' :
+            //Invalidate cache
+            cache_clear_all('batire_user_docs_folders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+            cache_clear_all('batire_user_docs_folders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+            cache_clear_all('batire_user_docs_myfolders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+            cache_clear_all('batire_user_docs_myfolders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+            if ($become_shared) {
+              //Update to shared
+              $upd_path = _array_key_path('f' . $node->nid, $data);
+              $upd_data_path = "\$data";
+              foreach ($upd_path as $part) {
+                $upd_data_path .= "['" . $part . "']";
+              }
+              eval($upd_data_path . "['d_cnt']  = \$node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs(\$node->field_folder_documents) : 0;");
+              eval($upd_data_path . "['name']   = \$node->title;");
+              eval($upd_data_path . "['nid']    = (int) \$node->nid;");
+              eval($upd_data_path . "['shared'] = 1;");
+              eval($upd_data_path . "['owner']['uid']  = (int) \$node->uid;");
+              eval($upd_data_path . "['owner']['name'] = mongodb_user_get_user_fullname(\$node->uid);");
+              //Stat stuff
+              $data['folders']['stat']['f_pcnt']--;
+              $data['folders']['stat']['f_scnt']++;
+              //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+              mongodb_user_update($keys, $data, __FUNCTION__ . '-update-folder-1');
+
+              $doc_cnt = $node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($node->field_folder_documents) : 0;
+              if ($doc_cnt) {
+                foreach ($node->field_folder_documents as $doc) {
+                  mongodb_docs_del_doc($doc['nid'], $node->nid, 0, $node->uid, FALSE, FALSE);
+                }
+              }
+              //Add folder and docs to all members
+              $data_add['d_cnt'] = $node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($node->field_folder_documents) : 0;
+              $data_add['name'] = $node->title;
+              $data_add['nid'] = (int) $node->nid;
+              $data_add['shared'] = 1;
+              $data_add['owner']['uid'] = (int) $node->uid;
+              $data_add['owner']['name'] = mongodb_user_get_user_fullname($node->uid);
+              mongodb_user_add_shared_folder($data_add, $node, $node->uid);
+              drupal_static_reset('mongodb_user_folder_shared');
+              //If have docs - add them
+              if ($data_add['d_cnt']) {
+                $doc_nids = array();
+                foreach ($node->field_folder_documents as $doc) {
+                  mongodb_docs_add_doc($doc['nid'], $doc['added'], $node->nid, $node->title, 1, $doc['owner']);
+                  $doc_nids[] = 'field_annotation_doc_nid = ' . $doc['nid'];
+                }
+
+                $filter = implode(' OR ', $doc_nids);
+                //Restore annotations
+                $annos = db_query('
+                  SELECT content_type_batire_user_annotation.vid, field_annotation_doc_nid, field_annotation_text_value, changed
+                    FROM  content_type_batire_user_annotation
+                      LEFT JOIN node ON content_type_batire_user_annotation.vid = node.nid
+                      LEFT JOIN content_field_annotation_shared ON content_type_batire_user_annotation.vid = content_field_annotation_shared.vid
+                    WHERE uid = %d AND field_annotation_shared_value = 0 AND status = 1 AND (%s)', $node->uid, $filter
+                );
+                //Insert user annotations
+                $dkeys = array('uid' => (int) $node->uid);
+                $ddata = mongodb_select_one(MONGODB_DOCS_COLLECTION, $dkeys);
+                while ($anno = db_fetch_object($annos)) {
+                  //If not
+                  $did = $anno->field_annotation_doc_nid;
+                  $aid = $anno->vid;
+                  if (!(isset($ddata['docs']['d' . $did]['anno']['p']['a' . $aid]) && $ddata['docs']['d' . $did]['anno']['p']['a' . $aid])) {
+                    mongodb_docs_add_annotation($did, '', $aid, $anno->changed, $anno->field_annotation_text_value);
+                  }
+                }
+              }
+
+              //Have childrens? Let's convert'em to shared
+              eval("\$fldr = " . $upd_data_path . ";");
+              if (isset($fldr['folders']) && $fldr['folders']) {
+                foreach ($fldr['folders'] as $folder) {
+                  $child = node_load($folder['nid']);
+                  $child->field_folder_shared = array(array('value' => 1));
+                  node_save($child);
+                }
+              }
+            }
+            else {
+              $act_node = node_load($node->nid, NULL, TRUE);
+              $data_add['d_cnt'] = $act_node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($act_node->field_folder_documents) : 0;
+              $data_add['name'] = $node->title;
+              $data_add['shared'] = (int) $node->field_folder_shared[0]['value'];
+              if ($node->field_folder_shared[0]['value'] == 1) {
+                $data_add['owner']['uid'] = (int) $node->uid;
+                $data_add['owner']['name'] = mongodb_user_get_user_fullname($node->uid);
+                mongodb_user_update_shared_folder($data_add, $node);
+              }
+              else {
+                //Invalidate folders cache
+                cache_clear_all('batire_user_docs_folders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+                cache_clear_all('batire_user_docs_myfolders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+
+                $data = _folders_get_all_parents_tree($data, $data_add, $node, $op);
+                //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+                mongodb_user_update($keys, $data, __FUNCTION__ . '-update-folder-2');
+              }
+              //Insert or delete docs
+              if ($changed_docs['type'] == 'insert') {
+                foreach ($changed_docs['docs'] as $did) {
+                  mongodb_docs_add_doc($did['nid'], $did['added'], $node->nid, $node->title, (int) $node->field_folder_shared[0]['value'], $did['owner']);
+                }
+              }
+              elseif ($changed_docs['type'] == 'delete') {
+                foreach ($changed_docs['docs'] as $did) {
+                  mongodb_docs_del_doc($did['nid'], $node->nid, (int) $node->field_folder_shared[0]['value'], $did['owner']);
+                }
+              }
+            }
+            break;
+          case 'presave' :
+            if (isset($node->nid) && $node->nid) {
+              $act_node = node_load($node->nid, NULL, TRUE);
+              //Detect become shared
+              $become_shared = FALSE;
+              if ($node->field_folder_shared[0]['value'] != $act_node->field_folder_shared[0]['value'] && $act_node->nid && $node->field_folder_shared[0]['value']) {
+                $become_shared = TRUE;
+              }
+              //Folder name changed?
+              if (($act_node->title != $node->title) && $act_node->title && isset($act_node->title)) {
+                cache_clear_all('batire_user_docs_folders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+                cache_clear_all('batire_user_docs_myfolders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+                if ($node->field_folder_shared[0]['value']) {
+                  cache_clear_all('batire_user_docs_folders:s:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+                  cache_clear_all('batire_user_docs_myfolders:s:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+                  $admin_uid = mongodb_user_get_admin($node->uid);
+
+                  $keys = array('data.uid' => (int) $admin_uid);
+                  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+                  $members = array();
+                  if (isset($data['members']) && $data['members']) {
+                    $members = $data['members'];
+                  }
+
+                  foreach ($members as $member) {
+                    $muid = $member['uid'];
+                    $mkeys = array('uid' => (int) $muid);
+                    $mdata = mongodb_select_one(MONGODB_DOCS_COLLECTION, $mkeys);
+
+                    foreach ($node->field_folder_documents as $doc) {
+                      $mdata['docs']['d' . $doc['nid']]['folders']['f' . $node->nid]['name'] = $node->title;
+                    }
+                    mongodb_update(MONGODB_DOCS_COLLECTION, $mkeys, $mdata);
+                  }
+                }
+                else {
+                  cache_clear_all('batire_user_docs_folders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+                  cache_clear_all('batire_user_docs_myfolders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+                  $keys = array('uid' => (int) $node->uid);
+                  $data = mongodb_select_one(MONGODB_DOCS_COLLECTION, $keys);
+
+                  foreach ($node->field_folder_documents as $doc) {
+                    $data['docs']['d' . $doc['nid']]['folders']['f' . $node->nid]['name'] = $node->title;
+                  }
+
+                  mongodb_update(MONGODB_DOCS_COLLECTION, $keys, $data);
+                }
+              }
+              //Count
+              $act_node_cnt = $act_node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($act_node->field_folder_documents) : 0;
+              $node_cnt = $node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($node->field_folder_documents) : 0;
+              if ($act_node_cnt != $node_cnt) {
+                if (!isset($changed_docs)) {
+                  $act_docs = $act_node->field_folder_documents;
+                  if (!$act_docs) {
+                    $act_docs = array();
+                  }
+                  $c_act_docs = array();
+                  foreach ($act_docs as $act_doc) {
+                    $c_act_docs[$act_doc['nid']] = $act_doc;
+                  }
+
+                  $docs = $node->field_folder_documents;
+                  $c_docs = array();
+                  foreach ($docs as $doc) {
+                    $c_docs[$doc['nid']] = $doc;
+                  }
+
+                  if ($act_node_cnt > $node_cnt) {
+                    $changed_docs['type'] = 'delete';
+                    $changed_docs['docs'] = array_diff_key($c_act_docs, $c_docs);
+                  }
+                  elseif ($act_node_cnt < $node_cnt) {
+                    $changed_docs['type'] = 'insert';
+                    $changed_docs['docs'] = array_diff_key($c_docs, $c_act_docs);
+                  }
+                  else {
+                    $changed_docs = array();
+                  }
+                }
+              }
+            }
+            break;
+          case 'delete' :
+            cache_clear_all('batire_user_docs_folders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+            cache_clear_all('batire_user_docs_myfolders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+            if ($node->field_folder_shared[0]['value']) {
+              mongodb_user_del_shared_folder($node);
+            }
+            else {
+              cache_clear_all('batire_user_docs_folders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+              cache_clear_all('batire_user_docs_myfolders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+              $data = _folders_get_all_parents_tree($data, NULL, $node, $op);
+              //Stat stuff
+              $data['folders']['stat']['f_cnt']--;
+              $data['folders']['stat']['f_pcnt']--;
+              //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+              mongodb_user_update($keys, $data, __FUNCTION__ . '-delete-folder-1');
+            }
+            $doc_cnt = $node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($node->field_folder_documents) : 0;
+            if ($doc_cnt) {
+              foreach ($node->field_folder_documents as $doc) {
+                mongodb_docs_del_doc($doc['nid'], $node->nid, (int) $node->field_folder_shared[0]['value'], $node->uid);
+              }
+            }
+            break;
+        }
+        break;
+    }
+  }
+}
+
+function _folders_get_all_parents_tree($data, $data_add = NULL, $node = NULL, $type = 'insert') {
+  switch ($type) {
+    case 'insert' :
+      //Build path
+      $parents = "['folders']['f" . $node->nid . "']";
+      $tmp_node = $node;
+      while ($tmp_node->field_folder_parent[0]['nid']) {
+        $parents = "['folders']['f" . $tmp_node->field_folder_parent[0]['nid'] . "']" . $parents;
+        $tmp_node = node_load($tmp_node->field_folder_parent[0]['nid']);
+      }
+      $parents = "\$data" . $parents;
+      //get sub folders
+      eval("\$folders = " . $parents . "['folders'];");
+      //Insert $data_add in path
+      eval($parents . " = \$data_add;");
+      //If have sub folders - add them
+      if (isset($folders) && $folders && is_array($folders)) {
+        eval($parents . "['folders'] = \$folders;");
+      }
+      break;
+    case 'update' :
+      //Build path
+      $path = _array_key_path('f' . $node->nid, $data);
+      $full_path = "\$data";
+      if (isset($path) && $path && is_array($path)) {
+        foreach ($path as $part) {
+          $full_path .= "['" . $part . "']";
+        }
+        //Save data
+        eval("\$act_data = " . $full_path . ';');
+        //Remove data from path
+        eval('unset(' . $full_path . ');');
+        //Insert updated saved data
+        $data = _folders_get_all_parents_tree($data, array_merge($act_data, $data_add), $node);
+      }
+      break;
+    case 'delete' :
+      //Build path
+      $del_path = _array_key_path('f' . $node->nid, $data);
+      $del_data_path = "\$data";
+      if (isset($del_path) && $del_path && is_array($del_path)) {
+        foreach ($del_path as $part) {
+          $del_data_path .= "['" . $part . "']";
+        }
+        //Save data
+        eval("\$del_data = " . $del_data_path . ';');
+        //Remove data from path
+        eval('unset(' . $del_data_path . ');');
+        //Build parent path
+        $parent_path = $del_path;
+        array_pop($parent_path);
+        $parent_data_path = "\$data";
+        foreach ($parent_path as $part) {
+          $parent_data_path .= "['" . $part . "']";
+        }
+        //Save parent data
+        eval("\$parent_data = " . $parent_data_path . ';');
+        if (!isset($del_data['folders'])) {
+          $del_data['folders'] = array();
+        }
+        //Move childrens to parent if exists
+        $sum_data = array_merge_recursive($parent_data, $del_data['folders']);
+        eval($parent_data_path . " = \$sum_data;");
+
+        //update node references
+        foreach ($del_data['folders'] as $fnid) {
+          $f_node = node_load($fnid['nid']);
+          if (isset($f_node->nid) && $f_node->nid) {
+            $f_node->field_folder_parent[0]['nid'] = $node->field_folder_parent[0]['nid'];
+            node_save($f_node);
+          }
+        }
+      }
+      else {
+        watchdog('MONGODB-USER', 'MongoDB user deleting folder f' . $node->nid . '. $data: ' . var_export($data) . '. $del_path: ' . $del_path);
+      }
+      break;
+  }
+  return $data;
+}
+
+function _array_key_path($needle, $haystack, $forbidden = array(), $path = array()) {
+  foreach ($haystack as $key => $val) {
+    if (in_array($key, $forbidden)) {
+      continue;
+    }
+
+    if (is_array($val) && is_array($sub = _array_key_path($needle, $val, $forbidden, array_merge($path, (array) $key)))) {
+      return $sub;
+    }
+    elseif ($key === $needle) {
+      return array_merge($path, (array) $key);
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Count folders per uid by type
+ *
+ * @param type $uid
+ * @param type $type
+ * @return count
+ */
+function mongodb_user_count_folders($uid, $type = 'all') {
+  return mongodb_user_counter($uid, 'folders', $type);
+}
+
+/**
+ * Count documents per uid by type
+ *
+ * @param type $uid
+ * @param type $type
+ * @return count
+ */
+function mongodb_user_count_docs($uid, $type = 'all') {
+  return mongodb_user_counter($uid, 'docs', $type);
+}
+
+/**
+ * Count documents or folders by type with static
+ *
+ * @param type $uid
+ * @param type $type
+ * @param type $cnt_type
+ * @return count
+ */
+function mongodb_user_counter($uid, $type, $cnt_type = 'all') {
+  $data = &drupal_static(__FUNCTION__);
+
+  if (!isset($data)) {
+    $keys = array('data.uid' => (int) $uid);
+    $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+  }
+
+  $s_data = $data['folders']['stat'];
+
+  if (isset($s_data) && $s_data) {
+    switch ($type) {
+      case 'folders' :
+        switch ($cnt_type) {
+          case 'all' :
+            return $s_data['f_cnt'];
+          case 'p' :
+            return $s_data['f_pcnt'];
+          case 's' :
+            return $s_data['f_scnt'];
+        }
+        break;
+      case 'docs' :
+        switch ($cnt_type) {
+          case 'all' :
+            return $s_data['d_cnt'];
+          case 'p' :
+            return $s_data['d_pcnt'];
+          case 's' :
+            return $s_data['d_scnt'];
+        }
+        break;
+    }
+  }
+  else {
+    return 0;
+  }
+}
+
+/**
+ * Is folder shared
+ *
+ * @param type $fid
+ * @return boolean
+ */
+function mongodb_user_folder_shared($fid, $uid) {
+  $keys = array('data.uid' => (int) $uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+  return _mongodb_user_search_shared_folder($data['folders'], $fid, $uid);
+}
+
+/**
+ * Find shared folder on each level
+ * @param $s_data List of subfolders
+ * @param $fid Folder if which need to find
+ * @return Bool TRUE|FALSE
+ */
+function _mongodb_user_search_shared_folder($s_data, $fid) {
+  if (isset($s_data['f' . $fid]['shared']) && $s_data['f' . $fid]['shared']) {
+    return TRUE;
+  }
+  else {
+    foreach ($s_data as $key => $val) {
+      if (isset($val['folders']) && !empty($val['folders'])) {
+        $result = _mongodb_user_search_shared_folder($val['folders'], $fid);
+        if ($result) {
+          return $result;
+        }
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Get folders subtree by folder id
+ *
+ * @param int $fid Folder id
+ * @param int $uid User id
+ * @return array Return array of folders.
+ */
+function mongodb_user_folder_subtree($fid, $uid = NULL) {
+  if ($uid) {
+    $user = user_load($uid);
+  }
+  else {
+    global $user;
+  }
+
+  //Already cached here
+  $data['folders'] = batire_user_docs_get_folders('all', $user->uid);
+
+  //Build path
+  $path = '';
+  $path_arr = _array_key_path('f' . $fid, $data);
+  foreach ($path_arr as $part) {
+    $path .= '[' . $part . ']';
+  }
+
+  eval('$childrens = $data' . $path . ';');
+
+  if (isset($childrens['folders']) && $childrens['folders']) {
+    $result['folders'] = $childrens['folders'];
+    return $result;
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ * Get user data from MongoDB
+ *
+ * @param int $uid User id
+ * @return array
+ */
+function mongodb_user_get_user($uid = NULL) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $keys = array('data.uid' => (int) $uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+  if (isset($data['data']) && $data['data']) {
+    return $data['data'];
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ * Get full user name from profile
+ * Use only for fullname, if need another data from profile use mongodb_user_get_user().
+ *
+ * @param int $uid
+ * @return string Full username
+ */
+function mongodb_user_get_user_fullname($uid = NULL) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $profile = mongodb_user_get_user($uid);
+  return $profile['name'] . ' ' . $profile['surname'];
+}
+
+/**
+ * Get user last login date from profile
+ *
+ * @param string $format
+ * @param int $uid
+ * @return string
+ */
+function mongodb_user_get_user_last_login($format = 'd/m/Y', $uid = NULL) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $cid = 'mongodb_user_get_user_last_login:' . $uid;
+  $date = batire_cache_get($cid, BATIRE_USER_CACHE_TABLE);
+  if (isset($date) && $date) {
+    return date($format, $date);
+  }
+
+  $profile = mongodb_user_get_user($uid);
+  if (isset($profile['last_date']) && is_numeric($profile['last_date']) && $profile['last_date']) {
+    batire_cache_set($cid, $profile['last_date'], BATIRE_USER_CACHE_TABLE, BATIRE_USER_LAST_LOGIN_CACHE_LIFETIME);
+    return date($format, $profile['last_date']);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Get user Admin ID
+ *
+ * @param int $uid User ID
+ * @return int
+ */
+function mongodb_user_get_admin($uid = NULL) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $keys = array('data.uid' => (int) $uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+  if (isset($data['admin_id']) && $data['admin_id']) {
+    return $data['admin_id'];
+  }
+  else {
+    return 0;
+  }
+}
+
+function mongodb_user_add_shared_folder($data_add, $node, $exclude_uid = 0) {
+  $admin_uid = mongodb_user_get_admin($node->uid);
+
+  $keys = array('data.uid' => (int) $admin_uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+  $members = array();
+  if (isset($data['members']) && $data['members']) {
+    $members = $data['members'];
+  }
+
+  foreach ($members as $member) {
+    $muid = $member['uid'];
+    if ($muid != $exclude_uid) {
+      $mkeys = array('data.uid' => (int) $muid);
+      $mdata = mongodb_select_one(MONGODB_USER_COLLECTION, $mkeys);
+
+      //Invalidate folders cache
+      cache_clear_all('batire_user_docs_folders:s:' . $muid, BATIRE_USER_CACHE_TABLE);
+      cache_clear_all('batire_user_docs_myfolders:s:' . $muid, BATIRE_USER_CACHE_TABLE);
+
+      $mdata = _folders_get_all_parents_tree($mdata, $data_add, $node);
+      //Stat stuff
+      $mdata['folders']['stat']['f_cnt']++;
+      $mdata['folders']['stat']['f_scnt']++;
+      //mongodb_update(MONGODB_USER_COLLECTION, $mkeys, $mdata);
+      mongodb_user_update($mkeys, $mdata, __FUNCTION__ . '-1');
+    }
+  }
+}
+
+function mongodb_user_del_shared_folder($node) {
+  $admin_uid = mongodb_user_get_admin($node->uid);
+
+  $keys = array('data.uid' => (int) $admin_uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+  $members = array();
+  if (isset($data['members']) && $data['members']) {
+    $members = $data['members'];
+  }
+
+  foreach ($members as $member) {
+    $muid = $member['uid'];
+    $mkeys = array('data.uid' => (int) $muid);
+    $mdata = mongodb_select_one(MONGODB_USER_COLLECTION, $mkeys);
+
+    //Invalidate folders cache
+    cache_clear_all('batire_user_docs_folders:s:' . $muid, BATIRE_USER_CACHE_TABLE);
+    cache_clear_all('batire_user_docs_myfolders:s:' . $muid, BATIRE_USER_CACHE_TABLE);
+
+    $mdata = _folders_get_all_parents_tree($mdata, NULL, $node, 'delete');
+    //Stat stuff
+    $mdata['folders']['stat']['f_cnt']--;
+    $mdata['folders']['stat']['f_scnt']--;
+    //mongodb_update(MONGODB_USER_COLLECTION, $mkeys, $mdata);
+    mongodb_user_update($mkeys, $mdata, __FUNCTION__ . '-1');
+  }
+}
+
+function mongodb_user_update_shared_folder($data_add, $node) {
+  $admin_uid = mongodb_user_get_admin($node->uid);
+
+  $keys = array('data.uid' => (int) $admin_uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+  $members = array();
+  if (isset($data['members']) && $data['members']) {
+    $members = $data['members'];
+  }
+
+  foreach ($members as $member) {
+    $muid = $member['uid'];
+    $mkeys = array('data.uid' => (int) $muid);
+    $mdata = mongodb_select_one(MONGODB_USER_COLLECTION, $mkeys);
+
+    //Invalidate folders cache
+    cache_clear_all('batire_user_docs_folders:s:' . $muid, BATIRE_USER_CACHE_TABLE);
+    cache_clear_all('batire_user_docs_myfolders:s:' . $muid, BATIRE_USER_CACHE_TABLE);
+
+    $mdata = _folders_get_all_parents_tree($mdata, $data_add, $node, 'update');
+    //mongodb_update(MONGODB_USER_COLLECTION, $mkeys, $mdata);
+    mongodb_user_update($mkeys, $mdata, __FUNCTION__ . '-1');
+  }
+}
+
+/**
+ * Get user members
+ *
+ * @param int $uid User ID
+ * @return array
+ */
+function mongodb_user_get_members($uid = NULL) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $admin_uid = mongodb_user_get_admin($uid);
+
+  $keys = array('data.uid' => (int) $admin_uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+  if (isset($data['members']) && $data['members']) {
+    return $data['members'];
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ * Get tree length
+ *
+ * @param int $fid Folder ID
+ * @param int $uid User ID
+ * @return int Depth of childrens
+ */
+function mongodb_user_folder_tree_length($fid, $uid = NULL, $recursive = FALSE, $left_data = array()) {
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+
+  $cnt = 0;
+  $sub_cnt = 0;
+
+  if (!$recursive) {
+    $keys = array('data.uid' => (int) $uid);
+    $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+
+    $f_path = _array_key_path('f' . $fid, $data);
+    $f_data_path = "\$data";
+    foreach ($f_path as $part) {
+      $f_data_path .= "['" . $part . "']";
+    }
+    eval("\$left_data = " . $f_data_path . ";");
+  }
+
+  if (isset($left_data['folders']) && $left_data['folders']) {
+    if (count($left_data['folders'])) {
+      $cnt++;
+      foreach ($left_data['folders'] as $f_id => $folder) {
+        $sub_f_cnt = mongodb_user_folder_tree_length($fid, $uid, TRUE, $left_data['folders'][$f_id]);
+        if ($sub_cnt < $sub_f_cnt) {
+          $sub_cnt = $sub_f_cnt;
+        }
+      }
+    }
+  }
+  return $cnt + $sub_cnt;
+}
+
+function _mongodb_user_published_modify($uid, $fid, $published_state) {
+  $keys = array('data.uid' => (int) $uid);
+  $data = mongodb_select_one(MONGODB_USER_COLLECTION, $keys);
+  $upd_path = _array_key_path('f' . $fid, $data);
+  $upd_data_path = "\$data";
+  foreach ($upd_path as $part) {
+    $upd_data_path .= "['" . $part . "']";
+  }
+  $upd_data_path .= "['d_cnt']";
+  switch ($published_state) {
+    case 1 :
+      eval($upd_data_path . "--;");
+      break;
+    case 2 :
+      eval($upd_data_path . "++;");
+      break;
+  }
+  //mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+  mongodb_user_update($keys, $data, __FUNCTION__ . '-1');
+}
+
+/**
+ * Get count published nodes from folder
+ * @param $folder_docs List of nodes
+ * @return int Count
+ */
+function _mongodb_user_count_folder_docs($folder_docs) {
+  $cnt = 0;
+  foreach ($folder_docs as $folder_doc) {
+    $docs = db_query_range("
+          SELECT status FROM {node}
+          WHERE nid = %d", $folder_doc['nid'], 0, 1
+    );
+
+    $doc = db_fetch_object($docs);
+    if (isset($doc->status) && $doc->status) {
+      $cnt++;
+    }
+  }
+  return $cnt;
+}
+
+function _mongodb_user_docs_presave($node) {
+  $published_state = 0;
+  if (isset($node->nid) && $node->nid) {
+    $act_node = node_load($node->nid, NULL, TRUE);
+    //State 0 - unchanged, 1 - become unpublished, 2 - become published
+    if ($act_node->nid && isset($node->status)) {
+      if ($node->status == 0 && $act_node->status == 1) {
+        $published_state = 1;
+      }
+      elseif ($node->status == 1 && $act_node->status == 0) {
+        $published_state = 2;
+      }
+    }
+  }
+  return $published_state;
+}
+
+function _mongodb_user_docs_update($published_state, $nid) {
+  if ($published_state) {
+    //Update folder counters
+    $user_folders = db_query('
+                    SELECT vid, field_folder_documents_owner, field_folder_shared_value FROM {content_field_folder_documents}
+                      LEFT JOIN {content_field_folder_shared} USING ( vid )
+                      WHERE field_folder_documents_nid = %d
+                  ', $nid);
+    while ($user_folder = db_fetch_object($user_folders)) {
+      if ($user_folder->field_folder_shared_value) {
+        $members = mongodb_user_get_members($user_folder->field_folder_documents_owner);
+        foreach ($members as $member) {
+          _mongodb_user_published_modify($member['uid'], $user_folder->vid, $published_state);
+        }
+      }
+      else {
+        _mongodb_user_published_modify($user_folder->field_folder_documents_owner, $user_folder->vid, $published_state);
+      }
+    }
+
+    //Update stat counters
+    $keys = array('docs.d' . $nid . '.nid' => (int) $nid);
+    $data = mongodb_select(MONGODB_DOCS_COLLECTION, $keys);
+
+    foreach ($data as $uid) {
+      $folders      = $uid['docs']['d' . $nid]['folders'];
+      $have_prv     = FALSE;
+      $have_shared  = FALSE;
+      foreach ($folders as $folder) {
+        if ($folder['shared']) {
+          $have_shared = TRUE;
+        }
+        else {
+          $have_prv = TRUE;
+        }
+        if ($have_prv && $have_shared) {
+          break;
+        }
+      }
+
+      $keys2 = array('data.uid' => (int) $uid['uid']);
+      $data2 = mongodb_select_one(MONGODB_USER_COLLECTION, $keys2);
+      if ($have_prv || $have_shared) {
+        switch ($published_state) {
+          case 1 :
+            $data2['folders']['stat']['d_cnt']--;
+            break;
+          case 2 :
+            $data2['folders']['stat']['d_cnt']++;
+            break;
+        }
+      }
+      if ($have_prv) {
+        switch ($published_state) {
+          case 1 :
+            $data2['folders']['stat']['d_pcnt']--;
+            break;
+          case 2 :
+            $data2['folders']['stat']['d_pcnt']++;
+            break;
+        }
+      }
+      if ($have_shared) {
+        switch ($published_state) {
+          case 1 :
+            $data2['folders']['stat']['d_scnt']--;
+            break;
+          case 2 :
+            $data2['folders']['stat']['d_scnt']++;
+            break;
+        }
+      }
+      //mongodb_update(MONGODB_USER_COLLECTION, $keys2, $data2);
+      mongodb_user_update($keys2, $data2, __FUNCTION__ . '-1');
+    }
+  }
+
+  //Put changes to Antidot
+  switch ($published_state) {
+    case 1 :
+      $op = 'delete';
+      break;
+    case 2 :
+      $op = 'add';
+      break;
+  }
+  job_queue_add("_batire_antidot_export_job_run",  'Antidot '. $op .' documents', array(array($nid), $op));
+}
+
+function mongodb_user_update($keys, $data, $func_name) {
+  mongodb_update(MONGODB_USER_COLLECTION, $keys, $data);
+  if (!isset($data['data']['uid']) || !$data['data']['uid']) {
+    watchdog('MONGODB-USER', 'MongoDB user update without data->uid in function ' . $func_name);
+  }
+}

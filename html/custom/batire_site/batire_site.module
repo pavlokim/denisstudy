@@ -1,0 +1,3532 @@
+<?php
+
+/**
+ * @file
+ * Site related functionality
+ */
+define('BATIRE_SITE_VID_THEMES', 4);
+define('BATIRE_SITE_VID_NORMATIF', 5);
+define('BATIRE_SITE_VID_BATIMENT', 6);
+define('BATIRE_SITE_VID_CORPS', 7);
+define('BATIRE_SITE_VID_CODES', 8);
+define('BATIRE_SITE_VID_TO', 9);
+define('BATIRE_SITE_VID_FM', 10);
+define('BATIRE_SITE_VID_LIVRES', 11);
+define('BATIRE_SITE_VID_SUPPORT', 12);
+define('BATIRE_SITE_VID_MOTS_CLEFS', 16);
+define('BATIRE_SITE_VID_TN_INDICE', 19);
+define('BATIRE_SITE_VID_TYPE_CT', 20);
+define('BATIRE_SITE_VID_RUBRIQUE_CT', 21);
+define('BATIRE_SITE_VID_PRODUCT_TYPES', variable_get('batire_user_product_types_vid', 22));
+define('BATIRE_SITE_VID_TYPE_DE_DOCUMENT_REFERENCE', variable_get('batire_site_type_document_reference_vid', 26));
+
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE', 187);
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL', 190);
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF', 188);
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM', 192);
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE', 191);
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT', 194);
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_DP', 189);
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE', 193);
+define('BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE', variable_get('batire_site_type_document_reference_tid', ''));
+
+define('BATIRE_SITE_TID_REGLES_RAGE', variable_get('batire_site_regles_rage_tid', ''));
+
+
+define('BATIRE_SITE_VID_DOC_TYPE', 15);
+define('BATIRE_SITE_TID_DOC_TYPE_FM', 192);
+
+define('BATIRE_SITE_VID_KEYWORDS', 16);
+
+define('BATIRE_SITE_NOT_FOUND_URL', 'node/3');
+define('BATIRE_SITE_LAST_DOCS_PAGE_URL', 'last');
+define('BATIRE_SITE_FAQ_URL', 'faq');
+define('BATIRE_SITE_REBOND_URL', 'abo');
+define('BATIRE_SITE_REBOND_TESTEZ_URL', 'rebond/testez');
+define('BATIRE_SITE_SITEMAP_URL', 'plan-du-site');
+define('BATIRE_SITE_CGV_NODE_NID', 2324);
+define('BATIRE_SITE_TABLES_CONTENT_URL', 'table-des-matieres');
+
+define('BATIRE_SITE_FORMULAS_CHARACTERS', variable_get('batire_site_formulas_characters_list', 'Ξ,α,χ,η,γ,ι,μ,ν,π,σ,τ,υ'));
+
+define('BATIRE_SITE_ERROR_SYSTEM', 1);
+define('BATIRE_SITE_ERROR_USER', 2);
+
+define('BATIRE_SITE_MENU_SITEMAP_NAME', 'menu-plan-du-site');
+define('BATIRE_USER_CACHE_TABLE', 'cache_batire_user');
+define('BATIRE_USER_FOLDERS_CACHE_LIFETIME', 300);
+define('BATIRE_USER_LAST_LOGIN_CACHE_LIFETIME', 7200);
+define('BATIRE_USER_INFOBAR_CACHE_LIFETIME', 300);
+define('BATIRE_SITE_MON_COMPTE_VIEWS_NAME', 'batire_mon_compte');
+define('BATIRE_SITE_USER_SEARCHES_VIEWS_NAME', 'batire_user_searches');
+define('BATIRE_SITE_MAX_NAME_LENGTH', variable_get('batire_site_max_length', 35));
+define('BATIRE_SEARCH_MAX_SEARCH_WORD', 256);
+define('BATIRE_USER_DOCS_TEASER_LENGTH', variable_get('batire_site_document_teaser_length', 500));
+
+//Content types
+define('BATIRE_SITE_CT_ACTUALITE', 'batire_actualite');
+define('BATIRE_SITE_CT_COMP_TECH', 'batire_complement_technique');
+define('BATIRE_SITE_CT_FM', 'batire_feuillet_mobile');
+define('BATIRE_SITE_CT_LIVRE', 'batire_livres');
+define('BATIRE_SITE_CT_CODE', 'batire_codes');
+define('BATIRE_SITE_CT_DOC_PRAT', 'batire_document_pratique');
+define('BATIRE_SITE_CT_TN', 'batire_texte_normatifs');
+define('BATIRE_SITE_CT_TO', 'batire_texte_officiel');
+define('BATIRE_SITE_CT_DR', 'batire_document_reference');
+define('BATIRE_SITE_IMAGES', 'batire_images');//not a content type
+
+define('BATIRE_SITE_TN_TYPE_NORMAL', 1);
+define('BATIRE_SITE_TN_TYPE_PDF', 2);
+define('BATIRE_SITE_TN_TYPE_HP', 3);
+
+define('BATIRE_SITE_SUMMARY_MAX_JOB', 500);
+
+define('LEMONITEUR_DIRNAME', 'lemoniteur');
+
+define('SITE_NAME_UC', drupal_strtoupper(variable_get('site_name', "kheox")));
+define('SITE_NAME_LC', drupal_strtolower(variable_get('site_name', "kheox")));
+define('SITE_NAME_FS', drupal_ucfirst(variable_get('site_name', "kheox")));
+
+define('BATIRE_SITE_DDR_CONTCT_EMAIL', variable_get('batire_site_ddr_contact_email', 'marie.lharidon@groupemoniteur.fr'));
+
+/**
+ * Request time constant;
+ */
+if (!defined('REQUEST_TIME')) {
+  define('REQUEST_TIME', $_SERVER['REQUEST_TIME']);
+}
+
+module_load_include('inc', 'batire_site', 'includes/batire_site');
+
+/**
+ * Get list of documents types
+ * @return Array List of machine name types
+ */
+function batire_site_document_types_list() {
+  $types_documents = array(
+    BATIRE_SITE_CT_TO,
+    BATIRE_SITE_CT_CODE,
+    BATIRE_SITE_CT_COMP_TECH,
+    BATIRE_SITE_CT_DOC_PRAT,
+    BATIRE_SITE_CT_FM,
+    BATIRE_SITE_CT_LIVRE,
+    BATIRE_SITE_CT_TN,
+    BATIRE_SITE_CT_ACTUALITE,
+    BATIRE_SITE_CT_DR,
+  );
+  return $types_documents;
+}
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_site_init() {
+  global $user;
+  $node = menu_get_object();
+
+  if ($node && in_array($node->type, batire_site_document_types_list()) && $node->status == 0 && $user->uid != 1) {
+    drupal_goto(BATIRE_SITE_NOT_FOUND_URL, 'destination=node/' . $node->nid);
+  }
+  
+  drupal_set_html_head('<meta http-equiv="X-UA-Compatible" content="IE=8">');
+  drupal_set_html_head('<meta http-equiv="X-UA-Compatible" content="edge">');
+  
+  /**
+   * We need to do early check, if first argument is related to homepage and redirect to home,
+   * to avoid issues with home/$smthing
+   */
+  $home_path = drupal_get_normal_path(variable_get('site_frontpage', 'node'));
+  if (arg(0) == $home_path && count(arg()) > 1) {
+    menu_set_active_item($home_path);
+  }
+  global $custom_theme;
+  drupal_add_js(
+  array(
+    'batire_site' => array(
+      'showPopup' => 0,
+      'popups_url' => url('js/batire_site/popup'),
+      'user_logged' => $user->uid != 0,
+      'access_denied_url' => url('access-denied'),
+      'did' => isset($node->nid) ? $node->nid : '',
+    )
+  ), 'setting'
+  );
+
+  /**
+   * Handling "promo" parameter
+   */
+  if (isset($_GET['promo']) && $_GET['promo']) {
+    $_SESSION[BATIRE_USERSESSION_NAMESPACE]['__promo_code'] = check_plain($_GET['promo']);
+  }
+
+  /**
+   * For 403 we need to set front end theme;
+   */
+  $menu_item = menu_get_item();
+  if (!$menu_item['access']) {
+    $custom_theme = 'batire';
+
+    /**
+     * Here we need to see, if access denied page in the list of pages,
+     * for which we not need to show popup
+     */
+    $pages = explode(
+    "\n", variable_get(
+    'batire_site_access_denied_pages', "user/register\nuser/register/free\nuser/register/activation\nuser"
+    )
+    );
+
+    if (!in_array($_REQUEST['q'], $pages)) {
+      $query = $_REQUEST;
+
+      if (isset($query['q'])) {
+        unset($query['q']);
+      }
+
+      $query_str = array();
+      if (count($query)) {
+        foreach($query as $key => $val) {
+          $query_str[] = $key . '=' . $val;
+        }
+      }
+      drupal_add_js(
+        array(
+          'batire_site' => array(
+            'popupUrl' => url('js/batire_user/popup'),
+            'popupType' => 'access-denied',
+            'showPopup' => 1,
+            'showPopupRedirect' => url($_REQUEST['q'], array('query' => implode('&', $query_str))),
+          )
+        ), 'setting'
+      );
+    }
+  }
+  elseif (isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']['success']) && $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']['success']) {
+    drupal_add_js(
+      array(
+        'batire_site' => array(
+          'popupUrl' => url('js/batire_site/popup'),
+          'showPopup' => 1,
+          'popupType' => 'fast-activate-ty',
+        )
+      ), 'setting'
+    );
+  }
+}
+
+/*
+ * Implementation of hook_menu().
+ */
+
+function batire_site_menu() {
+  $items = array();
+  /**
+   * Frontend
+   */
+  $items['access-denied'] = array(
+    'page callback' => 'batire_site_access_denied',
+    'page arguments' => array(1),
+    'access arguments' => array('access user docs'),
+  );
+
+  $items['last'] = array(
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+    'page callback' => 'batire_site_last_docs',
+  );
+
+  $items['js/batire_site/popup/%'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_site_popup_js',
+    'page arguments' => array(3),
+    'access arguments' => array('access content'),
+  );
+
+  $items['plan-du-site'] = array(
+    'type' => MENU_CALLBACK,
+    'title' => 'Plan du site',
+    'file' => 'batire_site.pages.inc',
+    'file path' => drupal_get_path('module', 'batire_site') . '/includes',
+    'access arguments' => array('access content'),
+    'page callback' => 'batire_site_sitemap',
+  );
+
+  /**
+   * Backend
+   */
+  $items['admin/batire-site'] = array(
+    'title' => SITE_NAME_FS,
+    'position' => 'left',
+    'weight' => 3,
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system')
+  );
+
+  $items['admin/batire-site/settings'] = array(
+    'title' => 'Parametres du site',
+    'position' => 'left',
+    'weight' => 3,
+    'description' => 'Parametres du site',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system')
+  );
+
+  $items['admin/batire-site/settings/character-settings'] = array(
+    'title' => 'Character settings',
+    'description' => 'Setting for special characters',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('_batire_site_characters_settings_form'),
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  $items['admin/batire-site/settings/site-settings'] = array(
+    'title' => 'Site settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_site_site_settings'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_site.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_site') . '/includes',
+    'description' => 'Settings for website'
+  );
+
+  $items['admin/batire-site/settings/access-denied'] = array(
+    'title' => 'Access denied pages',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_site_access_denied_settings'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_site.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_site') . '/includes',
+    'description' => 'Allows to configure pages, that we should not show popup for'
+  );
+
+  $items['admin/batire-site/settings/help'] = array(
+    'title' => 'Paramètres d\'aide',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_site_help_settings'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_site.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_site') . '/includes',
+    'description' => t('Help messages for site')
+  );
+
+  $items['admin/batire-site/settings/content-settings/lemoniteur_block'] = array(
+    'title' => 'Lemoniteur.fr block',
+    'description' => 'Configure Lemoniteur.fr block',
+    'position' => 'left',
+    'weight' => 5,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_site_lemoniteur_block_settings'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_site.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_site') . '/includes',
+  );
+
+  $items['js/batire_site_summary'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_site_summary_js',
+    'access arguments' => array('access content'),
+  );
+
+  $items['js/batire_site_update_codes_trail'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_site_update_codes_trail',
+    'access arguments' => array('administer batire configuration'),
+  );
+
+  return $items;
+}
+
+/**
+ * Calback for access denied functional
+ */
+function batire_site_access_denied($key) {
+  global $user;
+  if (!empty($key) && $user->uid) {
+    $url = base64_decode(str_replace('-', '/', $key));
+    $args = explode('?', ltrim($url, '/'));
+    drupal_goto($args[0], $args[1]);
+  }
+  else {
+    drupal_goto();
+  }
+}
+
+/**
+ * Implementation of hook_batire_site_breadcrumb().
+ * @return array
+ */
+function batire_site_batire_site_breadcrumb($args) {
+  $crumbs = array();
+
+  if (!drupal_is_front_page() && !((arg(0) == 'recherche-avancee') && (arg(1) != 'resultats')) && !(arg(0) == 'table-des-matieres') && !(arg(0) == 'abo')) {
+    $crumbs[] = array(
+      'title' => t('Accueil'),
+      'href' => '<front>',
+      'weight' => -1
+    );
+  }
+
+  switch ($args[0]) {
+    case BATIRE_SITE_REBOND_URL:
+      return array();
+
+    case BATIRE_SITE_FAQ_URL:
+      $crumbs[] = array(
+        'title' => t('FAQ'),
+        'href' => BATIRE_SITE_FAQ_URL,
+        'weight' => 0
+      );
+      break;
+
+    case BATIRE_SITE_SITEMAP_URL:
+      $crumbs[] = array(
+        'title' => t('Plan du site'),
+        'href' => BATIRE_SITE_SITEMAP_URL,
+        'weight' => 0
+      );
+      break;
+
+    case 'node':
+      if (is_numeric($args[1])) {
+        $node = menu_get_object();
+        switch ($node->nid) {
+          case BATIRE_SITE_CGV_NODE_NID:
+            $crumbs[] = array(
+              'title' => t('CGV'),
+              'href' => 'node/' . $node->nid,
+              'weight' => 0
+            );
+            break;
+
+          default:
+            $crumbs[] = array(
+              'title' => $node->title, // @todo - should be truncated to X chars. see in spec
+              'href' => 'node/' . $node->nid,
+              'weight' => 0
+            );
+            break;
+        }
+      }
+      break;
+  }
+  return $crumbs;
+}
+
+/**
+ * Breadcrumb builder
+ * @return array
+ */
+function batire_site_build_breadcrumb() {
+  $cache_enabled = _batire_site_is_cache_enabled();
+  //get path arguments
+  $args = arg();
+  $crumbs = array();
+  $cache = NULL;
+  $url = $_GET['q'];
+  //invoke batire_site_breadcrumb_cache_info hook
+  $create_cache = module_invoke_all('batire_site_breadcrumb_cache_info', $url);
+
+  if ($cache_enabled && (!isset($create_cache[$url]) || !$create_cache[$url])) {
+    $cid = 'batire_breadcrumb:' . md5($url);
+    $cache = cache_get($cid, 'cache');
+  }
+
+  if ($cache_enabled && $cache && !$cache->expire) {
+    $crumbs_raw = $cache->data;
+  }
+  else {
+    //invoke batire_site_breadcrumb hook
+    $crumbs_raw = module_invoke_all('batire_site_breadcrumb', $args);
+
+    if (!empty($crumbs_raw)) {
+      usort($crumbs_raw, '_batire_site_sort_breadcrumb');
+      //Altering crumbs
+      drupal_alter('batire_breadcrumb', $crumbs_raw);
+      usort($crumbs_raw, '_batire_site_sort_breadcrumb');
+      if ($cache_enabled && isset($cid)) {
+        cache_set($cid, $crumbs_raw);
+      }
+    }
+  }
+
+  /**
+   * Here we need to see if modules (themes) have set custom pieces to the end of breadcrumb;
+   */
+  global $_batire_site_breadcrumb;
+
+  if ($_batire_site_breadcrumb) {
+    usort($_batire_site_breadcrumb, '_batire_site_sort_breadcrumb');
+    $crumbs_raw = array_merge($crumbs_raw, $_batire_site_breadcrumb);
+  }
+
+  if (!empty($crumbs_raw)) {
+    $last = array_pop($crumbs_raw);
+    foreach ($crumbs_raw as $crumb) {
+      if (isset($crumb['click']) && !$crumb['click']) {
+        $crumbs[] = trim($crumb['title']);
+      }
+      else {
+        $attributes = isset($crumb['attributes']) ? $crumb['attributes'] : array();
+        $crumbs[] = l(trim($crumb['title']), $crumb['href'], $attributes);
+      }
+    }
+    $crumbs[] = trim($last['title']);
+  }
+  return $crumbs;
+}
+
+/*
+ * Implementation of batire_site_last_docs().
+ */
+
+function batire_site_last_docs() {
+  global $user;
+
+  $display = 'block_1';
+
+  if ($user->uid > 0) {
+    $display = 'block_2';
+  }
+
+  return views_embed_view('batire_last_docs_view', $display);
+}
+
+/**
+ * Popups handler
+ *
+ * Invokes hook_batire_site_popups_info() in every module.
+ * Should return name of mosule
+ *
+ * Invokes hook_batire_site_popups() in every module.
+ * Should return array of data:
+ *  -- $result['error]
+ *  -- $result['data]
+ */
+function batire_site_popup_js($type) {
+  global $user;
+
+  $popup = array(
+    'error' => FALSE,
+  );
+  try {
+    $nids = isset($_GET['nids']) ? $_GET['nids'] : '';
+
+    if (!$nids) {
+      $nids = array();
+//      throw new Exception(t("No nids were provided"));
+    }
+    else {
+      $nids = explode(',', $nids);
+      $nids = array_map('trim', $nids);
+    }
+    $type = batire_site_check_text($type);
+    if ($type == 'bad_link') {
+      $nids = $_GET['did'];
+    }
+    $modules = module_invoke_all('batire_site_popups_info', $type);
+
+   if (!isset($_POST['link_text'])) {
+      // should be only one
+      foreach ($modules as $module) {
+        $popup = module_invoke($module, 'batire_site_popups', $type, $nids);
+      }
+
+      if (isset($popup['error']) && $popup['error']) {
+        throw new Exception(t("Access denied to load popup @popup for user !user", array('@popup' => $type, '!user' => l($user->name, 'user/' . $user->uid))
+        ));
+      }
+      drupal_json($popup);
+   }
+   else {
+     $result = batire_site_send_bad_reference($_POST['link_text'], $_POST['nid'], $user);
+     drupal_json($result);
+   }
+   return NULL;
+  }
+  catch (Exception $e) {
+    $result = array(
+      'error' => TRUE,
+      'data' => batire_site_show_message($e->getMessage())
+    );
+
+    drupal_json($result);
+    return NULL;
+  }
+
+//  if (isset($_GET['nids']) && $_GET['nids']) {
+//    switch ($op) {
+//      case 'download' :
+//        $nids = check_plain($_GET['nids']);
+//        $result['data'] = theme('batire_popup_download', $nids);
+//        break;
+//      case 'print' :
+//        $nids = check_plain($_GET['nids']);
+//        $result['data'] = theme('batire_popup_print', $nids);
+//        break;
+//    }
+//  }
+}
+
+/**
+ * Implementation of hook_batire_site_popups_info().
+ */
+function batire_site_batire_site_popups_info($type) {
+  switch ($type) {
+    case 'download':
+    case 'print':
+    case 'show_pdf':
+    case 'summary_products':
+    case 'bad_link':
+      return 'batire_site';
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_batire_site_popups().
+ */
+function batire_site_batire_site_popups($type, $nids) {
+  $result = array(
+    'error' => FALSE,
+    'data' => ''
+  );
+  
+  global $user;
+  if (!$replace_user = batire_gc_ip_replace_user()) {
+    $replace_user = $user;
+  }
+
+  if (!user_access('access user docs', $replace_user) && $type != 'summary_products') {
+    $result['error'] = TRUE;
+    return $result;
+  }
+
+  switch ($type) {
+    case 'download' :
+      $result['data'] = theme('batire_popup_download', $nids); //@todo - change it to theme of the module
+      break;
+    case 'print' :
+      $result['data'] = theme('batire_popup_print', $nids); //@todo - change it to theme of the module
+      break;
+    case 'show_pdf' :
+      $result['data'] = theme('batire_popup_show_pdf', $nids); //@todo - change it to theme of the module
+      break;
+    case 'summary_products':
+      $products = batire_user_products_get_products();
+      $result['data'] = theme('batire_site_popup_summary_products', $products);
+      break;
+    case 'bad_link' :
+      $result['data'] = theme('batire_site_popup_bad_reference', $nids);
+      break;
+  }
+
+  if (!$result['data']) {
+    return array();
+  }
+
+  return $result;
+}
+
+/*
+ * Implementation of hook_theme().
+ */
+
+function batire_site_theme() {
+  $items = array(
+    'batire_link' => array(
+      'arguments' => array('text' => NULL, 'path' => NULL, 'options' => array())
+    ),
+    'batire_site_top' => array(
+      'arguments' => array('site_slogan' => NULL, 'menu' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_header' => array(
+      'arguments' => array('site_logo' => NULL, 'login_block' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_summary_content' => array(
+      'arguments' => array(),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_header_login_form' => array(
+      'arguments' => array('login_block' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_user_header' => array(
+      'arguments' => array('profile' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_footer_auth' => array(
+      'arguments' => array('title_left' => NULL, 'menu_left' => NULL, 'menu_right' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_footer_notauth' => array(
+      'arguments' => array('title_left' => NULL, 'menu_left' => NULL, 'title_right' => NULL, 'menu_right' => NULL, 'is_last' => FALSE),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_my_account_menu' => array(
+      'arguments' => array('menu' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_my_account_home_block' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_help_link' => array(
+      'arguments' => array('msg' => NULL, 'span' => FALSE),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_sitemap' => array(
+      'arguments' => array('data' => array())
+    ),
+    'batire_item_list' => array(
+      'arguments' => array('items' => array(), 'attributes' => NULL, 'div' => FALSE, 'array' => FALSE),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_site_neolan_tag' => array(
+      'arguments' => array('page_title' => NULL),
+      'template' => 'neolan_tag',
+      'path' => drupal_get_path('module', 'batire_site') . '/theme/templates'
+    ),
+    'batire_site_estat_tag' => array(
+      'arguments' => array('niveau1' => NULL, 'niveau2' => NULL),
+      'template' => 'estat_tag',
+      'path' => drupal_get_path('module', 'batire_site') . '/theme/templates'
+    ),
+    'batire_site_popup_bad_reference' => array(
+      'arguments' => array('nids' => NULL),
+      'file' => 'theme.inc',
+    ),
+    'batire_site_bad_reference_form' => array(
+      'arguments' => array('form' => NULL, 'nid' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_ctools_plugin_directory().
+ * @return string
+ */
+function batire_site_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools') {
+    return 'plugins/' . $plugin;
+  }
+  if ($module == 'panels' && $plugin == 'styles') {
+    return 'plugins/' . $plugin;
+  }
+  if ($module == 'panels' && $plugin == 'cache') {
+    return 'plugins/' . $plugin;
+  }
+  if ($module == 'page_manager' && $plugin == 'tasks') {
+    return 'plugins/' . $plugin;
+  }
+}
+
+/**
+ * Implementation of hook_ctools_plugin_api().
+ * @return array
+ */
+function batire_site_ctools_plugin_api($owner, $api) {
+  if ($owner == 'panels' && $api == 'styles') {
+    return array('version' => 2.0);
+  }
+
+  if (module_exists('panels_everywhere') && $owner == 'page_manager' && $api == 'pages_default') {
+    return array('version' => 1);
+  }
+}
+
+/**
+ * Implementation of hook_views_api().
+ * @return array
+ */
+function batire_site_views_api() {
+  return array('api' => '3');
+}
+
+/**
+ * Implementation of hook_menu_alter().
+ */
+function batire_site_menu_alter(&$items) {
+  unset($items['node']);
+  unset($items['taxonomy/term/%']);
+
+  $items['node/%node']['access callback'] = 'batire_site_node_access';
+}
+
+/**
+ * Implementation of hook_perm().
+ * @return array
+ */
+function batire_site_perm() {
+  return array('access system content', 'administer batire configuration');
+}
+
+/**
+ * Access callback for node view;
+ * @param string $op
+ * @param object $node
+ * @param object $account
+ * @return bool
+ */
+function batire_site_node_access($op, $node, $account = NULL) {
+  global $user;
+
+  if (empty($account)) {
+    $account = $user;
+  }
+
+  if (1 == $account->uid) {
+    return TRUE;
+  }
+
+  $replace_user = batire_gc_ip_replace_user();
+  if ($replace_user) {
+    $account = $replace_user;
+  }
+
+  $forbidden_nodes = array(
+    'batire_user_annotation',
+    'batire_user_folder',
+    'batire_user_profile',
+    'batire_user_search_profile',
+    'batire_user_sent_alert',
+    'batire_from_lemoniteur',
+    'batire_last_documents',
+    'batire_auteur',
+    'batire_homepage_blocks',
+    'batire_5_advices',
+    'faq',
+  );
+
+  if ((_batire_user_is_free() && $node->type == BATIRE_SITE_CT_TN)/* || (_batire_user_is_trialtn() && $node->type != BATIRE_SITE_CT_TN)*/) {
+    return user_access('access system content', $account);
+  }
+  elseif (_batire_site_is_document($node->type)) {
+    if (module_exists('batire_user_products') && batire_user_products_should_filter($account->uid)) {
+      $criteria = batire_user_products_products_criteria_user($account->uid);
+      return ($account->uid > 0) && batire_user_products_access_node($node, $criteria);
+    }
+    else {
+      return $account->uid > 0; // && node_access($op, $node, $account);
+    }
+  }
+  elseif (in_array($node->type, $forbidden_nodes)) {
+    return user_access('access system content', $account);
+  }
+
+  return node_access($op, $node, $account);
+}
+
+/**
+ * Implements hook_mailkeys().
+ * @return array
+ */
+function batire_site_mailkeys() {
+  return array(
+    'batire_site_friend_send' => t('Envoyer à un ami'),
+    'batire_site_friend_send_confirm' => t('Confirmation d\'envoi'),
+  );
+}
+
+/**
+ * Implements hook_mail_edit_tokens_value().
+ * @return array
+ */
+function batire_site_mail_edit_tokens_value($mailkey, $mail) {
+  $mailkeys = array('batire_site_friend_send', 'batire_site_friend_send_confirm', 'batire_site_signaler_link');
+
+  if (!in_array($mailkey, $mailkeys)) {
+    return array();
+  }
+  $tokens = array();
+
+  $tokens['!site_name_uc'] = SITE_NAME_UC;
+  $tokens['!site_name_lc'] = SITE_NAME_LC;
+  $tokens['!site_name_fs'] = SITE_NAME_FS;
+
+  $tokens['!name'] = $mail['params']['data']['name'];
+  $tokens['!surname'] = $mail['params']['data']['surname'];
+  $tokens['!email'] = $mail['params']['data']['mail'];
+  $tokens['!salutation'] = $mail['params']['data']['salut'];
+  switch ($mailkey) {
+    case 'batire_site_friend_send':
+      $tokens['!teaser'] = batire_site_get_node_in_buildmode($mail['params']['data']['nid'], 'email');
+      if (isset($mail['params']['data']['body']) && !empty($mail['params']['data']['body'])) {
+        $tokens['!sender_message'] = t('L\'expéditeur de cet e-mail a accompagné son envoi du message suivant : <br /><b>@message</b>', array(
+          '@message' => $mail['params']['data']['body']));
+      }
+      else {
+        $tokens['!sender_message'] = '';
+      }
+      break;
+
+    case 'batire_site_friend_send_confirm':
+      $tokens['!teaser'] = batire_site_get_node_in_buildmode($mail['params']['data']['nid'], 'email');
+      $tokens['!recipient_email'] = $mail['params']['data']['save_recipient'];
+      if (isset($mail['params']['data']['body']) && !empty($mail['params']['data']['body'])) {
+        $tokens['!sender_message'] = t("Accompagné de votre message :<br /> <b>@message</b>", array('@message' => $mail['params']['data']['body']));
+      }
+      else {
+        $tokens['!sender_message'] = '';
+      }
+      break;
+    case 'batire_site_signaler_link':
+      $tokens['!abo_num']       = $mail['params']['data']['abo_num'];
+      $tokens['!link_text']     = $mail['params']['data']['link_text'];
+      $tokens['!doc_title']     = $mail['params']['data']['doc_title'];
+      $tokens['!document_url']  = $mail['params']['data']['document_url'];
+      $tokens['!sous_type']     = $mail['params']['data']['sous_type'];
+      $tokens['!rubrique']      = $mail['params']['data']['rubrique'];
+      break;
+  }
+  return $tokens;
+}
+
+/**
+ * Check is type of node is document
+ * @param $type Node type
+ * @return bool
+ */
+function _batire_site_is_document($type) {
+  return in_array($type, batire_site_document_types_list());
+}
+
+function batire_site_contact_link($text = 'cliquant ici') {
+  $url = variable_get('batire_site_contact_url', '<front>');
+  return l(t($text), $url, array('attributes' => array('target' => '_blank')));
+}
+
+/**
+ * Get list of documents on site.
+ * @param $return Return different content
+ *  - name: Return an array of human-readable names
+ *  - full: Return an array of all data about each type of document
+ * @return Array of all available node documents
+ */
+function batire_site_get_document_types_list($return = 'name') {
+  $types = &drupal_static(__FUNCTION__, array());
+  if (isset($types[$return]) && count($types[$return])) {
+    return $types[$return];
+  }
+
+  $types_documents = batire_site_document_types_list();
+  $node_types = _batire_site_ct_tid_map('', TRUE);
+  $documents = array();
+  if ($node_types) {
+    foreach ($types_documents as $type) {
+      switch ($return) {
+        case 'name':
+          $documents[$type] = taxonomy_get_term($node_types[$type])->name;
+          break;
+        case 'full':
+          $documents[$type] = $node_types[$type];
+          break;
+      }
+    }
+  }
+  unset($documents['batire_document_pratique']);
+  $types[$return] = $documents;
+
+  return $documents;
+}
+
+/**
+ * Implementation of hook_content_build_modes().
+ * @return array
+ */
+function batire_site_content_build_modes() {
+  return array(
+    'document' => array(
+      'title' => t('Document'),
+      'build modes' => array(
+        'document' => array(
+          'title' => t('Document'),
+          'views style' => TRUE,
+        ),
+      ),
+    ),
+    'annotation' => array(
+      'title' => t('Annotation'),
+      'build modes' => array(
+        'annotation' => array(
+          'title' => t('Annotation'),
+          'views style' => TRUE,
+        ),
+      ),
+    ),
+    'antidot' => array(
+      'title' => t('Antidot'),
+      'build modes' => array(
+        'antidot' => array(
+          'title' => t('Antidot'),
+          'views style' => TRUE,
+        ),
+      ),
+    ),
+    'popups' => array(
+      'title' => t('Popups'),
+      'build modes' => array(
+        'popups' => array(
+          'title' => t('Popups'),
+          'views style' => TRUE,
+        ),
+      ),
+    ),
+    'email' => array(
+      'title' => t('Email'),
+      'build modes' => array(
+        'email' => array(
+          'title' => t('Email'),
+          'views style' => TRUE,
+        ),
+      ),
+    ),
+    'shared_document' => array(
+      'title' => t('Shared document'),
+      'build modes' => array(
+        'shared_document' => array(
+          'title' => t('Shared document'),
+          'views style' => TRUE,
+        ),
+      ),
+    ),
+    'shared_annotation' => array(
+      'title' => t('Shared annotation'),
+      'build modes' => array(
+        'shared_annotation' => array(
+          'title' => t('Shared annotation'),
+          'views style' => TRUE,
+        ),
+      ),
+    ),
+    'searches_alerts' => array(
+      'title' => t('Searches/Alerts'),
+      'build modes' => array(
+        'searches_alerts' => array(
+          'title' => t('Searches/Alerts'),
+          'views style' => TRUE,
+        ),
+      ),
+    ),
+  );
+}
+
+function batire_site_get_document_terms($taxonomy, $vid) {
+  $result = array();
+  foreach ($taxonomy as $term) {
+    if ($vid == $term->vid) {
+      $result[] = $term;
+    }
+  }
+  return $result;
+}
+
+/**
+ * Custom cache set
+ *
+ * @param type $cid
+ * @param type $data
+ * @param type $table
+ * @param type $expire delta time
+ */
+function batire_cache_set($cid, $data, $table = 'cache', $expire = NULL) {
+  if (_batire_site_is_cache_enabled()) {
+    if (is_int($expire)) {
+      $expire = time() + $expire;
+    }
+    cache_set($cid, $data, $table, $expire);
+  }
+}
+
+/**
+ * Custom cache get
+ *
+ * @param type $cid
+ * @param type $table
+ * @return type
+ */
+function batire_cache_get($cid, $table = 'cache') {
+  if (_batire_site_is_cache_enabled()) {
+    $cache = cache_get($cid, $table);
+    if (is_object($cache) && (!isset($cache->expire) || $cache->expire >= time() && isset($cache->data) && $cache->data)) {
+      return $cache->data;
+    }
+    else {
+      return array();
+    }
+  }
+  else {
+    return array();
+  }
+}
+
+/**
+ *  Custom clear cache
+ * @param $cid Cache id
+ * @param $table Cache table
+ */
+function batire_cache_clear_all($cid, $table = 'cache') {
+  if (_batire_site_is_cache_enabled()) {
+    cache_clear_all($cid, $table);
+  }
+}
+
+/**
+ * Mongo DB recreate
+ * Flush user collection and add users and users folders
+ * Flush docs collection and annotations
+ *
+ * @param string $rtype Type of recreate: all(default), user, docs.
+ */
+function batire_site_mongo_recreate($rtype = 'all', $kill_coll = TRUE) {
+  switch ($rtype) {
+    case 'all' :
+      mongodb_delete(MONGODB_USER_COLLECTION);
+      mongodb_ensure_index(MONGODB_USER_COLLECTION, 'data.uid');
+      mongodb_delete(MONGODB_DOCS_COLLECTION);
+      mongodb_ensure_index(MONGODB_DOCS_COLLECTION, 'uid');
+      batire_site_mongo_recreate('user', FALSE);
+      batire_site_mongo_recreate('docs', FALSE);
+      mongodb_delete(MONGODB_SEARCH_COLLECTION);
+      mongodb_ensure_index(MONGODB_SEARCH_COLLECTION, 'sid');
+      mongodb_ensure_index(MONGODB_SEARCH_COLLECTION, 'uid');
+      mongodb_delete(MONGODB_SITE_SUMMARY_COLLECTION);
+      mongodb_ensure_index(MONGODB_SITE_SUMMARY_COLLECTION, 'type');
+      mongodb_delete(MONGODB_SITE_SUMMARY_FILTER_COLLECTION);
+      mongodb_ensure_index(MONGODB_SITE_SUMMARY_FILTER_COLLECTION, 'fid');
+      break;
+    case 'docs-n-user' :
+      mongodb_delete(MONGODB_USER_COLLECTION);
+      mongodb_ensure_index(MONGODB_USER_COLLECTION, 'data.uid');
+      mongodb_delete(MONGODB_DOCS_COLLECTION);
+      mongodb_ensure_index(MONGODB_DOCS_COLLECTION, 'uid');
+      batire_site_mongo_recreate('user', FALSE);
+      batire_site_mongo_recreate('docs', FALSE);
+      break;
+    case 'page':
+      if ($kill_coll) {
+        mongodb_delete(MONGODB_PAGE_COLLECTION);
+        mongodb_ensure_index(MONGODB_PAGE_COLLECTION, 'bid');
+        mongodb_ensure_index(MONGODB_PAGE_COLLECTION, 'nid');
+      }
+      break;
+    case 'user' :
+      //Clear mongo user collection
+      if ($kill_coll) {
+        mongodb_delete(MONGODB_USER_COLLECTION);
+        mongodb_ensure_index(MONGODB_USER_COLLECTION, 'data.uid');
+      }
+      //Create users collections
+      //Get users
+      $users = db_query('SELECT uid FROM {users} WHERE uid > 0');
+      while ($uid = db_result($users)) {
+        $user = user_load($uid);
+        //Get profile
+        $profile = batire_user_profile_load($uid);
+        //Insert user
+        //Search profile
+        $sp_data = array('nid' => (int) $profile->field_default_search[0]['nid']);
+        if ($sp_data['nid']) {
+          $sp = node_load($sp_data);
+          $sp_data['title'] = $sp->title;
+        }
+        else {
+          $sp_data['title'] = '';
+        }
+
+        $data = array(
+          'uid' => (int) $uid,
+          'name' => $profile->field_user_name[0]['value'],
+          'surname' => $profile->field_user_surname[0]['value'],
+          'salut' => $profile->field_user_salut[0]['value'],
+          'roles' => $user->roles,
+          'mail' => $user->mail,
+          'last_date' => (int) $profile->field_user_last_login_date[0]['value'],
+          'search_profile' => $sp_data,
+        );
+
+        $members = array();
+        //If multi post -> is admin?
+        if (array_key_exists(BATIRE_USER_MULTIADMIN, $user->roles)) {
+          $data['is_admin'] = TRUE;
+          $admin_id = (int) $user->uid;
+          //Get last shared anno
+          $anno_query = db_query('
+            SELECT content_type_batire_user_annotation.vid, field_annotation_doc_nid, changed
+              FROM  content_type_batire_user_annotation
+                LEFT JOIN node ON content_type_batire_user_annotation.vid = node.nid
+                LEFT JOIN content_field_annotation_shared ON content_type_batire_user_annotation.vid = content_field_annotation_shared.vid
+              WHERE field_annotation_shared_value = 1 AND uid = %d
+              ORDER BY changed DESC
+              LIMIT 1
+          ', $user->uid);
+          $anno = db_fetch_object($anno_query);
+          $last_anno = array(
+            'did' => (int) $anno->field_annotation_doc_nid,
+            'aid' => (int) $anno->vid,
+            'date' => (int) $anno->changed,
+          );
+
+          //Get last shared doc
+          $doc_query = db_query('
+          SELECT field_folder_documents_nid, field_folder_documents_added
+            FROM  content_field_folder_documents
+              LEFT JOIN node ON content_field_folder_documents.vid = node.nid
+              LEFT JOIN content_field_folder_shared ON content_field_folder_documents.vid = content_field_folder_shared.vid
+            WHERE field_folder_shared_value = 1 AND field_folder_documents_owner = %d
+            ORDER BY field_folder_documents_added DESC
+            LIMIT 1
+          ', $user->uid);
+          $doc = db_fetch_object($doc_query);
+          $last_doc = array(
+            'nid' => (int) $doc->field_folder_documents_nid,
+            'date' => (int) $doc->field_folder_documents_added,
+          );
+
+          //Fill members array with admin data
+          $members['u' . $user->uid] = array(
+            'is_admin' => TRUE,
+            'uid' => (int) $user->uid,
+            'name' => $profile->field_user_name[0]['value'],
+            'surname' => $profile->field_user_surname[0]['value'],
+            'mail' => $user->mail,
+            'last_doc_add' => $last_doc,
+            'last_anno_add' => $last_anno,
+          );
+          //Fill members array with subaccs data
+          $sub_accs = $profile->field_user_subacc;
+          if (!empty($sub_accs)) {
+            foreach ($sub_accs as $sub_acc) {
+              $sub_profile = batire_user_profile_load($sub_acc['uid']);
+              if ($sub_profile->uid == $sub_acc['uid']) {
+                //Get subuser last shared anno
+                $anno_query = db_query('
+                  SELECT content_type_batire_user_annotation.vid, field_annotation_doc_nid, changed
+                    FROM  content_type_batire_user_annotation
+                      LEFT JOIN node ON content_type_batire_user_annotation.vid = node.nid
+                      LEFT JOIN content_field_annotation_shared ON content_type_batire_user_annotation.vid = content_field_annotation_shared.vid
+                    WHERE field_annotation_shared_value = 1 AND uid = %d
+                    ORDER BY changed DESC
+                    LIMIT 1
+                ', $sub_acc['uid']);
+                $anno = db_fetch_object($anno_query);
+                $last_anno = array(
+                  'did' => (int) $anno->field_annotation_doc_nid,
+                  'aid' => (int) $anno->vid,
+                  'date' => (int) $anno->changed,
+                );
+                //Get subuser last shared doc
+                $doc_query = db_query('
+                SELECT field_folder_documents_nid, field_folder_documents_added
+                  FROM  content_field_folder_documents
+                    LEFT JOIN node ON content_field_folder_documents.vid = node.nid
+                    LEFT JOIN content_field_folder_shared ON content_field_folder_documents.vid = content_field_folder_shared.vid
+                  WHERE field_folder_shared_value = 1 AND field_folder_documents_owner = %d
+                  ORDER BY field_folder_documents_added DESC
+                  LIMIT 1
+                ', $sub_acc['uid']);
+                $doc = db_fetch_object($doc_query);
+                $last_doc = array(
+                  'nid' => (int) $doc->field_folder_documents_nid,
+                  'date' => (int) $doc->field_folder_documents_added,
+                );
+
+                $members['u' . $sub_acc['uid']] = array(
+                  'is_admin' => FALSE,
+                  'uid' => (int) $sub_acc['uid'],
+                  'name' => $sub_profile->field_user_name[0]['value'],
+                  'surname' => $sub_profile->field_user_surname[0]['value'],
+                  'mail' => user_load($sub_acc['uid'])->mail,
+                  'last_doc_add' => $last_doc,
+                  'last_anno_add' => $last_anno,
+                );
+              }
+            }
+          }
+        }
+        elseif (array_key_exists(BATIRE_USER_SUBACCOUNT, $user->roles)) {
+          $data['is_admin'] = FALSE;
+          $admin_query = db_query('
+            SELECT uid FROM node
+              WHERE nid
+              IN (
+                SELECT nid FROM content_field_user_subacc
+                  WHERE field_user_subacc_uid = %d
+              )
+          ', $user->uid);
+          $admin_id = db_result($admin_query);
+        }
+
+        $folders = array(
+          'stat' => array(
+            'f_cnt' => 0,
+            'f_pcnt' => 0,
+            'f_scnt' => 0,
+            'd_cnt' => 0,
+            'd_pcnt' => 0,
+            'd_scnt' => 0,
+          ),
+        );
+
+        $user_data = array(
+          'data' => $data,
+          'admin_id' => (int) $admin_id,
+          'folders' => $folders
+        );
+        if (isset($members) && $members) {
+          $user_data['members'] = $members;
+        }
+        mongodb_update(MONGODB_USER_COLLECTION, array('data.uid' => 0), $user_data);
+
+        //Insert user docs
+        $data = array(
+          'uid' => (int) $user->uid,
+          'docs' => array(),
+        );
+        mongodb_update(MONGODB_DOCS_COLLECTION, array('uid' => (int) $user->uid), $data);
+      }
+
+      //USER FOLDERS SECTION
+      //Get folders
+      $folders = db_query('
+        SELECT nid FROM node
+          WHERE
+            type = "batire_user_folder" AND
+            status = 1 AND uid > 0'
+      );
+
+      //Insert folders
+      while ($nid = db_result($folders)) {
+        $data_add = array();
+        $node = node_load($nid);
+        cache_clear_all('batire_user_docs_folders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+        cache_clear_all('batire_user_docs_myfolders:all:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+        $data_add['d_cnt'] = $node->field_folder_documents[0]['nid'] ? _mongodb_user_count_folder_docs($node->field_folder_documents) : 0;
+        $data_add['name'] = $node->title;
+        $data_add['nid'] = (int) $node->nid;
+        $data_add['shared'] = (int) $node->field_folder_shared[0]['value'];
+        if ($node->field_folder_shared[0]['value']) {
+          //Shared folder
+          $data_add['owner']['uid'] = (int) $node->uid;
+          $data_add['owner']['name'] = mongodb_user_get_user_fullname($node->uid);
+          mongodb_user_add_shared_folder($data_add, $node);
+        }
+        else {
+          //Invalidate folders cache
+          cache_clear_all('batire_user_docs_folders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+          cache_clear_all('batire_user_docs_myfolders:p:' . $node->uid, BATIRE_USER_CACHE_TABLE);
+
+          $fkeys = array('data.uid' => (int) $node->uid);
+          $fdata = mongodb_select_one(MONGODB_USER_COLLECTION, $fkeys);
+
+          $fdata = _folders_get_all_parents_tree($fdata, $data_add, $node);
+          //Stat stuff
+          $fdata['folders']['stat']['f_cnt']++;
+          $fdata['folders']['stat']['f_pcnt']++;
+          mongodb_update(MONGODB_USER_COLLECTION, $fkeys, $fdata);
+        }
+      }
+      break;
+    //USER DOCS SECTION
+    case 'docs' :
+      //Clear mongo docs collection
+      if ($kill_coll) {
+        mongodb_delete(MONGODB_DOCS_COLLECTION);
+        mongodb_ensure_index(MONGODB_DOCS_COLLECTION, 'uid');
+      }
+      //Get user docs
+      $docs = db_query('
+        SELECT uid, content_field_folder_documents.vid, title, field_folder_documents_nid, field_folder_shared_value, field_folder_documents_added, field_folder_documents_owner
+          FROM  content_field_folder_documents
+            LEFT JOIN node ON content_field_folder_documents.vid = node.nid
+            LEFT JOIN content_field_folder_shared ON content_field_folder_documents.vid = content_field_folder_shared.vid
+            WHERE node.uid > 0'
+      );
+      //Insert user docs
+      while ($doc = db_fetch_object($docs)) {
+        if ($doc->field_folder_documents_nid) {
+          mongodb_docs_add_doc($doc->field_folder_documents_nid, $doc->field_folder_documents_added, $doc->vid, $doc->title, $doc->field_folder_shared_value, $doc->field_folder_documents_owner);
+        }
+      }
+      //Get user annotations
+      $annos = db_query('
+        SELECT content_type_batire_user_annotation.vid, field_annotation_doc_nid, field_annotation_text_value, uid, changed, field_annotation_shared_value
+          FROM  content_type_batire_user_annotation
+            LEFT JOIN node ON content_type_batire_user_annotation.vid = node.nid
+            LEFT JOIN content_field_annotation_shared ON content_type_batire_user_annotation.vid = content_field_annotation_shared.vid
+            WHERE node.uid > 0'
+      );
+      //Insert user annotations
+      while ($anno = db_fetch_object($annos)) {
+        $atype = ($anno->field_annotation_shared_value == 1) ? 'shared' : '';
+        mongodb_docs_add_annotation($anno->field_annotation_doc_nid, $atype, $anno->vid, $anno->changed, $anno->field_annotation_text_value, $anno->uid);
+      }
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_mail_alter().
+ */
+function batire_site_mail_alter(&$message) {
+  $message['body'] = preg_replace("/(\n)/", "<br />", $message['body']);
+}
+
+/**
+ * Convert content type to argument
+ */
+function batire_site_convert_type_to_arg($type) {
+  return str_replace('batire-', '', str_replace('_', '-', $type));
+}
+
+/**
+ * Convert arg to machine name of content type
+ */
+function batire_site_convert_arg_to_type($arg) {
+  if ($arg != 'tous') {
+    $converted = 'batire_';
+    $converted .= str_replace('-', '_', $arg);
+    return $converted;
+  }
+  else {
+    return $arg;
+  }
+}
+
+function batire_site_doc_is_latest($nid) {
+  $node = node_load($nid);
+  if ($node) {
+    switch ($node->type) {
+      case BATIRE_SITE_CT_ACTUALITE:
+      case BATIRE_SITE_CT_CODE:
+      case BATIRE_SITE_CT_COMP_TECH:
+      case BATIRE_SITE_CT_DOC_PRAT:
+      case BATIRE_SITE_CT_LIVRE:
+      case BATIRE_SITE_CT_TN:
+      case BATIRE_SITE_CT_TO:
+      case BATIRE_SITE_CT_FM:
+        return 1;
+        break;
+
+//      case BATIRE_SITE_CT_FM:
+//        $arr = explode('-', $node->page_data['bid']);
+//        if (count($arr) > 2) {
+//          return FALSE;
+//        }
+//        return 1;
+//        break;
+//
+//      case 'so_texte':
+//        if ($node->field_to_complete[0]['value']) {
+//          if ($node->field_jorf_to_complete[0]['value'] && $node->field_legi_id[0]['value']) {
+//            return !cp_site_get_to_consolidated($node->field_legi_id[0]['value']);
+//          }
+//          elseif (!empty($node->field_cidtexte[0]['value'])) {
+//            return cp_site_get_to_consolidated($node->field_cidtexte[0]['value']) == $node->cpid;
+//          }
+//        }
+//        return 1;
+//        break;
+    }
+  }
+  return FALSE;
+}
+
+function _batire_site_get_fm_prefix() {
+  if ($cache = batire_cache_get('batire_site_fm_prefix')) {
+    return $cache->data;
+  }
+  if ($term = taxonomy_get_term(BATIRE_SITE_TID_DOC_TYPE_FM)) {
+    batire_cache_set('batire_site_fm_prefix', $term->description);
+  }
+  return $term->description;
+}
+
+/**
+ * Show site help link
+ */
+function _batire_site_help_link($id = NULL, $span = FALSE) {
+  $msg = t('Aucune aide disponible');
+  if ($id) {
+    $text = variable_get('batire_site_help_' . $id, '');
+    if (isset($text) && $text) {
+      $link_text = variable_get('batire_site_help_' . $id . '_link_text', '');
+      if (isset($link_text) && $link_text) {
+        $msg = $text . l($link_text, variable_get('batire_site_help_' . $id . '_link', ''));
+      }
+      else {
+        $msg = $text;
+      }
+    }
+  }
+
+  return theme('batire_site_help_link', $msg, $span);
+}
+
+/**
+ * Get human readable node type
+ * @param $node
+ * @return Type
+ */
+function _batire_site_get_humanreadable_node_type($node) {
+  $type = $node->type;
+  if (_batire_site_is_document($type)) {
+    $types = batire_site_get_document_types_list('name');
+
+    // define doc type
+    foreach ($node->taxonomy as $term) {
+      if ($term->vid == BATIRE_SITE_VID_DOC_TYPE) {
+        $doc_type = $term->name;
+        break;
+      }
+    }
+
+    // define additional info
+    switch ($type) {
+      case BATIRE_SITE_CT_CODE:
+        $vid = BATIRE_SITE_VID_CODES;
+        break;
+      case BATIRE_SITE_CT_TO:
+        $vid = BATIRE_SITE_VID_TO;
+        break;
+      case BATIRE_SITE_CT_TN:
+        $vid = BATIRE_SITE_VID_NORMATIF;
+        break;
+      case BATIRE_SITE_CT_FM:
+        $vid = BATIRE_SITE_VID_FM;
+        break;
+      case BATIRE_SITE_CT_LIVRE:
+        $vid = BATIRE_SITE_VID_LIVRES;
+        break;
+      case BATIRE_SITE_CT_COMP_TECH:
+        $vid = BATIRE_SITE_VID_TYPE_CT;
+        break;
+      case BATIRE_SITE_CT_ACTUALITE:
+        //$vid = BATIRE_SITE_VID_SUPPORT;
+        break;
+    }
+
+    if (isset($vid)) {
+      foreach ($node->taxonomy as $term) {
+        if ($term->vid == $vid) {
+          $additional = $term->name;
+          break;
+        }
+      }
+    }
+
+    $doc_type = isset($doc_type) ? $doc_type : $types[$type];
+    return $doc_type . (isset($additional) ? ' - ' . $additional : '');
+  }
+  else {
+    return $type;
+  }
+}
+
+/**
+ * Implementation of hook_cronapi().
+ */
+function batire_site_cronapi($op, $job = NULL) {
+  switch ($op) {
+    case 'list':
+      return array(
+        'batire_site_lemoniteur_get_news' => t('Get news for Lemoiteur.fr block'),
+        'batire_site_summary_check' => t('Check state of import and regenerate summary.'),
+      );
+      break;
+
+    case 'rule':
+      switch ($job) {
+        case 'batire_site_lemoniteur_get_news':
+          return '* */6 * * *';
+        case 'batire_site_summary_check':
+          return '* 2 * * *';
+      }
+      break;
+
+    case 'execute':
+      switch ($job) {
+        case 'batire_site_lemoniteur_get_news':
+          batire_site_lemoniteur_get_news();
+          break;
+        case 'batire_site_summary_check':
+          batire_site_summary_check();
+          break;
+      }
+      break;
+  }
+}
+
+function batire_site_lemoniteur_get_news() {
+  $url = variable_get('batire_site_lemoniteur_block_url', "http://www.lemoniteur.fr/cache/X_articles_rss2_185.xml");
+  $doc = new DOMDocument();
+  $feed_content = _batire_site_get_curl($url);
+
+  $doc->loadXML($feed_content);
+  $arrFeeds = array();
+  $cnt = 1;
+  foreach ($doc->getElementsByTagName('item') as $node) {
+    if ($cnt > 5) {
+      break;
+    }
+    $d_image = '';
+    if (is_object($node->getElementsByTagName('enclosure')->item(0))) {
+      $d_image = $node->getElementsByTagName('enclosure')->item(0)->getAttribute('url');
+    }
+    $itemRSS = array(
+      'title' => html_entity_decode($node->getElementsByTagName('title')->item(0)->nodeValue, ENT_QUOTES, 'UTF-8'),
+      'link' => $node->getElementsByTagName('link')->item(0)->nodeValue,
+      'date' => $node->getElementsByTagName('pubDate')->item(0)->nodeValue,
+      'image' => $d_image
+    );
+    array_push($arrFeeds, $itemRSS);
+    $cnt++;
+  }
+
+  $lemoniteur_folder = file_directory_path() . '/' . LEMONITEUR_DIRNAME;
+  if (file_check_directory($lemoniteur_folder, FILE_CREATE_DIRECTORY)) {
+    $cnt_sql = "SELECT COUNT(nid) FROM {content_type_batire_from_lemoniteur} WHERE field_lemoniteur_link_value = '%s'";
+    foreach ($arrFeeds as $feed) {
+      $cnt = db_result(db_query($cnt_sql, $feed['link']));
+      if (!$cnt) {
+        $item = new stdClass();
+        $item->type = 'batire_from_lemoniteur';
+        $item->status = 1;
+        $item->uid = 1;
+        $item->title = $feed['title'];
+        $item->field_lemoniteur_date = array(
+          array('value' => strtotime($feed['date']))
+        );
+        $item->field_lemoniteur_link = array(
+          array('value' => $feed['link'])
+        );
+
+        if (isset($feed['image']) && $feed['image']) {
+          $image_url = $feed['image'];
+
+          $image = _batire_site_get_curl($image_url);
+          $image_name = basename($image_url);
+          $destination = $lemoniteur_folder . '/' . $image_name;
+          file_save_data($image, $destination, FILE_EXISTS_REPLACE);
+        }
+        else {
+          $placeholder_image = path_to_theme() . '/files/ph-lemoniteur-rss.gif';
+
+          $image_name = basename($placeholder_image);
+          $destination = $lemoniteur_folder . '/' . $image_name;
+          file_copy($placeholder_image, $destination, FILE_EXISTS_REPLACE);
+        }
+
+        // Create file object and update files table
+        $file = new stdClass();
+        $file->filename = $image_name;
+        $file->filepath = $destination;
+        if (function_exists('mime_content_type')) {
+          $file->filemime = mime_content_type($destination);
+        }
+        else {
+          $size = getimagesize($destination);
+          $file->filemime = $size['mime'];
+        }
+        $file->filesize = filesize($destination);
+        $file->uid = 1;
+        $file->timestamp = time();
+        drupal_write_record('files', $file);
+
+        $item->field_lemoniteur_image = array((array) $file);
+        node_save($item);
+      }
+    }
+  }
+
+  //Remove old data
+  $total_cnt_sql = "SELECT COUNT(*) FROM {content_type_batire_from_lemoniteur}";
+  $total_cnt = db_result(db_query($total_cnt_sql));
+  if ($total_cnt > 10) {
+    $total_cnt -= 10;
+    $nodes = db_query_range('SELECT nid FROM {content_type_batire_from_lemoniteur} ORDER BY field_lemoniteur_date_value ASC', 0, $total_cnt);
+    while ($nid = db_result($nodes)) {
+      node_delete($nid);
+    }
+  }
+}
+
+/**
+ * Cron job for check import state. If it is - regenerate content.
+ */
+function batire_site_summary_check() {
+  if (variable_get('batire_site_generate_tdm', TRUE)) {
+    $doc_types = variable_get('batire_import_types', array());
+    foreach ($doc_types as $key => $value) {
+      mongodb_site_recreate_summary($key);
+    }
+    variable_set('batire_import_types', array());
+  }
+}
+
+/**
+ * CURL helper function with detection
+ * @param $url
+ * @return mixed|string
+ */
+function _batire_site_get_curl($url) {
+  if (function_exists('curl_init')) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    //curl_setopt($cr, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows; U; Windows NT 6.1; ru; rv:1.9.1.5) Gecko/20091102 Firefox/3.5.5');
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+
+    /**
+     * For moved documents;
+     */
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
+    curl_setopt($ch, CURLOPT_MAXREDIRS, 2);
+
+    $feed_content = curl_exec($ch);
+    curl_close($ch);
+  }
+  else {
+    $feed_content = file_get_contents($url);
+  }
+  return $feed_content;
+}
+
+function _batire_site_ct_tid_map($value, $flip = FALSE) {
+  $data = array(
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE           => BATIRE_SITE_CT_CODE,
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_OFFICIEL => BATIRE_SITE_CT_TO,
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_TEXTE_NORMATIF => BATIRE_SITE_CT_TN,
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_FM             => BATIRE_SITE_CT_FM,
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_LIVRE          => BATIRE_SITE_CT_LIVRE,
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CT             => BATIRE_SITE_CT_COMP_TECH,
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_DP             => BATIRE_SITE_CT_DOC_PRAT,
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_ACTUALITE      => BATIRE_SITE_CT_ACTUALITE,
+    BATIRE_SITE_TID_TYPE_DE_DOCUMENT_REFERENCE      => BATIRE_SITE_CT_DR,
+  );
+
+  if ($flip) {
+    $data = array_flip($data);
+  }
+
+  if (empty($value)) {
+    return $data;
+  }
+
+  return $data[$value] ? $data[$value] : 0;
+}
+
+/**
+ * Remove docs from import
+ * @param $nids
+ */
+function _batire_site_delete_node_job_run($nids) {
+  $start = substr(microtime(),10,11).substr(microtime(),1,10);
+
+  foreach ($nids as $nid) {
+    db_query('DELETE FROM {node} WHERE nid = %d', $nid);
+    db_query('DELETE FROM {node_revisions} WHERE nid = %d', $nid);
+    // Call the node-specific callback (if any):
+    node_invoke($node, 'delete');
+    node_invoke_nodeapi($node, 'delete');
+    batire_site_log_watchdog('Node @nid has been deleted', array('@nid' => $node->nid));
+  }
+
+  $end = substr(microtime(),10,11).substr(microtime(),1,10);
+  $duration = trim($end) - trim($start);
+  $duration = sprintf("%01.4f", $duration);
+  batire_site_log_watchdog(t('Job duration = @duration', array('@duration' => $duration)));
+}
+
+function _batire_site_render_summary_level($data, $depth = 0, $tid = NULL, $recursive = TRUE, $parent_type = '', $no_link = FALSE, $show_cnt = TRUE, $skip_level = FALSE, $lock_all = FALSE, $break_on_level = NULL, $auto_cache_generation = FALSE) {
+
+  /*
+   * break recursive on some level
+   * now it's for Codes only
+   * because the structure is so huge
+   * (After ajax request FF has error popup)
+   */
+  if (isset($break_on_level)) {
+    if ($depth > $break_on_level) {
+      return FALSE;
+    }
+  }
+
+  if (empty($data['depublished'])) {
+    $data['depublished'] = 0;
+  }
+  if ($data['cnt'] - $data['depublished'] <= 0 && $depth > 0) {
+    return FALSE;
+  }
+
+  $preload = $recursive ? '' : ' preload';
+  $a_class = $ul_class = '';
+  switch ($depth) {
+    case 0:
+      $a_class  = 'main' . $preload;
+      $ul_class = 'theme';
+      break;
+    case 1:
+      $ul_class = 'document';
+      break;
+    case 2:
+      if (!$skip_level) {
+        $ul_class = 'documents';
+      }
+      else {
+        $ul_class = 'themes';
+      }
+      break;
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+      $ul_class = 'themes';
+      break;
+  }
+
+  $cnt = $data['cnt'] - $data['depublished'];
+
+  if ($show_cnt) {
+    $title = $depth ? $data['title'] . ' (' . $cnt . ')' : taxonomy_get_term($tid)->name;
+  }
+  else {
+    $title = $depth ? $data['title'] : taxonomy_get_term($tid)->name;
+  }
+
+  $childs = array();
+  $url    = 'table-des-matieres';
+  $frag   = FALSE;
+
+  if (!empty($data['bid'])) {
+    $url = 'document/' . $data['bid'];
+  }
+  else {
+    $data['bid'] = md5($data['title']);
+    $frag        = TRUE;
+  }
+
+  $output    = '';
+  $sub_child = FALSE;
+  $id_pref   = '';
+  global $user;
+  if (isset($data['sub_level']) && count($data['sub_level'])) {
+    if ($recursive) {
+      $i = 0;//iterator for theme function batire_batire_item_list()
+      foreach ($data['sub_level'] as $sub) {
+        if (isset($sub['sub_level']) && count($sub['sub_level'])) {
+          $sub_child = TRUE;
+        }
+        $sub_level = _batire_site_render_summary_level($sub, $depth + 1, NULL, TRUE, '', FALSE, $show_cnt, $skip_level, $lock_all, $break_on_level, $auto_cache_generation);
+        if (!batire_site_is_active_codes_trail($sub['bid']) && !isset($sub['cites']) && $sub['type'] == 'Code' && ($auto_cache_generation || $user->uid != 1)) {//hide menu items if inactive item AND not a last level AND not admin
+          $li_class = 'hidden-item';
+        }
+        else {
+          $li_class = '';
+        }
+        if (!empty($sub_level['html'])) {
+          $childs[$i]['data']  = $sub_level['html'];
+          $childs[$i]['class'] = $li_class;
+        }
+        $i++;
+      }
+    }
+
+    $a_class = $a_class ? ($a_class . ' full') : 'full';
+    $id_pref = 'F';
+    $url     = 'table-des-matieres';
+    $frag    = TRUE;
+  }
+  else {
+    $a_class = 'empty-docs';
+    $title    = $data['title'];
+    if ($lock_all) {
+      $data['disabled'] = TRUE;
+    }
+  }
+
+  if (!$sub_child) {
+    $ul_class = 'docs';
+  }
+
+  if ($cnt || !$depth) {
+    if (!empty($parent_type)) {
+      $data['type'] = $parent_type;
+    }
+    if ($data['type'] == BATIRE_SITE_CT_CODE && $depth == 1) {
+      $a_class .= ' ' . $id_pref . $data['bid'] . ' preload';
+      $id = $data['type'] . ':' . $data['tid'];
+    }
+    else {
+      $id = ($depth) ? $id_pref . $data['bid'] : $data['type'];
+    }
+
+    if (!$no_link) {
+      $attr = array(
+        'html' => TRUE,
+        'attributes' => array(
+          'class' => $a_class,
+          'id' => $id)
+      );
+      if ($frag || (isset($data['disabled']) && $data['disabled'])) {
+        $attr['fragment'] = ' ';
+        $attr['external'] = TRUE;
+      }
+      if (isset($data['disabled']) && $data['disabled']) {
+        $output .= '<span class="empty-docs active">' . $title . '</span>';
+      }
+      else {
+        if ($data['type'] != 'Code') {//only a 3td and more levels (except last level: Article, Annexe, etc) has this type
+          if ($depth == 1 && $data['type'] == 'batire_codes' && ($user->uid != 1 || $auto_cache_generation)) {//add link for hide/show inactive levels for a second level of the Codes tree
+            if (batire_site_count_inactive_trail($data['bid']) > 0) {//if count of inactive items > 0
+              if(is_null(_batire_site_get_cookie($data['bid'])) || _batire_site_get_cookie($data['bid']) == 'close') {
+                $show_link_text = t('Afficher tout le code');
+              }
+              elseif (_batire_site_get_cookie($data['bid']) == 'open') {
+                $show_link_text = t('Afficher le code restreint à la réglementation technique');
+              }
+              $output .= '<a class="view-code" id="' .$data['bid']. '" href="#">' . $show_link_text . '</a>';
+              $output .= l($title, $url, $attr);
+            }
+            else {
+              $output .= l($title, $url, $attr);
+            }
+          }
+          else {
+            $output .= l($title, $url, $attr);
+          }
+        }
+        else {//if item has type = 'Code', current user is admin and it's not an auto generation of cache =>  then we add a checkbox
+          $output .= l($title, $url, $attr);
+          if ($user->uid == 1 && !$auto_cache_generation) {
+            if (batire_site_is_active_codes_trail($data['bid'])) {
+              $checked = 'checked="checked"';
+            }
+            $output .= '<input  id="' . $data['bid'] . '" class="form-checkbox" type="checkbox" value="' . $data['bid'] . '" ' . $checked . '/>';
+          }
+        }
+      }
+    }
+    $output .= theme('item_list', $childs, NULL, 'ul', array('class' => $ul_class));
+  }
+
+  return array('html' => $output);
+}
+
+/**
+ * Duplicate filter
+ *
+ * When summary build jobs finished this job removes in last level title duplicates
+ * @param $type
+ */
+function batire_site_summary_duplicate_filter_job_run($type) {
+  $keys = array('type' => $type);
+  $data = mongodb_select_one(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+
+  foreach ($data['sub_level'] as $tid => $sub_level) {
+    $data['sub_level'][$tid] = batire_site_summary_duplicate_filter($sub_level);
+  }
+  //generate cache for anonymous and full base users
+  $anonymous = user_load(0);
+  $render = batire_site_get_tdm_section($type, $data, NULL, $anonymous, NULL, 0, TRUE);
+  cache_set($type . ':tdm:', $render, 'cache_tdm', time() + 3600 * 24);
+  mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+}
+
+function batire_site_summary_build_job_run($type, $tid, $nodes, $build_cache = FALSE) {
+  $keys = array('type' => $type);
+  $data = mongodb_select_one(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+  if ($data['type'] == $type) {
+    switch ($type) {
+      case 'batire_texte_officiel' :
+        foreach ($nodes as $node) {
+          $page_keys   = array('nid' => (int) $node['nid']);
+          $page_data   = mongodb_select_one(MONGODB_PAGE_COLLECTION, $page_keys);
+          $terms = _batire_site_node_get_terms((int) $node['nid']);
+          $cites = batire_antidot_export_get_cites($page_data['bid']);
+          $bid         = $page_data['bid'];
+          $title       = $page_data['title'];
+          $to_complete = isset($page_data['to_complete']) ? $page_data['to_complete'] : FALSE;
+          $to_initial = isset($page_data['jorf_summary']) ? $page_data['jorf_summary'] : FALSE;
+
+          //Filter out TO which are not indexed with at least one index "métier" (index métier = Types de bâtiments, or Corps d'état or Thème)
+          if (batire_site_texte_officiel_filter((object)$node)) {
+            $data['sub_level'][$tid]['cnt']--;
+          }
+          else {
+          // Filter out TO initial and TO complete separate pages
+          $versions = batire_hierarchy_get_versions($page_data['id'], 'TO');
+          if ($to_initial && (count($versions) == 1)) {
+            $to_initial = FALSE;
+          }
+          if ($to_initial || !($to_complete || (empty($to_complete) && $page_data['bid'] == $page_data['super_bid'])) || (isset($page_data['not_export']) && $page_data['not_export'])) {
+              $data['sub_level'][$tid]['cnt']--;
+            }
+            else {
+              if (isset($page_data['date_texte'])) {
+                $date      = $page_data['date_texte'];
+                $year      = format_date($date, 'custom', 'Y');
+                $next_year = $year + 1;
+
+                if (!isset($data['sub_level'][$tid]['sub_level'][$year])) {
+                  $data['sub_level'][$tid]['sub_level'][$year] = array(
+                    'title' => $year,
+                    'cnt'  => 1,
+                    'depublished' => 0,
+                  );
+                }
+                else {
+                  $data['sub_level'][$tid]['sub_level'][$year]['cnt']++;
+                }
+
+                $data['sub_level'][$tid]['sub_level'][$year]['sub_level'][$bid] = array(
+                  'title' => $page_data['title'],
+                  'cnt'  => 1,
+                  'depublished' => 0,
+                  'bid' => $bid,
+                  'order' => $date,
+                  'terms' => $terms,
+                  'cites' => $cites,
+                  'type' => $type,
+                );
+                batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$year]['sub_level'], 'order', TRUE);
+
+                $data['bids'][] = $bid;
+
+                if (!$node['status']) {
+                  $data['sub_level'][$tid]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$year]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$year]['sub_level'][$bid]['depublished']++;
+                }
+              }
+            }
+          }
+        }
+        ksort($data['sub_level'][$tid]['sub_level']);
+        $data['sub_level'][$tid]['sub_level'] = array_reverse($data['sub_level'][$tid]['sub_level'], TRUE);
+        break;
+      case 'batire_feuillet_mobile' :
+        foreach ($nodes as $node) {
+          $page_keys   = array('nid' => (int) $node['nid']);
+          $page_data   = mongodb_select_one(MONGODB_PAGE_COLLECTION, $page_keys);
+          $subtitle    = $page_data['subtitle'];
+          $subsubtitle = $page_data['subsubtitle'];
+          $bid         = $page_data['bid'];
+
+          $arr = explode('-', $bid);
+          $latest = (count($arr) > 2 && strlen($arr[2]) > 3) ? FALSE : TRUE;
+
+          //If latest - ok, if not - remove from lvl 2 counter
+          if ($latest || !(isset($page_data['not_export']) && $page_data['not_export'])) {
+            //add 3 lvl
+            if (!empty($subtitle)) {
+              if (!isset($data['sub_level'][$tid]['sub_level'][$subtitle])) {
+                $data['sub_level'][$tid]['sub_level'][$subtitle] = array(
+                  'title' => $subtitle,
+                  'cnt'  => 1,
+                  'depublished' => 0,
+                  'bids' => array($bid),
+                );
+              }
+              else {
+                $data['sub_level'][$tid]['sub_level'][$subtitle]['cnt']++;
+                $data['sub_level'][$tid]['sub_level'][$subtitle]['bids'][] = $bid;
+              }
+
+              //add 4 lvl
+              if (!empty($subsubtitle)) {
+                if (!isset($data['sub_level'][$tid]['sub_level'][$subtitle]['sub_level'][$subsubtitle])) {
+                  $data['sub_level'][$tid]['sub_level'][$subtitle]['sub_level'][$subsubtitle] = array(
+                    'title' => $subsubtitle,
+                    'cnt'  => 1,
+                    'depublished' => 0,
+                    'bids' => array($bid),
+                  );
+                }
+                else {
+                  $data['sub_level'][$tid]['sub_level'][$subtitle]['sub_level'][$subsubtitle]['cnt']++;
+                  $data['sub_level'][$tid]['sub_level'][$subtitle]['sub_level'][$subsubtitle]['bids'][] = $bid;
+                }
+              }
+
+              if (!$node['status']) {
+                $data['sub_level'][$tid]['depublished']++;
+                $data['sub_level'][$tid]['sub_level'][$subtitle]['depublished']++;
+                $data['sub_level'][$tid]['sub_level'][$subtitle]['sub_level'][$subsubtitle]['depublished']++;
+              }
+            }
+          }
+          else {
+            $data['sub_level'][$tid]['cnt']--;
+          }
+        }
+        break;
+      case 'batire_livres' :
+        foreach ($nodes as $node) {
+          $page_keys         = array('nid' => (int) $node['nid']);
+          $page_data         = mongodb_select_one(MONGODB_PAGE_COLLECTION, $page_keys);
+          $section_sub_title = isset($page_data['section_sub_title']) ? $page_data['section_sub_title'] : '';
+          $titre             = $page_data['titre'];
+          $part_title        = $page_data['part_title'];
+          $bid               = $page_data['bid'];
+          $struct = batire_site_summary_get_position($bid);
+
+          if (count($struct) > 1) {
+            if (isset($page_data['not_export']) && $page_data['not_export']) {
+              $data['sub_level'][$tid]['cnt']--;
+            }
+            else {
+
+//            if (isset($section_sub_title) && !empty($section_sub_title)) {
+//              //add 3 lvl
+//              if (!isset($data['sub_level'][$tid]['sub_level'][$section_sub_title])) {
+//                $data['sub_level'][$tid]['sub_level'][$section_sub_title] = array(
+//                  'title' => $section_sub_title,
+//                  'cnt'  => 1,
+//                  'depublished' => 0,
+//                  'position' => batire_site_summary_get_position($bid, $depth, $pos),
+//                  'filter' => mongodb_site_update_filter_by_bid(array($bid)),
+//                  'bids' => array($bid),
+//                );
+//                $pos--;
+//                batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'], 'position');
+//              }
+//              else {
+//                $data['sub_level'][$tid]['sub_level'][$section_sub_title]['cnt']++;
+//                $data['sub_level'][$tid]['sub_level'][$section_sub_title]['bids'][] = $bid;
+//                mongodb_site_update_filter_by_bid($data['sub_level'][$tid]['sub_level'][$section_sub_title]['bids'], $data['sub_level'][$tid]['sub_level'][$section_sub_title]['filter']);
+//              }
+//
+//              $level = &$data['sub_level'][$tid]['sub_level'][$section_sub_title]['sub_level'];
+//            }
+//            else {
+                $level = &$data['sub_level'][$tid]['sub_level'];
+  //            }
+
+              //add 4 lvl
+              if (!empty($titre)) {
+                $pos = array_pop($struct);
+                if (!isset($level[$titre])) {
+                  $level[$titre] = array(
+                    'title' => $titre,
+                    'cnt'  => 1,
+                    'depublished' => 0,
+                    'position' => $pos,
+                  );
+                  batire_site_summary_sort_by_val($level, 'position');
+                }
+                else {
+                  $level[$titre]['cnt']++;
+                }
+
+                //add 5 lvl
+                if (!empty($part_title)) {
+                  if (!isset($level[$titre]['sub_level'][$part_title])) {
+                    $pos = array_pop($struct);
+                    $level[$titre]['sub_level'][$part_title] = array(
+                      'title' => $part_title,
+                      'cnt'  => 1,
+                      'depublished' => 0,
+                      'position' => $pos,
+                    );
+                    batire_site_summary_sort_by_val($level[$titre]['sub_level'], 'position');
+                  }
+                  else {
+                    $level[$titre]['sub_level'][$part_title]['cnt']++;
+                    $level[$titre]['sub_level'][$part_title]['bids'][] = $bid;
+                  }
+
+                  $level[$titre]['sub_level'][$part_title]['sub_level'][$bid] = array(
+                    'title' => $page_data['title'],
+                    'cnt'  => 1,
+                    'depublished' => 0,
+                    'bid' => $bid,
+                  );
+
+                  $data['bids'][] = $bid;
+                }
+              }
+
+              if (!$node['status']) {
+                if (isset($section_sub_title) && !empty($section_sub_title)) {
+                  $data['sub_level'][$tid]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$section_sub_title]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$section_sub_title]['sub_level'][$titre]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$section_sub_title]['sub_level'][$titre]['sub_level'][$part_title]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$section_sub_title]['sub_level'][$titre]['sub_level'][$part_title]['sub_level'][$bid]['depublished']++;
+                }
+                else {
+                  $data['sub_level'][$tid]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$titre]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$titre]['sub_level'][$part_title]['depublished']++;
+                  $data['sub_level'][$tid]['sub_level'][$titre]['sub_level'][$part_title]['sub_level'][$bid]['depublished']++;
+                }
+              }
+            }
+          }
+        }
+        break;
+      case 'batire_texte_normatifs' :
+        foreach ($nodes as $node) {
+          $page_keys = array('nid' => (int) $node['nid']);
+          $page_data = mongodb_select_one(MONGODB_PAGE_COLLECTION, $page_keys);
+          $terms = _batire_site_node_get_terms((int) $node['nid']);
+          $cites = batire_antidot_export_get_cites($page_data['bid']);
+          $indice    = isset($page_data['indice']) ? $page_data['indice'] : '';
+          $bid       = $page_data['bid'];
+
+          if (isset($page_data['h1_gtext']) && !empty($page_data['h1_gtext'])) {
+            $title = '§ ' . $page_data['h1_gtext'];
+            if (isset($page_data['h1_titre']) && !empty($page_data['h1_titre'])) {
+              $title .=  ' - ' . $page_data['h1_titre'];
+            }
+          }
+          else {
+            if (isset($page_data['h1_titre']) && !empty($page_data['h1_titre'])) {
+              $title = $page_data['h1_titre'];
+            }
+            else {
+              $title = $page_data['title'];
+            }
+          }
+
+          //index stuff
+          $index     = TRUE;
+          //Detailed TN need to export
+          if (isset($page_data['not_export']) && $page_data['not_export']) {
+            $index = FALSE;
+          }
+
+          // Filter out Notice detaillees
+          if (isset($page_data['notice_seule']) && $page_data['notice_seule'] && empty($page_data['attached'])) {
+            $index = FALSE;
+          }
+
+          //Filter out sommaire
+          $sub_type = isset($page_data['sub_type']) ? drupal_strtolower($page_data['sub_type']) : '';
+          // Set specific title for prebody
+          if ($sub_type == 'prebody') {
+            $title = 'Généralités';
+          }
+
+          if (!$index) {
+            $data['sub_level'][$tid]['cnt']--;
+          }
+          else {
+            if (!empty($indice)) {
+              switch ($tid) {
+                case 115: //NF DTU
+                  if ($sub_type == 'prebody') {
+                    $title = $page_data['title'];
+                  }
+                  elseif($sub_type == 'summary') {
+                    $title = '';
+                  }
+                  if(!empty($page_data['reference']) && $title == $page_data['title']) {
+                    $second_order = 0;
+                    preg_match("/DTU\s(\d+)(?:\.(\d+))?(?:.+P(\d+))?(?:-(\d+))?(?:-(\d+))?/i", $page_data['reference'], $matches);
+                    if(!empty($matches[1])) {
+                      $ref_id  = $matches[1];
+                      $second_order = (int) $matches[1] * 10000000000000000;
+                      if(!empty($matches[2])) {
+                        $second_order += (int) $matches[2] * 1000000000000;
+                      }
+                      if(!empty($matches[3])) {
+                        $second_order += (int) $matches[3] * 100000000;
+                      }
+                      if(!empty($matches[4])) {
+                        $second_order += (int) $matches[4] * 10000;
+                      }
+                      if(!empty($matches[5])) {
+                        $second_order += (int) $matches[5];
+                      }
+                    }
+                    else {
+                      $ref_id = $page_data['reference'];
+
+                      if(isset($data['sub_level'][$tid]['ref_id_reference_key'][$ref_id]['key'])) {
+                        $second_order = $data['sub_level'][$tid]['ref_id_reference_key'][$ref_id]['second_order'];
+                        $ref_id = $data['sub_level'][$tid]['ref_id_reference_key'][$ref_id]['key'];
+                      }
+                      else {
+                        $title_ref_id = FALSE;
+                        preg_match("/DTU\s(\d+)(?:\.(\d+))?/i", $page_data['title'], $matches_title);
+                        if(!empty($matches_title[1])) {
+                          $title_ref_id = $matches_title[1];
+                          $second_order = (int) $matches_title[1] * 10000000000000000;
+                          if(!empty($matches_title[2])) {
+                            $second_order += (int) $matches_title[2] * 1000000000000;
+                          }
+                        }
+                        if($title_ref_id) {
+                          preg_match("/P(\d+)(?:-(\d+))?(?:-(\d+))?/i", $page_data['reference'], $matches);
+                          if(!empty($matches[1])) {
+                            $second_order += (int) $matches[1] * 100000000;
+                          }
+                          if(!empty($matches[2])) {
+                            $second_order += (int) $matches[2] * 10000;
+                          }
+                          if(!empty($matches[3])) {
+                            $second_order += (int) $matches[3];
+                          }
+                          $data['sub_level'][$tid]['ref_id_reference_key'][$ref_id]['second_order'] = $second_order;
+                          $data['sub_level'][$tid]['ref_id_reference_key'][$ref_id]['key'] = $title_ref_id;
+                          $ref_id = $title_ref_id;
+                        }
+                        else {
+                          $order_arr = explode('-', $bid);
+                          $order = ($sub_type == 'prebody') ? -1 : array_pop($order_arr);
+                          $data['sub_level'][$tid]['ref_id_reference_key'][$ref_id]['nodes'][$bid] = array(
+                            'title' => $page_data['reference'] . ' - ' . $title,
+                            'cnt'  => 1,
+                            'depublished' => 0,
+                            'bid' => $bid,
+                            'order' => $order,
+                            'terms' => $terms,
+                            'cites' => $cites,
+                            'type' => $type,
+                          );
+                          $ref_id = FALSE;
+                        }
+                      }
+                    }
+                    
+                    if($ref_id) {
+                      //lvl2
+                      if (!isset($data['sub_level'][$tid]['sub_level'][$ref_id])) {
+                        $ref_name = db_result(db_query("SELECT name FROM {term_data} td
+                          RIGHT JOIN {term_fields_term} tft ON tft.tid = td.tid WHERE tft.nf_dtu_number_value = '%s'", $ref_id));
+                        if(!$ref_name) {
+                          $ref_name = $ref_id;
+                        }
+                        $data['sub_level'][$tid]['sub_level'][$ref_id] = array(
+                          'title' => $ref_name,
+                          'cnt'  => 1,
+                          'depublished' => 0,
+                          'order' => $ref_id,
+                        );
+                        $data['sub_level'][$tid]['sub_level'][$ref_id]['bids'][] = $bid;
+                        batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'], 'order');
+                      }
+                      else {
+                        $data['sub_level'][$tid]['sub_level'][$ref_id]['cnt']++;
+                        $data['sub_level'][$tid]['sub_level'][$ref_id]['bids'][] = $bid;
+                      }
+
+                      //lvl3
+                      $order_arr = explode('-', $bid);
+                      $order = ($sub_type == 'prebody') ? -1 : array_pop($order_arr);
+                      $data['sub_level'][$tid]['sub_level'][$ref_id]['sub_level'][$bid] = array(
+                        'title' => $page_data['reference'] . ' - ' . $title,
+                        'cnt'  => 1,
+                        'depublished' => 0,
+                        'bid' => $bid,
+                        'order' => $order,
+                        'second_order' => (string)$second_order,
+                        'terms' => $terms,
+                        'cites' => $cites,
+                        'type' => $type,
+                      );
+                      
+                      // added to summary nodes with reference without dtu 
+                      if(isset($data['sub_level'][$tid]['ref_id_reference_key'][$page_data['reference']]['nodes'])) {
+                        foreach($data['sub_level'][$tid]['ref_id_reference_key'][$page_data['reference']]['nodes'] as $ref_node) {
+                          $data['sub_level'][$tid]['sub_level'][$ref_id]['sub_level'][$ref_node['bid']] = $ref_node;
+                          $ref_node['second_order'] = (string)$second_order;
+                          $data['bids'][] = $ref_node['bid'];
+                          $data['sub_level'][$tid]['sub_level'][$ref_id]['bids'][] = $ref_node['bid'];
+                        }
+                        unset($data['sub_level'][$tid]['ref_id_reference_key'][$page_data['reference']]['nodes']);
+                      }
+
+                      batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$ref_id]['sub_level'], 'second_order');
+                      $sorter = array();
+                      foreach ($data['sub_level'][$tid]['sub_level'][$ref_id]['sub_level'] as $ii => $va) {
+                        $sorter[$va['second_order']][$ii] = $va;
+                      }
+                      $ret = array();
+                      foreach ($sorter as $arr) {
+                        batire_site_summary_sort_by_val($arr, 'order');
+                        $ret = array_merge($ret, $arr);
+                      }
+                      $data['sub_level'][$tid]['sub_level'][$ref_id]['sub_level'] = $ret;
+
+                      $data['bids'][] = $bid;
+                    }
+                  }
+
+                  break;
+             
+                case 116: //NORMES
+                  //lvl2
+                  $ind_l1    = substr($indice, 0, 1);
+                  $indice_l1 = batire_site_summary_get_indice_name($ind_l1);
+                  if ($indice_l1) {
+                    $indice_l1_name = $indice_l1['name'];
+                    $indice_l1_tid  = $indice_l1['tid'];
+                    if (!isset($data['sub_level'][$tid]['sub_level'][$indice_l1_tid])) {
+                      $data['sub_level'][$tid]['sub_level'][$indice_l1_tid] = array(
+                        'title' => $ind_l1 . ' - ' . $indice_l1_name,
+                        'cnt'  => 1,
+                        'depublished' => 0,
+                        'order' => $ind_l1,
+                      );
+                      batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'], 'order');
+                    }
+                    else {
+                      $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['cnt']++;
+                      $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['bids'][] = $bid;
+                    }
+
+                    //lvl3
+                    $ind_l2    = substr($indice, 0, 2);
+                    $indice_l2 = batire_site_summary_get_indice_name($ind_l2);
+                    if ($indice_l2) {
+                      $indice_l2_name = $ind_l2 . ' - ' . $indice_l2['name'];
+                      $indice_l2_tid  = $indice_l2['tid'];
+                      if (!isset($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid])) {
+                        $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid] = array(
+                          'title' => $indice_l2_name,
+                          'cnt'  => 1,
+                          'depublished' => 0,
+                          'order' => $ind_l2,
+                        );
+                        batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'], 'order');
+                      }
+                      else {
+                        $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['cnt']++;
+                        $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['bids'][] = $bid;
+                      }
+                      $data['bids'][] = $bid;
+                      //lvl4
+                      $ind_l3    = substr($indice, 0, 3);
+                      $indice_l3 = batire_site_summary_get_indice_name($ind_l3);
+                      if ($indice_l3) {
+                        $indice_l3_name = $indice_l3['name'];
+                        $indice_l3_tid  = $indice_l3['tid'];
+                        if (!isset($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid])) {
+                          $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid] = array(
+                            'title' => $ind_l3 . ' - ' . $indice_l3_name,
+                            'cnt'  => 1,
+                            'depublished' => 0,
+                            'order' => $ind_l3,
+                          );
+                          batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'], 'order');
+                        }
+                        else {
+                          $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['cnt']++;
+                          $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['bids'][] = $bid;
+                        }
+
+                        if (!empty($page_data['reference']) && !empty($page_data['title'])) {
+                          $ref_id  = str_replace(' ', '_', $page_data['reference']);
+                          if (!isset($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'][$ref_id])) {
+                            $first_part_bid = batire_site_get_bid_of_first_texte_normatifs_part($page_data['super_bid']);
+                            $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'][$ref_id] = array(
+                              'title' => $page_data['reference'] . ' - ' . $page_data['title'],
+                              'cnt'  => 1,
+                              'depublished' => 0,
+                              'order' => $ref_id,
+                              'bid' => $first_part_bid['bid'],
+                            );
+                            batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'], 'order');
+                          }
+                          else {
+                            $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'][$ref_id]['cnt']++;
+                            $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'][$ref_id]['bids'][] = $bid;
+                          }
+                          /*
+                          $order_arr = explode('-', $bid);
+                          $order = ($sub_type == 'prebody') ? -1 : array_pop($order_arr);
+                          $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'][$ref_id]['sub_level'][$bid] = array(
+                            'title' => $title,
+                            'cnt'  => 1,
+                            'depublished' => 0,
+                            'bid' => $bid,
+                            'order' => $order,
+                            'terms' => $terms,
+                            'cites' => $cites,
+                            'type' => $type,
+                          );
+                          batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'][$ref_id]['sub_level'], 'order');*/
+                        }
+                        else {
+                          $order_arr = explode('-', $bid);
+                          $order = ($sub_type == 'prebody') ? -1 : array_pop($order_arr);
+                          $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'][$bid] = array(
+                            'title' => $title,
+                            'cnt'  => 1,
+                            'depublished' => 0,
+                            'bid' => $bid,
+                            'order' => $order,
+                            'terms' => $terms,
+                            'cites' => $cites,
+                            'type' => $type,
+                          );
+                          batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$indice_l3_tid]['sub_level'], 'order');
+                        }
+
+                        $data['bids'][] = $bid;
+                      }
+                      else {
+                        if (!isset($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$ref_id])) {
+                          $order_arr = explode('-', $bid);
+                          $order = ($sub_type == 'prebody') ? -1 : array_pop($order_arr);
+                          $first_part_bid = batire_site_get_bid_of_first_texte_normatifs_part($page_data['super_bid']);
+                          $data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'][$ref_id] = array(
+                            'title' => $page_data['reference'] . ' - ' . $page_data['title'],
+                            'cnt'  => 1,
+                            'depublished' => 0,
+                            'bid' => $first_part_bid['bid'],
+                            'order' => $order,
+                            'terms' => $terms,
+                            'cites' => $cites,
+                            'type' => $type,
+                          );
+                          batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$indice_l1_tid]['sub_level'][$indice_l2_tid]['sub_level'], 'order');
+
+                          $data['bids'][] = $bid;
+                        }
+                      }
+                    }
+                  }
+
+                  break;
+                case 114: //EUROCODES
+                  //lvl2
+                  $e_code     = trim(substr($page_data['title'], 0, 11));
+                  $e_code_cnt = trim(substr($page_data['title'], 8, 2));
+
+                  if (drupal_strtoupper(substr($e_code, 0, 8)) != 'EUROCODE') {
+                    $e_code = 'OTHER';
+                    $e_code_cnt = 9999;
+                  }
+
+                  if (is_numeric($e_code_cnt)) {
+                    $e_code_cnt = (int) $e_code_cnt;
+                  }
+                  else {
+                    $e_code_arr = explode(' ', $page_data['title']);
+                    $e_code = substr($e_code_arr[0], 0, 8) . ' 0';
+                    $e_code_cnt = 0;
+                  }
+
+                  $e_codes = array(
+                    0 => t("Eurocode 0: Bases de calcul des structures (EN 1990)"),
+                    1 => t("Eurocode 1: Actions sur les structures (EN 1991)"),
+                    2 => t("Eurocode 2: Calcul des structures en béton (EN 1992)"),
+                    3 => t("Eurocode 3: Calcul des structures en acier (EN 1993)"),
+                    4 => t("Eurocode 4: Calcul des structures mixtes acier-béton (EN 1994)"),
+                    5 => t("Eurocode 5: Conception et calcul des structures en bois (EN 1995)"),
+                    6 => t("Eurocode 6: Calcul des ouvrages en maçonnerie (EN 1996)"),
+                    7 => t("Eurocode 7: Calcul géotechnique (EN 1997)"),
+                    8 => t("Eurocode 8: Calcul des structures pour leur résistance aux séismes (EN 1998)"),
+                    9 => t("Eurocode 9: Calcul des structures en aluminium (EN 1999)"),
+                    9999 => t("Eurocode Other:")
+                  );
+
+                  $e_code_s = str_replace(' ', '_', $e_code);
+                  if (!isset($data['sub_level'][$tid]['sub_level'][$e_code_s])) {
+                    $data['sub_level'][$tid]['sub_level'][$e_code_s] = array(
+                      'title' => isset($e_codes[$e_code_cnt]) ? $e_codes[$e_code_cnt] : $e_codes[9999],
+                      'cnt'  => 1,
+                      'depublished' => 0,
+                      'order' => $e_code_cnt,
+                    );
+                    batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'], 'order');
+                  }
+                  else {
+                    $data['sub_level'][$tid]['sub_level'][$e_code_s]['cnt']++;
+                    $data['sub_level'][$tid]['sub_level'][$e_code_s]['bids'][] = $bid;
+                  }
+
+                  //lvl3
+                  $ref_id  = str_replace(' ', '_', $page_data['title']);
+                  $order = array();
+                  preg_match('/Partie_((\d)+(-(\d)+)?)_:/', $ref_id, $order);
+                  $first_part_bid = batire_site_get_bid_of_first_texte_normatifs_part($page_data['super_bid']);
+                  if (!isset($data['sub_level'][$tid]['sub_level'][$e_code_s]['sub_level'][$ref_id])) {
+                    $data['sub_level'][$tid]['sub_level'][$e_code_s]['sub_level'][$ref_id] = array(
+                      'title' => $page_data['title'],
+                      'cnt'  => 1,
+                      'depublished' => 0,
+                      'order' => $order[1],
+                      'cites' => $cites,
+                      'bid' => $first_part_bid['bid'],
+                    );
+                    batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$e_code_s]['sub_level'], 'order', FALSE, TRUE);
+                  }
+                  else {
+                    $data['sub_level'][$tid]['sub_level'][$e_code_s]['sub_level'][$ref_id]['cnt']++;
+                    $data['sub_level'][$tid]['sub_level'][$e_code_s]['sub_level'][$ref_id]['bids'][] = $bid;
+                  }
+
+                  /*//lvl4
+                  $order_arr = explode('-', $bid);
+                  $order     = array_pop($order_arr);
+                  $e_title   = (!empty($page_data['h1_gtext'])) ? '§' . $page_data['h1_gtext'] . ' - ' : '';
+                  $data['sub_level'][$tid]['sub_level'][$e_code_s]['sub_level'][$ref_id]['sub_level'][$bid] = array(
+                    'title' => (!empty($page_data['h1_titre'])) ? $e_title . $page_data['h1_titre'] : 'Sans titre',
+                    'cnt'  => 1,
+                    'depublished' => 0,
+                    'bid' => $bid,
+                    'order' => $order,
+                    'terms' => $terms,
+                    'cites' => $cites,
+                    'type' => $type,
+                  );*/
+
+                  batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'][$e_code_s]['sub_level'][$ref_id]['sub_level'], 'order');
+                  $data['bids'][] = $bid;
+
+                  break;
+                case 117: //REGLES DE CALCUL
+                  //lvl2
+                  if (!empty($page_data['reference']) && !empty($page_data['title'])) {
+                    $ref_id  = str_replace(' ', '_', $page_data['reference']);
+                    if (!isset($data['sub_level'][$tid]['sub_level'][$ref_id])) {
+                      $first_part_bid = batire_site_get_bid_of_first_texte_normatifs_part($page_data['super_bid']);
+                      $data['sub_level'][$tid]['sub_level'][$ref_id] = array(
+                        'title' => $page_data['reference'] . ' - ' . $page_data['title'],
+                        'cnt'  => 1,
+                        'bid' => $first_part_bid['bid'],
+                        'cites' => $cites,
+                        'depublished' => 0,
+                        'order' => $ref_id,
+                      );
+                      batire_site_summary_sort_by_val($data['sub_level'][$tid]['sub_level'], 'order');
+                    }
+                    else {
+                      $data['sub_level'][$tid]['sub_level'][$ref_id]['cnt']++;
+                      $data['sub_level'][$tid]['sub_level'][$ref_id]['bids'][] = $bid;
+                    }
+
+                    /*$data['sub_level'][$tid]['sub_level'][$ref_id]['sub_level'][$bid] = array(
+                      'title' => $title,
+                      'cnt'  => 1,
+                      'depublished' => 0,
+                      'bid' => $bid,
+                      'terms' => $terms,
+                      'cites' => $cites,
+                      'type' => $type,
+                    );*/
+                  }
+                  else {
+                    $data['sub_level'][$tid]['sub_level'][$bid] = array(
+                      'title' => $title,
+                      'cnt'  => 1,
+                      'depublished' => 0,
+                      'bid' => $bid,
+                      'terms' => $terms,
+                      'cites' => $cites,
+                      'type' => $type,
+                    );
+                  }
+
+                  $data['bids'][] = $bid;
+
+                  break;
+              }
+            }
+          }
+        }
+        break;
+      case 'batire_codes' :
+        foreach ($nodes as $node) {
+          $page_keys         = array('nid' => (int) $node['nid']);
+          $page_data         = mongodb_select_one(MONGODB_PAGE_COLLECTION, $page_keys);
+          $terms = _batire_site_node_get_terms((int) $node['nid']);
+          $cites = batire_antidot_export_get_cites($page_data['bid']);
+          $bid               = $page_data['bid'];
+          $level             = &$data['sub_level'][$tid]['sub_level'];
+
+          $index = TRUE;
+
+          if (isset($page_data['not_export']) && $page_data['not_export']) {
+            $index = FALSE;
+          }
+
+          //Filter out Codes from this array
+          $codes = array(
+            'LEGITEXT000006074069', 'LEGITEXT000006073984', 'LEGITEXT000006074234', 'LEGITEXT000006070721',
+            'LEGITEXT000005634379', 'LEGITEXT000006069441', 'LEGITEXT000006070162', 'LEGITEXT000006069565',
+            'LEGITEXT000006070208', 'LEGITEXT000006074237', 'LEGITEXT000006071570', 'LEGITEXT000006071191',
+            'LEGITEXT000006070239', 'LEGITEXT000006074224', 'LEGITEXT000006071514',
+            'LEGITEXT000006070299', 'LEGITEXT000006070633', 'LEGITEXT000006069577', 'LEGITEXT000006069568',
+            'LEGITEXT000006069569', 'LEGITEXT000006069574', 'LEGITEXT000006069576', 'LEGITEXT000006070249',
+            'LEGITEXT000006070933', 'LEGITEXT000006069562', 'LEGITEXT000006069564', 'LEGITEXT000006072666',
+            'LEGITEXT000006071785', 'LEGITEXT000006072026', 'LEGITEXT000006074236',
+            'LEGITEXT000006070719', 'LEGITEXT000006071029', 'LEGITEXT000006070987', 'LEGITEXT000006070680',
+            'LEGITEXT000006070716', 'LEGITEXT000006071154', 'LEGITEXT000006069414', 'LEGITEXT000006074228',
+            'LEGITEXT000006074947', 'LEGITEXT000006071366', 'LEGITEXT000006071367', /*'LEGITEXT000006072665',*/
+            'LEGITEXT000006073189', 'LEGITEXT000006071318', 'LEGITEXT000006074073', /*'LEGITEXT000006072050',*/
+            'LEGITEXT000006071344', /*'LEGITEXT000006070667'*/
+          );
+
+          if (in_array($page_data['super_id'], $codes)) {
+            $index = FALSE;
+          }
+
+          //Filter out Codes to_complete
+          if (isset($page_data['to_complete']) && $page_data['to_complete']) {
+            $index = FALSE;
+          }
+
+          //Indexing only fresh version, so get fresh version id
+          if (isset($page_data['versions']) && $page_data['versions']) {
+            $fresh = '';
+            foreach ($page_data['versions'] as $version) {
+              if (drupal_strtoupper($version['etat']) == 'VIGUEUR') {
+                $fresh = $version['id'];
+                break;
+              }
+            }
+            if ($page_data['id'] != $fresh) {
+              $index = FALSE;
+            }
+          }
+
+          if (!$node['status']) {
+            $index = FALSE;
+          }
+
+          if ($index) {
+            if (isset($page_data['persistent']['trail']) && count($page_data['persistent']['trail'])) {
+              unset($page_data['persistent']['trail'][0]);
+              foreach ($page_data['persistent']['trail'] as $sub_lvl) {
+                $title = $sub_lvl['title'];
+                if (!isset($level[$title])) {
+                  $level[$title] = array(
+                    'title' => $title,
+                    'cnt'  => 1,
+                    'bid' => $sub_lvl['bid'],
+                    'type' => $sub_lvl['type'],
+                    'position' => $sub_lvl['position'],
+                    'depublished' => 0,
+                  );
+                  batire_site_summary_sort_by_val($level, 'position');
+                }
+                else {
+                  $level[$title]['cnt']++;
+                }
+
+                $level = &$level[$title]['sub_level'];
+              }
+
+              if($page_data['title'] == $page_data['num_art']) {
+                preg_match_all('/(\S+(?:\*|\.|\s)?(?:[\d]+\-?\s?)+)/i', $page_data['num_art'], $nums);
+                if($nums) {
+                  $num = array_pop($nums);
+                  if(is_array($num)) {
+                    $num = array_pop($num);
+                  }
+                }
+                else {
+                  $num = $page_data['num_art'];
+                }
+              }
+              else {
+                $num = $page_data['num_art'];
+              }
+              $level[$bid] = array(
+                'title' => $page_data['title'],
+                'cnt'  => 1,
+                'depublished' => 0,
+                'bid' => $bid,
+                'terms' => $terms,
+                'cites' => $cites,
+                'type' => $type,
+                'num' => $num,
+                'position' => $sub_lvl['position'],
+              );
+              batire_site_summary_sort_by_val($level, 'title', FALSE, TRUE);
+
+              $data['bids'][] = $bid;
+            }
+          }
+          else {
+            $data['sub_level'][$tid]['depublished']++;
+          }
+        }
+        
+        if(isset($data['sub_level'])) {
+          batire_site_summary_code_title_recursive($data['sub_level']);
+        }
+        break;
+      case 'batire_complement_technique' :
+        foreach ($nodes as $node) {
+          $page_keys         = array('nid' => (int) $node['nid']);
+          $page_data         = mongodb_select_one(MONGODB_PAGE_COLLECTION, $page_keys);
+          $terms = _batire_site_node_get_terms((int) $node['nid']);
+          $bid               = $page_data['bid'];
+          $puration          = '';
+
+          if (isset($page_data['num_puration']) && isset($page_data['date_puration']) && !empty($page_data['num_puration']) && !empty($page_data['date_puration'])) {
+            $date      = $page_data['date_puration'];
+            $text_date     = drupal_ucfirst(date_format_date(date_make_date($date, NULL, 'date'), 'custom', 'F Y'));
+            $text_date_lvl = drupal_ucfirst(date_format_date(date_make_date($date, NULL, 'date'), 'custom', 'Ym'));
+            $puration      = '№' . (int) $page_data['num_puration'] . ' - ' . $text_date;
+            $puration_lvl  = $text_date_lvl . $page_data['num_puration'];
+          }
+
+          if (!(isset($page_data['not_export']) && $page_data['not_export']) || $node['status'] || !empty($puration)) {
+            //add 2 lvl
+            if (!isset($data['sub_level'][$puration_lvl])) {
+              $data['sub_level'][$puration_lvl] = array(
+                'title' => $puration,
+                'cnt'  => 1,
+                'depublished' => 0,
+              );
+
+              ksort($data['sub_level']);
+              $data['sub_level'] = array_reverse($data['sub_level'], TRUE);
+            }
+            else {
+              $data['sub_level'][$puration_lvl]['cnt']++;
+            }
+
+            //add 3 lvl
+            $data['sub_level'][$puration_lvl]['sub_level'][$bid] = array(
+              'title' => $page_data['title'],
+              'cnt'  => 1,
+              'depublished' => 0,
+              'bid' => $bid,
+              'terms' => $terms,
+              'type' => $type,
+            );
+
+            $data['bids'][] = $bid;
+          }
+          else {
+            $data['depublished']++;
+          }
+        }
+
+        break;
+      case 'batire_actualite' :
+        foreach ($nodes as $node) {
+          $page_keys         = array('nid' => (int) $node['nid']);
+          $page_data         = mongodb_select_one(MONGODB_PAGE_COLLECTION, $page_keys);
+          $terms = _batire_site_node_get_terms((int) $node['nid']);
+          $bid               = $page_data['bid'];
+          $puration          = '';
+
+          //if document older than 6 month
+          $from =  strtotime('- 6 month');
+          if ($page_data['date_document'] > $from) {
+            if (!(isset($page_data['not_export']) && $page_data['not_export']) || $node['status'] || !empty($puration)) {
+              if (isset($page_data['support']) && isset($page_data['titre']) && !empty($page_data['support']) && !empty($page_data['titre'])) {
+                $support_lv = str_replace(' ', '_', $page_data['support']);
+                //add 2 lvl
+                if (!isset($data['sub_level'][$support_lv])) {
+                  $node_taxonomy = taxonomy_node_get_terms_by_vocabulary((object) $node, BATIRE_SITE_VID_SUPPORT);
+                  $data['sub_level'][$support_lv] = array(
+                    'title' => count($node_taxonomy) ? array_shift($node_taxonomy)->name : $page_data['support'],
+                    'cnt' => 1,
+                    'depublished' => 0,
+                  );
+
+                  batire_site_summary_sort_by_val($data['sub_level'], 'title');
+                } else {
+                  $data['sub_level'][$support_lv]['cnt']++;
+                }
+
+                //add 3 lvl
+                $data['sub_level'][$support_lv]['sub_level'][$bid] = array(
+                  'title' => $page_data['titre'],
+                  'cnt' => 1,
+                  'depublished' => 0,
+                  'bid' => $bid,
+                  'terms' => $terms,
+                  'type' => $type,
+                );
+
+                $data['bids'][] = $bid;
+              } else {
+                $data['depublished']++;
+              }
+            } else {
+              $data['depublished']++;
+            }
+          } else {
+            $data['depublished']++;
+          }
+        }
+
+        break;
+      case 'batire_document_reference' :
+        foreach ($nodes as $node) {
+
+          $page_keys   = array('nid' => (int) $node['nid']);
+          $page_data   = mongodb_select_one(MONGODB_PAGE_COLLECTION, $page_keys);
+          $bid         = $page_data['bid'];
+
+          //add 3 lvl
+          if (isset($page_data['sous_type']) && !isset($page_data['rubrique'])) {
+              $data['sub_level'][$page_data['sous_type']['tid']]['sub_level'][$page_data['titre']] = array(
+                'title' => $page_data['titre'],
+                'cnt' => 1,
+                'depublished' => 0,
+                'bid' => $bid,
+                'bids' => array($bid),
+              );
+              $data['sub_level'][$page_data['sous_type']['tid']]['cnt']++;
+              $data['sub_level'][$page_data['sous_type']['tid']]['bids'][] = $bid;
+          }
+          elseif (isset($page_data['sous_type']) && isset($page_data['rubrique'])) {
+            //add 4 lvl
+            $data['sub_level'][$page_data['sous_type']['tid']]['sub_level'][$page_data['rubrique']['tid']]['sub_level'][$page_data['titre']] = array(
+              'title' => $page_data['titre'],
+              'cnt' => 1,
+              'depublished' => 0,
+              'bid' => $bid,
+              'bids' => array($bid),
+            );
+            $data['sub_level'][$page_data['sous_type']['tid']]['cnt']++;
+            $data['sub_level'][$page_data['sous_type']['tid']]['sub_level'][$page_data['rubrique']['tid']]['cnt']++;
+            $data['sub_level'][$page_data['sous_type']['tid']]['sub_level'][$page_data['rubrique']['tid']]['bids'][] = $bid;
+          }
+
+          if (!$node['status']) {
+            $data['cnt']['depublished']++;
+            $data['sub_level'][$page_data['sous_type']['tid']]['depublished']++;
+            $data['sub_level'][$page_data['sous_type']['tid']]['sub_level'][$page_data['titre']]['depublished']++;
+            $data['sub_level'][$page_data['sous_type']['tid']]['sub_level'][$page_data['rubrique']['tid']]['depublished']++;
+          }
+        }
+        break;
+    }
+    mongodb_update(MONGODB_SITE_SUMMARY_COLLECTION, $keys, $data);
+
+  /*
+   * Texte Normatifs and Codes have a special process of TDM building
+   * Codes: each second levels is building singly by tid from Codes types vocabulary (see function mongodb_site_recreate_summary)
+   * Texte Normatifs: each first levels is building exaclty like in Codes (see function mongodb_site_recreate_summary)
+   *
+   * We've added tid to cache key as solution
+   */
+    if ($build_cache) {
+      //generate cache for anonymous and full base users
+      $anonymous = user_load(0);
+      $render = batire_site_get_tdm_section($type, $data, $tid, $anonymous, NULL, 0, TRUE);
+      cache_set($type . ':tdm:' . $tid, $render, 'cache_tdm', time() + 3600 * 24);
+    }
+  }
+}
+
+function batire_site_summary_code_title_recursive(&$data) {
+  $start = $finish = false;
+  foreach($data as $key => &$data_item) {
+    if(isset($data_item['sub_level'])) {
+      $result = batire_site_summary_code_title_recursive($data_item['sub_level']);
+      if(!$start) {
+        $start = $result['start'];
+      }
+      $finish = $result['finish'];
+      if(!isset($data_item['base_title'])) {
+        $data_item['base_title'] = $data_item['title'];
+      }
+      else {
+        $data_item['title'] = $data_item['base_title'];
+      }
+      if($result['start'] == $result['finish']) {
+        $data_item['title'] .= ' (Article ' . $result['start'] . ')';
+      }
+      else {
+        $data_item['title'] .= ' (Articles ' . $result['start'] . ' à ' . $result['finish'] . ')';
+      }
+    }
+    else {
+      if(!$start) {
+        $start = $data_item['num'];
+      }
+      $finish = $data_item['num'];
+    }
+  }
+  
+  return array(
+    'start' => $start,
+    'finish' => $finish,
+  );
+}
+
+//Filter out TO which are not indexed with at least one index "métier" (index métier = Types de bâtiments, or Corps d'état or Thème)
+//see task #53051
+function batire_site_texte_officiel_filter($node) {
+  $sql = 'SELECT n.nid as nid FROM node as n
+          JOIN term_node as tn ON n.nid = tn.nid
+          JOIN term_data as td ON tn.tid = td.tid
+          WHERE n.nid = %d AND tn.tid IN (SELECT tid FROM term_data WHERE vid IN (' . BATIRE_SITE_VID_BATIMENT .', ' . BATIRE_SITE_VID_CORPS . ', ' . BATIRE_SITE_VID_THEMES . '))
+          GROUP BY n.nid';
+  $result = db_result(db_query($sql, $node->nid));
+
+  if (!$result) {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+function batire_site_summary_in_tdm($bid) {
+  $page = mongodb_page_get_page_by_bid($bid);
+  $node = node_load($page['nid']);
+
+  if ($node->nid) {
+    $keys = array('type' => $node->type);
+    $data = mongodb_select_one(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+
+    if ($node->type == BATIRE_SITE_CT_FM) {
+      $bid = $data['bid'];
+
+      $arr    = explode('-', $bid);
+      $latest = (count($arr) > 2 && strlen($arr[2]) > 3) ? FALSE : TRUE;
+
+      if ($latest || !(isset($node->page_data['not_export']) && $node->page_data['not_export'])) {
+        return TRUE;
+      }
+    }
+
+    if ($node->type == BATIRE_SITE_CT_LIVRE) {
+      if (!(isset($node->page_data['not_export']) && $node->page_data['not_export'])) {
+        return TRUE;
+      }
+    }
+
+    if (is_array($data) && isset($data['bids'])) {
+      if (in_array($bid, $data['bids'])) {
+        return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
+}
+/*
+ * Implementation Ajax response function of TDM
+ * Cached TDM for common case and by each users with assigned products
+ */
+function batire_site_summary_js() {
+  global $user;
+  if (!$replace_user = batire_gc_ip_replace_user()) {
+    $replace_user = $user;
+  }
+
+  $message = array(
+    'status' => 0,
+    'message' => ''
+  );
+
+  $type = batire_site_check_text($_POST['type']);
+  $tid  = '';
+
+  $type_p = explode(':', $type);
+
+  if ($type_p[0] == BATIRE_SITE_CT_TN || $type_p[0] == BATIRE_SITE_CT_CODE) {
+    $type = $type_p[0];
+    $tid  = $type_p[1];
+  }
+
+  $keys = array('type' => $type);
+  $data = mongodb_select_one(MONGODB_SITE_SUMMARY_COLLECTION, $keys);
+  $demo = $_POST['demo'];
+  if (isset($data['sub_level']) && module_exists('batire_user_products') && (batire_user_products_should_filter($replace_user->uid) || $demo)) {
+    $products = $_POST['products'];
+    if ($products[0]) {
+      foreach ($products as $key => $value) {
+        $products[$key] = array('nid' => $value);
+      }
+      _batire_site_summary_filter_products($data['sub_level'], NULL, $products, $_POST['remove']);
+    }
+    else {
+      _batire_site_summary_filter_products($data['sub_level'], $replace_user->uid, NULL, $_POST['remove']);
+    }
+  }
+
+  if (isset($data['type'])) {
+    $message = batire_site_get_tdm_section($type, $data, $tid, $replace_user, $demo, $_POST['remove']);
+  }
+
+  ob_start('ob_gzhandler');
+  drupal_json($message);
+}
+
+/*
+ * Implementation function
+ * get sections of each documents types of TDM
+ */
+function batire_site_get_tdm_section($type, $data, $tid, $user, $demo, $remove, $auto_cache_generation = FALSE) {
+  /*
+   * Check what cache we need to choose
+   * With removed sub levels or not
+   */
+  if ($remove) {
+    $hierarchy = cache_get($type . '_' . $user->uid . ':tdm:' . $tid, 'cache_tdm');
+  } else {
+    $hierarchy = cache_get($type . ':tdm:' . $tid, 'cache_tdm');
+  }
+  if ($hierarchy && $user->uid != 1) {
+    $render = $hierarchy->data['message'];
+
+    if ($render) {
+      $message['status'] = 1;
+      $message['message'] = $render;
+    }
+    return $message;
+  }
+  else {
+    switch ($type) {
+      case BATIRE_SITE_CT_TN:
+        if (isset($data['sub_level'][$tid]) && $data['sub_level'][$tid]['cnt'] > 0) {
+          if ($tid == 115) {
+            $render = _batire_site_render_summary_level($data['sub_level'][$tid], 0, $tid, TRUE, BATIRE_SITE_CT_TN . ':' . $tid, TRUE, FALSE, TRUE, $demo);
+          } else {
+            $render = _batire_site_render_summary_level($data['sub_level'][$tid], 0, $tid, TRUE, BATIRE_SITE_CT_TN . ':' . $tid, TRUE, FALSE, FALSE, $demo);
+          }
+          if ($render['html']) {
+            $message['status'] = 1;
+            $message['message'] = $render['html'];
+          }
+        }
+        break;
+
+      case BATIRE_SITE_CT_CODE:
+
+        $render = _batire_site_render_summary_level($data['sub_level'][$tid], 0, $tid, TRUE, '', TRUE, FALSE, FALSE, $demo, NULL, $auto_cache_generation);
+
+        if ($render['html']) {
+          $message['status'] = 1;
+          $message['message'] = $render['html'];
+        }
+        break;
+
+      default :
+        $tid = _batire_site_ct_tid_map($type, TRUE);
+        $render = _batire_site_render_summary_level($data, 0, $tid, TRUE, '', TRUE, TRUE, FALSE, $demo);
+        if ($render['html']) {
+          $message['status'] = 1;
+          $message['message'] = $render['html'];
+        }
+        break;
+    }
+    if ($user->uid != 1 && $remove) {//build cache by users only for Limit TDM
+      cache_set($type . '_' . $user->uid . ':tdm:' . $tid, $render, 'cache_tdm', time() + 3600 * 24);
+    }
+    return $message;
+  }
+}
+
+/*
+ * Ajax callback for updating trail of Codes
+ */
+function batire_site_update_codes_trail() {
+  $sql = 'SELECT * FROM {batire_codes_trail} WHERE bid ="%s" LIMIT 1';
+  if (!db_result(db_query($sql, $_POST['bid']))) {
+    db_query('INSERT INTO {batire_codes_trail} SET bid = "%s", active = %d', $_POST['bid'], ($_POST['active'] == 'false') ? 1 : 0);
+  }
+  else {
+    $result = db_query('UPDATE {batire_codes_trail} SET active = %d WHERE bid = "%s"', ($_POST['active'] == 'false') ? 1 : 0, $_POST['bid']);
+  }
+  if ($result) {
+    echo 'success';
+  }
+  else {
+    echo 'not satisfied';
+  }
+}
+
+/*
+ * Count of inactive codes
+ * Recursive
+ */
+function batire_site_count_inactive_trail($bid) {
+  $sql = 'SELECT count(*) count FROM {batire_codes_trail} WHERE parent_bid = "%s" AND active = 0';
+  $result = db_fetch_array(db_query($sql, $bid));
+  return $result['count'];
+}
+
+function batire_site_summary_get_indice_name($code) {
+  $codes = db_query('SELECT name, tid FROM {term_data} WHERE description = "%s" AND vid = "%d"', $code, BATIRE_SITE_VID_TN_INDICE);
+  $name = db_fetch_array($codes);
+  if (is_array($name) && count($name)) {
+    return $name;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+function batire_site_summary_get_position($bid) {
+  $struct = array();
+  while ($bid != batire_hierarchy_get_parent_bid($bid)) {
+    $struct[$bid] = batire_hierarchy_get_by_bid($bid, 'position');
+    $bid          = batire_hierarchy_get_parent_bid($bid);
+  }
+  return $struct;
+}
+
+function batire_site_summary_sort_by_val(&$array, $key, $reverse = FALSE, $natural_order = FALSE) {
+  $sorter=array();
+  $ret=array();
+  reset($array);
+  foreach ($array as $ii => $va) {
+    if(!isset($va[$key])) {
+      $sorter[$ii]=0;
+    }
+    else {
+      $sorter[$ii]=$va[$key];
+    }
+  }
+  if (!$natural_order) {
+    asort($sorter);
+  }
+  else {
+    natsort($sorter);
+  }
+  foreach ($sorter as $ii => $va) {
+    $ret[$ii]=$array[$ii];
+  }
+  if ($reverse) {
+    $array = array_reverse($ret, TRUE);
+  }
+  else {
+    $array = $ret;
+  }
+}
+
+function batire_site_summary_duplicate_filter($sub_level) {
+  if (!(isset($sub_level['sub_level']) || count($sub_level['sub_level']))) {
+    return $sub_level;
+  }
+
+  if (count($sub_level['sub_level']) == 1) {
+    foreach ($sub_level['sub_level'] as $name => $sub) {
+      if ($sub_level['sub_level'][$name]['title'] == $sub_level['title']) {
+        unset($sub_level['sub_level']);
+      }
+    }
+  }
+  else {
+    foreach ($sub_level['sub_level'] as $name => $sub) {
+      $sub_level['sub_level'][$name] = batire_site_summary_duplicate_filter($sub_level['sub_level'][$name]);
+    }
+  }
+
+  return $sub_level;
+}
+
+/**
+ * TdM filtering based on user's subscription
+ */
+function _batire_site_summary_filter_products(&$data, $uid = NULL, $products = NULL, $remove = FALSE) {
+  //Enable full TN (all documents of the summary)
+  $cites = array();
+  foreach($data as $key => $item) {
+    if (!empty($item['cites']) && $item['type'] == BATIRE_SITE_CT_TN) {
+      $cites = array_merge($cites, $item['cites']);
+    }
+  }
+  foreach($data as $key => &$item) {
+    if ($item['type'] == BATIRE_SITE_CT_TN) {
+      $item['cites'] = $cites;
+    }
+  }
+
+  foreach ($data as $key => &$item) {
+    if (isset($item['sub_level']) && count($item['sub_level'])) {
+      _batire_site_summary_filter_products($item['sub_level'], $uid, $products, $remove);
+      if ($remove) {
+        $initial_count = $item['cnt'];
+        $item['cnt'] = 0;
+        foreach ($item['sub_level'] as $sub_item) {
+           $item['cnt'] += $sub_item['cnt'];
+        }
+        if (isset($item['depublished'])) {
+          $item['depublished'] -= $initial_count - $item['cnt'];
+          if ($item['depublished'] < 0) {
+            $item['depublished'] = 0;
+          }
+        }
+      }
+    }
+    else {
+      if (isset($item['terms']) && isset($item['type'])) {
+        $node = new stdClass();
+        $node->taxonomy = $item['terms'];
+        $node->type = $item['type'];
+        $cites = isset($item['cites']) ? $item['cites'] : NULL;
+        if (isset($uid)) {
+          $criteria = batire_user_products_products_criteria_user($uid);
+        }
+        elseif (isset($products)) {
+          $criteria = batire_user_products_products_criteria($products);
+        }
+        if (!batire_user_products_access_node($node, $criteria, $cites, $data)) {
+          if ($remove) {
+            unset($data[$key]);
+          }
+          else {
+            $item['disabled'] = TRUE;
+          }
+        }
+      }
+    }
+  }
+}
+/*
+ * List of special characters of formulars
+ * see task #63557
+ */
+function _batire_site_characters_settings_form() {
+  $form['batire_site_formulas_characters_list'] = array(
+    '#type' => 'textfield',
+    '#title' => t('List of characters'),
+    '#default_value' => BATIRE_SITE_FORMULAS_CHARACTERS,
+    '#description' => t('Enter separated by commas'),
+  );
+
+  return system_settings_form($form);
+}
+
+function batire_repalce_formulars_characters(&$data) {
+  $array_chars = explode(',', str_replace(' ' ,'', BATIRE_SITE_FORMULAS_CHARACTERS));
+  foreach ($array_chars as $char) {
+    $data['doc_content']['body'] = str_replace($char, '<span class="formulas_charcters">' . $char . '</span>', $data['doc_content']['body']);
+  }
+}
+
+/**
+ * Build the form to send bed reference
+ *
+ * @ingroup forms.
+ */
+function batire_site_bad_reference_form($form, $nid) {
+  $form = array();
+  $form['link_text'] = array(
+    '#type' => 'textfield',
+    '#attributes' => array('class' => 'form-text'),
+    '#maxlength' => BATIRE_SITE_MAX_NAME_LENGTH
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => !empty($nid) ? $nid : NULL
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+
+  $form['#theme'] = 'batire_site_bad_reference_form';
+  return $form;
+}
+
+function batire_site_send_bad_reference($link_text, $doc_nid, $user) {
+  global $base_url;
+  $document_node = node_load($doc_nid);
+  if (!empty($link_text)) {
+    $account = mongodb_user_get_user($user->uid);
+    $options = array(
+      'module'    => 'batire_site',
+      'mailkey'   => 'batire_site_signaler_link',
+      'recipient' => BATIRE_SITE_DDR_CONTCT_EMAIL,
+      'subject'   => '',
+      'data'      => array(
+        'abo_num'       => $user->abo_num,
+        'name'          => $account['name'],
+        'surname'       => $account['surname'],
+        'salutation'    => $account['salut'],
+        'link_text'     => $link_text,
+        'doc_title'     => $document_node->title,
+        'document_url' => url('document/' . $document_node->page_data['bid']),
+        'sous_type' => $document_node->page_data['sous_type']['title'],
+        'rubrique' => $document_node->page_data['rubrique']['title'],
+      ),
+      'plaintext' => FALSE,
+    );
+    batire_site_send_mail($options, variable_get('site_mail', 'batire@adyax.com'));
+    $result = array(
+      'error' => FALSE,
+      'data' => t('Nous vous remercions de votre vigilance'),
+    );
+    return $result;
+  } else {
+    $result = array(
+      'error' => TRUE,
+      'data' => batire_site_show_message(t('Please fill the text')),
+    );
+    return $result;
+  }
+}
+
+/*
+ * Get first part of Norme
+ * like § 1 ..
+ */
+function batire_site_get_bid_of_first_texte_normatifs_part($super_bid) {
+
+  $sql = "SELECT nid, bid FROM {batire_hierarchy}
+          WHERE parent_bid = '%s' AND position = (SELECT position + 1
+          FROM `batire_hierarchy` WHERE title = 'Généralités' AND parent_bid = '%s' ORDER BY position ASC LIMIT 1) AND type = 'batire_texte_normatifs'
+          LIMIT 1";
+  $result = db_fetch_array(db_query($sql, $super_bid, $super_bid));
+  if (!empty($result['bid']) && isset($result['bid'])) {
+    return $result;
+  }
+  else {
+    $sql = "SELECT nid, bid FROM {batire_hierarchy}
+            WHERE parent_bid = '%s' AND position = 1 AND type = 'batire_texte_normatifs'
+            LIMIT 1";
+    $result = db_fetch_array(db_query($sql, $super_bid));
+    if (!empty($result['bid']) && isset($result['bid'])) {
+      return $result;
+    }
+    else {
+      $sql = "SELECT nid, bid FROM {batire_hierarchy}
+              WHERE parent_bid = '%s' AND position = 1 AND type = 'batire_texte_normatifs'
+              ORDER BY position ASC LIMIT 1";
+      $result = db_fetch_array(db_query($sql, $super_bid));
+      if (!empty($result['bid']) && isset($result['bid'])) {
+        return $result;
+      }
+      else {
+        $sql = "SELECT nid, bid FROM {batire_hierarchy}
+              WHERE parent_bid = '%s' AND position = 0 AND type = 'batire_texte_normatifs' LIMIT 1";
+        $result = db_fetch_array(db_query($sql, $super_bid));
+        if (!empty($result['bid']) && isset($result['bid'])) {
+          return $result;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Get node taxonomy directly from DB
+ */
+function _batire_site_node_get_terms($nid) {
+  $terms = array();
+  $result = db_query("SELECT td.tid, td.vid, n.type FROM term_node tn INNER JOIN term_data td ON tn.tid = td.tid INNER JOIN node n ON n.nid = tn.nid WHERE tn.nid = %d", $nid);
+  while ($row = db_fetch_object($result)) {
+    $type = $row->type;
+    unset($row->type);
+    $terms[$row->tid] = $row;
+  }
+  return $terms;
+}
+
+/*
+ * Check for enable of Codes trail
+ */
+function batire_site_is_active_codes_trail($bid) {
+  $sql = 'SELECT active FROM {batire_codes_trail} WHERE bid ="%s"';
+  $result = db_result(db_query($sql, $bid));
+  if ($result) {
+    if ($result == 1) {
+      return TRUE;
+    }
+    else {
+      return FALSE;
+    }
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Debug...
+ */
+function sho() {
+  $args = func_get_args();
+  print '<pre>';
+  foreach ($args as $arg) {
+    print_r($arg);
+    print '<br/>-----------------------<br/>';
+  }
+  print '</pre>';
+}
+
+function shoc() {
+  $args = func_get_args();
+  print '<div style="width: 750px; height: 350px; overflow: auto; position: relative; background-color: #ffffcc; border: 2px solid #ffcc00;">';
+  call_user_func_array('sho', $args);
+  print '</div>';
+}
+
+function shodie() {
+  $args = func_get_args();
+  call_user_func_array('sho', $args);
+  die();
+}
+
+function shocdie() {
+  $args = func_get_args();
+  call_user_func_array('shoc', $args);
+  die();
+}
+
+function shokpr() {
+  $input = func_get_args();
+  if (merits_krumo($input)) {
+    return krumo($input);
+  }
+  else {
+    sho($input);
+  }
+}
+
+function shokprdie() {
+  $input = func_get_args();
+  if (merits_krumo($input)) {
+    krumo($input);
+  }
+  else {
+    sho($input);
+  }
+  die;
+}
+
+function batire_site_update_fm_numeroart($struct) {
+  $batire_xsm_parse_path = drupal_get_path('module', 'batire_xml_parse') . '/batire_xml_parse.xml.inc';
+  foreach($struct as $struct_item) {
+    $doc = mongodb_page_is_doc($struct_item->bid);
+    if ($doc !== FALSE) {
+      job_queue_add(
+        'batire_site_fm_numeroart_job',
+        "Update numeroart",
+        array($struct_item->bid),
+        $batire_xsm_parse_path
+      );
+    }
+    batire_site_update_fm_numeroart($struct_item->children);  
+  }
+}
+
+function batire_site_fm_numeroart_job($bid) {
+  $page_data   = mongodb_page_get_page_by_bid($bid);
+  if(isset($page_data['body']['content'])) {
+    $dom = new DOMDocument();
+    $dom->loadXML($page_data['body']['content']);
+    $xpath = batire_xml_get_xpath($dom, array($page_data['bid']));
+    if($num_start = batire_xml_node_value_get($xpath, '/FICHEART/CARTOUCHE/NUMARTDEB')) {
+      $page_data['num_art_start'] = $num_start;
+      if($num_finnish = batire_xml_node_value_get($xpath, '/FICHEART/CARTOUCHE/NUMARTFIN')) {
+        $page_data['num_art_finish'] = $num_finnish;
+      }
+      mongodb_page_save($page_data);
+    }
+  }
+}
+
+function batire_site_fm_summary_rebuild_job() {
+  mongodb_site_recreate_summary('batire_feuillet_mobile');
+}

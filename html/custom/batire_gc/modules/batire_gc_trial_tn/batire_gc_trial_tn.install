@@ -1,0 +1,52 @@
+<?php
+
+define('BATIRE_USER_REG_TYPE_TRIAL_TN_INSTALL', 5);
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_gc_trial_tn_install() {
+  // Set alias for user/register/5
+  path_set_alias('user/register/' . BATIRE_USER_REG_TYPE_TRIAL_TN_INSTALL, 'client/inscription/gratuite-textes-normatifs');
+
+  // Add role 'abonnement gratuit avec TN'
+  $role_name = 'abonnement gratuit avec TN';
+  $query = "INSERT INTO {role} (name) VALUES ('%s')";
+  db_query($query, $role_name);
+  $query = "SELECT rid FROM {role} WHERE name = '%s'";
+  $inserted_role = db_fetch_object(db_query($query, $role_name));
+  variable_set('batire_gc_trial_tn_role_id', $inserted_role->rid);
+
+  // Add term Offre d’essai gratuite avec TN
+  $term_name = t('Offre d’essai gratuite avec TN');
+  $term = array();
+  $term['vid'] = BATIRE_USER_TYPES_VID;
+  $term['name'] = $term_name;
+  $term['weight'] = 3;
+  taxonomy_save_term($term);
+  $inserted_term = taxonomy_get_term_by_name($term_name);
+  variable_set('batire_gc_trial_tn_term_id', $inserted_term[0]->tid);
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_gc_trial_tn_uninstall() {
+  // Remove path alias
+  path_set_alias('user/register/' . BATIRE_USER_REG_TYPE_TRIAL_TN_INSTALL);
+
+  // Remove role 'abonnement gratuit avec TN'
+  $rid = variable_get('batire_gc_trial_tn_role_id', 0);
+  if ($rid) {
+    $query = "DELETE FROM {role} WHERE rid = %d";
+    db_query($query, $rid);
+    variable_del('batire_gc_trial_tn_role_id');
+  }
+
+  // Remove term Offre d’essai gratuite avec TN
+  $tid = variable_get('batire_gc_trial_tn_term_id', 0);
+  if ($tid) {
+    taxonomy_del_term($tid);
+    variable_del('batire_gc_trial_tn_term_id');
+  }
+}

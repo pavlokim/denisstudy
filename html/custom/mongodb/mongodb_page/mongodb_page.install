@@ -1,0 +1,44 @@
+<?php
+
+/**
+ * @file
+ * MongoDB user stuff install file.
+ */
+
+/**
+ * Implement hook_install().
+ */
+function mongodb_page_install() {
+  _mongodb_page_create_collection();
+}
+
+function _mongodb_page_create_collection() {
+  module_load_include('module', 'mongodb');
+  module_load_include('module', 'mongodb_page');
+  
+  $collection = mongodb_page_get_collection();
+  if (!$collection) {
+    $mongo->createCollection(MONGODB_PAGE_COLLECTION);
+    $collection = mongodb_page_get_collection();
+  }
+  $collection->ensureIndex(array('bid' => 1), array('background' => TRUE, 'unique' => 'TRUE'));
+  $collection->ensureIndex(array('nid' => 1), array('background' => TRUE, 'unique' => 'TRUE'));
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function mongodb_page_uninstall() {}
+
+
+/**  Updates **/
+
+function mongodb_page_update_1() {
+  module_load_include('module', 'mongodb');
+  module_load_include('module', 'mongodb_page');
+
+  $collection = mongodb_page_get_collection();
+  $collection->deleteIndexes();
+  _mongodb_page_create_collection();
+  return array();
+}

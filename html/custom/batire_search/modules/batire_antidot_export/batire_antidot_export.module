@@ -1,0 +1,1510 @@
+<?php
+
+define('ANTIDOT_ZIP_DIRNAME', 'antidot_zip');
+define('BATIRE_ANTIDOT_EXPORT_WATCHDOG', 'batire_antidot_export');
+define('BATIRE_ANTIDOT_EXPORT_SAVED_SEARCH_MAX_JOB', 50);
+
+/**
+ * Implementation of hook_theme().
+ */
+function batire_antidot_export_theme() {
+  $hooks = array();
+  $info = _batire_antidot_export_get_info();
+  foreach ($info as $type => $module_name) {
+    $hooks[_batire_antidot_export_xml_theme_name($type)] = array(
+      'path' => drupal_get_path('module', $module_name),
+      'template' => 'xml_template',
+      'arguments' => array('data' => NULL),
+      'override preprocess functions' => TRUE
+    );
+  }
+  return $hooks;
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_antidot_export_menu() {
+  return array(
+    'admin/batire-site/settings/antidot/initial/start/%' => array(
+      'title' => 'Antidot Initial import process',
+      'page callback' => 'batire_antidot_export_initial_start',
+      'page arguments' => array(6, 7, 'normal', FALSE, 'full', 'add'),
+      'type' => MENU_CALLBACK,
+      'access arguments' => array('administer batire configuration'),
+    ),
+    'admin/batire-site/settings/antidot/initial' => array(
+      'title' => 'Antidot Initial import',
+      'page callback' => 'batire_antidot_export_initial',
+      'page arguments' => array(),
+      'type' => MENU_LOCAL_TASK,
+      'access arguments' => array('administer batire configuration'),
+    ),
+    'admin/batire-site/settings/antidot/uploader/%' => array(
+      'page callback' => '_batire_antidot_export_uploader',
+      'page arguments' => array(5),
+      'type' => MENU_CALLBACK,
+      'access arguments' => array('administer batire configuration')
+    ),
+    'admin/batire-site/antidot/admin/%node/%' => array(
+      'title' => 'Antidot',
+      'page callback' => 'batire_antidot_export_custom_operation',
+      'page arguments' => array(4, 5),
+      'type' => MENU_LOCAL_TASK,
+      'access arguments' => array('administer batire configuration'),
+    )
+  );
+}
+
+function batire_antidot_export_form_batire_antidot_settings_form_alter(&$form, &$form_state) {
+  $form['ftp_settings'] = array(
+    '#tree' => FALSE,
+    '#type' => 'fieldset',
+    '#title' => t('Antidot FTP settings'),
+    'batire_antidot_export_ftp_server' => array(
+      '#type' => 'textfield',
+      '#title' => t("Nom d'hôte"),
+      '#default_value' => variable_get('batire_antidot_export_ftp_server', ''),
+      '#description' => t('Ce paramètre ne devrait pas avoir de slash final et ne doit pas être préfixé par ftp://.'),
+      '#required' => TRUE
+    ),
+    'batire_antidot_export_ftp_folder' => array(
+      '#type' => 'textfield',
+      '#title' => t("Le dossier"),
+      '#default_value' => variable_get('batire_antidot_export_ftp_folder', ''),
+    ),
+    'batire_antidot_export_ftp_port' => array(
+      '#type' => 'textfield',
+      '#title' => t("Port"),
+      '#size' => 4,
+      '#default_value' => variable_get('batire_antidot_export_ftp_port', '22'),
+      '#description' => t('Ce paramètre permet de spécifier un autre port pour se connecter'),
+      '#required' => TRUE
+    ),
+    'batire_antidot_export_ftp_user' => array(
+      '#type' => 'textfield',
+      '#title' => t("Nom d'utilisateur"),
+      '#size' => 20,
+      '#default_value' => variable_get('batire_antidot_export_ftp_user', '')
+    ),
+    'batire_antidot_export_ftp_password' => array(
+      '#type' => 'textfield',
+      '#title' => t('Mot de passe'),
+      '#size' => 20,
+      '#default_value' => variable_get('batire_antidot_export_ftp_password', '')
+    ),
+    'batire_antidot_export_ftp_passive' => array(
+      '#type' => 'checkbox',
+      '#title' => t('Mode passif'),
+      '#description' => t('Utilisé pour FTP uniquement'),
+      '#default_value' => variable_get('batire_antidot_export_ftp_passive', FALSE)
+    ),
+  );
+
+  $form['batire_antidot_export_queue_size'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Job queue size'),
+    '#size' => 8,
+    '#default_value' => variable_get('batire_antidot_export_queue_size', 1000)
+  );
+  $options = batire_site_get_document_types_list();
+  $options2 = array();
+  foreach ($options as $key => $option) {
+    $cat_name = _batire_antidot_export_get_category($key);
+    $options2[$cat_name] = $cat_name;
+  }
+  $options2 = array_unique($options2);
+  $form['batire_antidot_export_initial'] = array(
+    '#title' => t('Set next import as initial for:'),
+    '#type' => 'checkboxes',
+    '#options' => $options2,
+    '#default_value' => variable_get('batire_antidot_export_initial', array()),
+  );
+  $form['array_filter'] = array(
+    '#type' => 'value',
+    '#value' => 1
+  );
+}
+
+function batire_antidot_export_upload_files_scp($files, $unlink = 1) {
+  if (is_array($files) && count($files)) {
+    $server = variable_get('batire_antidot_export_ftp_server', '');
+    $port = variable_get('batire_antidot_export_ftp_port', 22);
+    $user_name = variable_get('batire_antidot_export_ftp_user', '');
+    $password = variable_get('batire_antidot_export_ftp_password', '');
+    //Status stuff
+    $status = variable_get('batire_antidot_search_status', 'rc');
+    $status = ($status == 'rc') ? 'RC' : $status;
+    $scp_folder = variable_get('batire_antidot_export_ftp_folder', '') . '/' . $status;
+    if ($user_name && $server) {
+      $connection = @ssh2_connect($server, $port, array('hostkey' => 'ssh-rsa'));
+      if ($connection) {
+        $key_folder = drupal_get_path('module', 'batire_antidot_export') . '/keys/';
+        $is_auth = @ssh2_auth_pubkey_file($connection, $user_name, $key_folder . 'antidot.pub', $key_folder . 'antidot');
+        //$is_auth = @ssh2_auth_password($connection, $user_name, $password);
+        if ($is_auth) {
+          $sftp = ssh2_sftp($connection);
+          //ssh2_sftp_mkdir($sftp, '/incoming/Batire/RC/test');
+          foreach ($files as $file) {
+            $remote_file = basename($file);
+            $remote_file = str_replace(' ', '-', $remote_file);
+            $is_send = copy($file, "ssh2.sftp://$sftp/$scp_folder/$remote_file");
+            if ($is_send) {
+              if ($unlink) {
+                unlink($file);
+              }
+              batire_site_log_watchdog('File @filename successfully uploaded to SSH server', array('@filename' => $remote_file));
+            }
+            else {
+              batire_site_log_watchdog('There was a problem while uploading file @filename', array('@filename' => $remote_file));
+            }
+          }
+        }
+        else {
+          batire_site_log_watchdog('SSH connection to @server for user @user has failed', array('@server' => $server, '@user' => $user_name));
+        }
+      }
+      else {
+        batire_site_log_watchdog('SSH connection to @server has failed', array('@server' => $server));
+      }
+    }
+  }
+}
+
+/**
+ * Creates a zip file containing the xml for the given node and it's media
+ */
+function batire_antidot_export_create_zips($nodes, $state = 'add', $custom_export = FALSE) {
+  $zips = array();
+  $nodes_by_type = array();
+  foreach ($nodes as $n) {
+    if (is_numeric($n)) {
+      $n = node_load($n, NULL, TRUE);
+    }
+    else {
+      $additional_data = $n;
+      $n = node_load($n['nid'], NULL, TRUE);
+    }
+    if ($n && _batire_site_is_document($n->type)) {
+      //find the type for additional data (images, etc)
+      $additional_type = $additional_data['type'];
+      $cat_name = _batire_antidot_export_get_category($n->type, $additional_type);
+      if (!isset($nodes_by_type[$cat_name])) {
+        $nodes_by_type[$cat_name] = array('name' => $cat_name, 'nodes' => array());
+      }
+      if (isset($additional_type) && !empty($additional_type)) {//if it's a some additional import (not a document) like IMAGES or something else
+        $nodes_by_type[$cat_name]['nodes'][] = array(
+          'node' => $n,
+          'data' => $additional_data,
+        );
+      }
+      else {
+        $nodes_by_type[$cat_name]['nodes'][] = $n;
+      }
+    }
+  }
+
+  $initial = variable_get('batire_antidot_export_initial', array());
+  $flag = array();
+  foreach ($nodes_by_type as $tid => $nodes) {
+    $type_name = $nodes['name'];
+    $zip_folder = file_directory_path() . '/' . ANTIDOT_ZIP_DIRNAME;
+    if (in_array($tid, $initial)) {
+      $key = array_search($tid, $initial);
+      unset($initial[$key]);
+      $zip_name = date('YmdHis') . '_full_TK_' . $type_name . '.zip';
+      $i = 1;
+      while (file_exists($zip_folder . '/' . $zip_name)) {
+        $ts = date('YmdHis') + $i;
+        $zip_name = $ts . '_full_TK_' . $type_name . '.zip';
+        $i++;
+      }
+    }
+    else {
+      $zip_name = date('YmdHis') . '_diff_TK_' . $type_name . '.zip';
+      $i = 1;
+      while (file_exists($zip_folder . '/' . $zip_name)) {
+        $ts = date('YmdHis') + $i;
+        $zip_name = $ts . '_diff_TK_' . $type_name . '.zip';
+        $i++;
+      }
+    }
+
+    if (file_check_directory($zip_folder, FILE_CREATE_DIRECTORY)) {
+      $zip_file = $zip_folder . '/' . $zip_name;
+      $zip = new ZipArchive();
+      if ($zip->open($zip_file, ZIPARCHIVE::OVERWRITE) !== TRUE) {
+        return;
+      }
+      foreach ($nodes['nodes'] as $node) {
+        if (!$custom_export) {//if it's a some additional import (not a document) like IMAGES or something else
+          if (($state != 'delete') && batire_antidot_export_filter($node)) {
+            continue;
+          }
+
+          $xml_file_name =  $type_name . '_' . $node->page_data['id'] . '.xml';
+          //$xml_file_name = $type_name .'_'. 'TEST' . $node->nid .'.xml';
+          $files = array();
+          $xml = batire_antidot_export_node2xml($node, $state, $files);
+          if (!empty($xml)) {
+            $zip->addFromString($xml_file_name, $xml);
+            if (!empty($files)) {
+              foreach ($files as $file) {
+                $file_path = /* $root_dir .'/'. */ $file['filepath'];
+                if (file_exists($file_path)) {
+                  $zip->addFile($file_path, $file['filename']);
+                }
+              }
+            }
+            /*if ($state == 'delete') {
+              db_query('DELETE FROM {node} WHERE nid = %d', $node->nid);
+              db_query('DELETE FROM {node_revisions} WHERE nid = %d', $node->nid);
+              // Call the node-specific callback (if any):
+              node_invoke($node, 'delete');
+              node_invoke_nodeapi($node, 'delete');
+              batire_site_log_watchdog('Node @nid has been deleted', array('@nid' => $node->nid));
+            }*/
+          }
+
+          if (in_array($state, array('add', 'edit'))) {
+            $flag['last_bid'] = $node->page_data['bid'];
+            $flag['import_time'] = $node->changed;
+            $flag['have_new'] = 1;
+          }
+        } else {
+          $xml_file_name = $type_name . '_' . $node['data']['image_id'] . '.xml';
+          $files = array();
+          $xml = batire_antidot_export_node2xml($node['node'], $state, $files, $node['data']);
+          if (!empty($xml)) {
+            $zip->addFromString($xml_file_name, $xml);
+            if (!empty($files)) {
+              foreach ($files as $file) {
+                $file_path = /* $root_dir .'/'. */
+                  $file['filepath'];
+                if (file_exists($file_path)) {
+                  $zip->addFile($file_path, $file['filename']);
+                }
+              }
+            }
+            /*if ($state == 'delete') {
+              db_query('DELETE FROM {node} WHERE nid = %d', $node->nid);
+              db_query('DELETE FROM {node_revisions} WHERE nid = %d', $node->nid);
+              // Call the node-specific callback (if any):
+              node_invoke($node, 'delete');
+              node_invoke_nodeapi($node, 'delete');
+              batire_site_log_watchdog('Node @nid has been deleted', array('@nid' => $node->nid));
+            }*/
+          }
+        }
+      }
+      $zip->close();
+      $zips[] = $zip_file;
+    }
+  }
+  if ($flag) {
+    variable_set('doc_alerts_last_imported_document', $flag);//use for documents alerts
+    variable_set('batire_xml_parse_last_import', $flag);//use for searches alerts
+  }
+  variable_set('batire_antidot_export_initial', $initial);
+  if ($state == 'delete') {
+    cache_clear_all();
+  }
+  return $zips;
+}
+
+/**
+ * Returns the xml representation of the given node
+ */
+function batire_antidot_export_node2xml($node, $state = 'add', &$files = array(), $additional_data = array()) {
+  if (is_numeric($node)) {
+    $node = node_load($node, NULL, TRUE);
+  }
+  if ($node) {
+    $type = !isset($additional_data['type']) ? $node->type : $additional_data['type'];
+    $module_name = _batire_antidot_export_get_info($type);
+    if ($module_name) {
+      $data = new stdClass();
+      $data->state = $state;
+      batire_antidot_export_xml_preprocess($node, $data);
+      //      module_invoke($module_name, 'xml_preprocess', $node, $data);
+      // to pass the data by reference into hook
+      if (module_hook($module_name, 'xml_preprocess')) {
+        if (!empty($additional_data)) {
+          call_user_func_array($module_name . '_' . 'xml_preprocess', array($node, &$data, $additional_data));
+        }
+        else {
+          call_user_func_array($module_name . '_' . 'xml_preprocess', array($node, &$data));
+        }
+      }
+      if ($data) {
+        if (!empty($data->files)) {
+          $files = $data->files;
+        }
+        return theme(_batire_antidot_export_xml_theme_name($type), $data);
+      }
+    }
+  }
+  return '';
+}
+
+/**
+ * Prepares xml template variables, common for all supported node types
+ */
+function batire_antidot_export_xml_preprocess($node, &$data) {
+  $data->cpid = $node->page_data['bid'];
+  if (!$data->cpid) {
+    batire_site_log_watchdog('Document without ID detected during export (nid: !nid)', array('!nid' => $node->nid));
+  }
+  $data->url = _batire_antidot_export_doc_url($node->page_data['bid']);
+  $data->title = batire_antidot_export_xml_escape($node->title);
+
+  if (is_array($node->taxonomy)) {
+    foreach ($node->taxonomy as $tax) {
+      switch ($tax->vid) {
+        case BATIRE_SITE_VID_DOC_TYPE :
+          $data->type_source = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => _batire_antidot_export_get_priorite($node->type));
+          break;
+        case BATIRE_SITE_VID_BATIMENT :
+          $par = taxonomy_get_parents($tax->tid);
+          $batiments = array('batiment' => array(), 'batiment_sub' => array());
+          if (!isset($data->batiments)) {
+            $data->batiments = array();
+          }
+
+          if ($par) {
+            $par = array_pop($par);
+
+            $batiments['batiment']     = array('name' => $par->name, 'id' => $par->tid, 'priorite' => 0);
+            $batiments['batiment_sub'] = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          }
+          else {
+            $batiments['batiment'] = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          }
+
+          $data->batiments[] = $batiments;
+          break;
+        case BATIRE_SITE_VID_CORPS :
+          $par = taxonomy_get_parents($tax->tid);
+          $corps = array('corps' => array(), 'corps_sub' => array());
+          if (!isset($data->corps)) {
+            $data->corps = array();
+          }
+
+          if ($par) {
+            $par = array_pop($par);
+
+            $corps['corps']     = array('name' => $par->name, 'id' => $par->tid, 'priorite' => 0);
+            $corps['corps_sub'] = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          }
+          else {
+            $corps['corps'] = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          }
+
+          $data->corps[] = $corps;
+          break;
+        case BATIRE_SITE_VID_THEMES :
+          $par = taxonomy_get_parents($tax->tid);
+          $themes = array('themes' => array(), 'themes_sub' => array());
+          if (!isset($data->themes)) {
+            $data->themes = array();
+          }
+
+          if ($par) {
+            $par = array_pop($par);
+
+            $themes['themes']     = array('name' => $par->name, 'id' => $par->tid, 'priorite' => 0);
+            $themes['themes_sub'] = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          }
+          else {
+            $themes['themes'] = array('name' => $tax->name, 'id' => $tax->tid, 'priorite' => 0);
+          }
+
+          $data->themes[] = $themes;
+          break;
+      }
+    }
+  }
+
+  $content = '';
+
+  $content .= (isset($node->page_data['content'])) ? implode('', $node->page_data['content']) : '';
+
+  $GLOBALS['mongodb_page_node'] = $node;
+  _mongodb_page_prepare_content($content);
+
+  $data->content = empty($content) ? '' : '<![CDATA[' . batire_antidot_export_strip_tags(array('object', 'param', 'embed'), $content) . ']]>';
+
+  if ($node->type == BATIRE_SITE_CT_TO && $node->field_jorf[0]['value']) {
+    $data->version = 'INITIAL';
+  }
+  else {
+    $data->version = $node->page_data['version'];
+  }
+
+  if ($node->field_date_vide[0]['value']) {
+    $data->date = '';
+  }
+  else {
+    $data->date = date_format_date(date_make_date($node->page_data['date_document'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+  }
+
+  /*
+   * date_editoriale presents in all types of the documents
+   * date_editoriale - date for verification of modification
+   * "True modification" - it's new version of the document, but not the node modification by re-import or regeneration (change title, auteur, displaying of the documents and other)
+   * Replace date_modified to date_editoriale
+   * It needs for Search ALERTS
+   */
+  $data->dateCreation = date_format_date(date_make_date($node->created, NULL, 'datestamp'), 'custom', 'Y-m-d');
+  if ($node->page_data['date_editoriale']) {
+    $data->dateMaj = date_format_date(date_make_date($node->page_data['date_editoriale'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+  }
+  else {
+    if (isset($node->field_import_date[0]['value']) && $node->field_import_date[0]['value'] && !empty($node->field_import_date[0]['value'])) {
+      $data->dateMaj = date_format_date(date_make_date($node->field_import_date[0]['value'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+    }
+    else {
+      $data->dateMaj = $data->dateCreation;
+    }
+  }
+  $position = batire_hierarchy_get_by_bid($node->page_data['bid'], 'position');
+  $data->position = (isset($position) && !empty($position)) ? $position : 0;
+
+  $data->latest = (int) !!batire_site_doc_is_latest($node->nid);
+}
+
+/**
+ * Helper function for creating XML tag
+ */
+function _batire_antidot_export_xml_tag($tag_name, $value = '', $attributes = array()) {
+  $tag = '<' . $tag_name;
+  if (count($attributes)) {
+    foreach ($attributes as $attr_name => $value) {
+      $tag .= ' ' . $attr_name . '="' . trim($value) . '"';
+    }
+  }
+  if (empty($value)) {
+    $tag .= '/>';
+  }
+  else {
+    $tag .= '>' . $value . '</' . $tag_name . '>';
+  }
+  return $tag;
+}
+
+/**
+ * Small helper function
+ * returns a theme function name for the given type of node.
+ */
+function _batire_antidot_export_xml_theme_name($type) {
+  return 'antidot_xml_' . $type;
+}
+
+//@todo move from here?
+/**
+ * Helper function to get URL for document
+ */
+function _batire_antidot_export_doc_url($bid) {
+  return 'document/' . $bid;
+}
+
+/**
+ * Helper function to get priority by content type
+ */
+function _batire_antidot_export_get_priorite($ctype, $full = FALSE) {
+  $priorites = array(
+    BATIRE_SITE_CT_CODE => 9,
+    BATIRE_SITE_CT_TO => 8,
+    BATIRE_SITE_CT_TN => 7,
+    BATIRE_SITE_CT_DR => 6,
+    BATIRE_SITE_CT_FM => 5,
+    BATIRE_SITE_CT_LIVRE => 4,
+    BATIRE_SITE_CT_COMP_TECH => 3,
+    BATIRE_SITE_CT_DOC_PRAT => 2,
+    BATIRE_SITE_CT_ACTUALITE => 1,
+  );
+
+  if ($full) {
+    $priorites = array_flip($priorites);
+    return $priorites;
+  }
+  return isset($priorites[$ctype]) ? $priorites[$ctype] : 0;
+}
+
+function _batire_antidot_export_get_info($type = NULL) {
+  static $info = array();
+  if (empty($info)) {
+    $info = module_invoke_all('antidot_info');
+  }
+  return $type ? (isset($info[$type]) ? $info[$type] : FALSE) : $info;
+}
+
+/**
+ * Helper function to get possible facets
+ */
+function _batire_antidot_get_possible_facets() {
+  return array(
+    'typeSource' => (object) array('title' => t('TypeSource')),
+    'source' => (object) array('title' => t('Source')),
+    'typeBatiment' => (object) array('title' => t('TypeBatiment')),
+    'sousTypeBatiment' => (object) array('title' => t('SousTypeBatiment')),
+    'corpsEtat' => (object) array('title' => t('CorpsEtat')),
+    'sousCorpsEtat' => (object) array('title' => t('SousCorpsEtat')),
+    'theme' => (object) array('title' => t('Theme')),
+    'sousTheme' => (object) array('title' => t('SousTheme')),
+    'date' => (object) array('title' => t('Date')),
+  );
+}
+
+/**
+ * Helper function for formating date
+ */
+function _batire_antidot_export_format_date($date, $format = 'Y-m-d') {
+  if (!empty($date)) {
+    $dateObj = date_make_date($date, $date['timezone'], $date['date_type']);
+    return date_format_date($dateObj, 'custom', $format);
+  }
+  return '';
+}
+
+/**
+ * Initial import handlers
+ */
+function batire_antidot_export_initial() {
+  $types = batire_site_get_document_types_list();
+  $options = array();
+  foreach ($types as $key => $option) {
+    $cat_name = _batire_antidot_export_get_category($key);
+    $options[$cat_name] = $cat_name;
+  }
+  $options = array_unique($options);
+
+  $links = array();
+  foreach ($options as $key => $type) {
+    $links[] = array('data' => l($type, 'admin/batire-site/settings/antidot/initial/start/' . $key . '/' . variable_get('batire_antidot_export_initial_' . $key, 0)));
+  }
+  return theme('item_list', $links);
+}
+
+function batire_antidot_export_initial_start($cat, $nid = 0, $mode = 'normal', $send = 'FALSE', $type = 'full', $state = 'add') {
+  $zip_name = date('YmdHis') . '_' . $type . '_TK_' . $cat . '.zip';
+  $zip_folder = file_directory_path() . '/' . ANTIDOT_ZIP_DIRNAME;
+  if (file_check_directory($zip_folder, TRUE)) {
+    $zip_file = $zip_folder . '/' . $zip_name;
+    $zip = new ZipArchive();
+    $res = $zip->open($zip_file, ZIPARCHIVE::CREATE);
+    if ($res !== TRUE) {
+      drupal_set_message(t("Can't create file %file (%res)", array('%file' => $zip_file, '%res' => $res)), 'warning');
+      return;
+    }
+    $zip->addFromString('empty.txt', '');
+    $zip->close();
+
+    $ctypes = _batire_antidot_export_get_ctype_by_cat($cat);
+    $operations = array();
+    foreach ($ctypes as $ctype) {
+      $operations[] = array('_batire_antidot_export_initial_process', array($ctype, $state, $nid, $zip_file));
+    }
+
+    if ($send) {
+      $operations[] = array('batire_antidot_export_upload_files_scp', array(array($zip_file)));
+    }
+
+    switch ($mode) {
+      case 'normal' :
+        $batch = array(
+          'operations' => $operations,
+          'finished' => '_batire_antidot_export_initial_finished',
+          'title' => t('Creating initial zip files'),
+          'init_message' => t('Zip creation is starting.'),
+          'progress_message' => t('Processed @current out of @total.'),
+          'error_message' => t('Zip creation has encountered an error.'),
+        );
+        batch_set($batch);
+        batch_process('admin/batire-site/settings/antidot/initial');
+        break;
+      case 'drush' :
+        $batch = array(
+          'operations' => $operations,
+          'finished' => '_batire_antidot_export_initial_finished',
+          'init_message' => t('Zip creation is starting.'),
+        );
+        batch_set($batch);
+        drush_backend_batch_process();
+        break;
+    }
+  }
+}
+
+function _batire_antidot_export_initial_process($ctype, $state, $nid, $zip_file, &$context) {
+  $cnt_sql = "SELECT COUNT(DISTINCT n.nid) FROM {node} n WHERE n.type = '%s' AND n.nid > %d";
+  $sql = "SELECT n.nid FROM {node} n WHERE n.nid > %d AND n.type = '%s' ORDER BY nid ASC";
+
+  if (!isset($context['sandbox']['max']) || !$context['sandbox']['max']) {
+    $c_types = batire_site_get_document_types_list();
+    $nid = (int) $nid;
+    $max = db_result(db_query($cnt_sql, $ctype, $nid));
+    $context['sandbox']['progress'] = 0;
+    $context['sandbox']['current_node'] = $nid;
+    $context['sandbox']['max'] = $max;
+    $context['sandbox']['type'] = _batire_antidot_export_get_xml_cat($ctype);
+  }
+
+  $limit = 50;
+  $result = db_query_range($sql, $context['sandbox']['current_node'], $ctype, 0, $limit);
+  $cnt = 0;
+  $zip = new ZipArchive();
+  $res = $zip->open($zip_file);
+  if ($res !== TRUE) {
+    drupal_set_message(t("Can't open file %file (%res)", array('%file' => $zip_file, '%res' => $res)), 'warning');
+    return;
+  }
+  while ($row = db_fetch_array($result)) {
+    $cnt++;
+    $node = node_load($row['nid'], NULL, TRUE);
+    if ($node && $node->status) {
+      if (!batire_antidot_export_filter($node)) {
+        $xml_file_name = $context['sandbox']['type'] . '_' . $node->page_data['id'] . '.xml';
+        //$xml_file_name = $context['sandbox']['type'] .'_'. 'TEST' . $node->nid .'.xml';
+        $files = array();
+        $xml = batire_antidot_export_node2xml($node, $state, $files);
+        if ($xml) {
+          $zip->addFromString($xml_file_name, $xml);
+          if (!empty($files)) {
+            foreach ($files as $file) {
+              $file_path = /* $root_dir .'/'. */ $file['filepath'];
+              if (file_exists($file_path)) {
+                $zip->addFile($file_path, $file['filename']);
+              }
+            }
+          }
+          variable_set('batire_antidot_export_initial_' . $ctype, $node->nid);
+          $context['message'] = t('Processing node %nid (%cpid)', array('%nid' => $node->nid, '%cpid' => $node->page_data['id']));
+        }
+      }
+      else {
+        variable_set('batire_antidot_export_initial_' . $ctype, $node->nid);
+        $context['message'] = t('Processing node %nid (%cpid)', array('%nid' => $node->nid, '%cpid' => $node->page_data['id']));
+      }
+    }
+    $context['sandbox']['current_node'] = $row['nid'];
+    $context['sandbox']['progress']++;
+    if (isset($context['results']['cnt'])) {
+      $context['results']['cnt']++;
+    }
+    else {
+      $context['results']['cnt'] = 1;
+    }
+  }
+  $zip->close();
+  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
+    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+  }
+}
+
+/**
+ * Batch 'finished' callback
+ */
+function _batire_antidot_export_initial_finished($success, $results, $operations) {
+  if ($success) {
+    // Here we do something meaningful with the results.
+    $message = ($results['cnt'] ? $results['cnt'] : 0) . ' documents processed.';
+    //    $message .= theme('item_list', $results);
+  }
+  else {
+    // An error occurred.
+    // $operations contains the operations that remained unprocessed.
+    $error_operation = reset($operations);
+    $message = t('An error occurred while processing %error_operation with arguments: @arguments', array('%error_operation' => $error_operation[0], '@arguments' => print_r($error_operation[1], TRUE)));
+  }
+  drupal_set_message($message);
+}
+
+/**
+ * Helper function for get category name by CT name
+ * @param $ctype
+ * @return string
+ */
+function _batire_antidot_export_get_category($ctype, $additional_type = NULL) {
+  if (empty($additional_type)) {
+      switch ($ctype) {
+        case BATIRE_SITE_CT_ACTUALITE :
+        case BATIRE_SITE_CT_DR :
+        case BATIRE_SITE_CT_COMP_TECH :
+        case BATIRE_SITE_CT_FM :
+        case BATIRE_SITE_CT_LIVRE :
+          return 'PUBLICATIONS';
+        case BATIRE_SITE_CT_CODE :
+          return 'CODES';
+        case BATIRE_SITE_CT_DOC_PRAT :
+          return 'MODELES-PRATIQUES';
+        case BATIRE_SITE_CT_TN :
+          return 'NORMES';
+        case BATIRE_SITE_CT_TO :
+          return 'TEXTES-OFFICIELS';
+
+      }
+  }
+  else {
+    switch ($additional_type) {
+      case BATIRE_SITE_IMAGES:
+        return 'IMAGES';
+    }
+  }
+}
+
+/**
+ * Helper function for get CT name by category name
+ * @param $cat
+ * @return array
+ */
+function _batire_antidot_export_get_ctype_by_cat($cat) {
+  switch ($cat) {
+    case 'PUBLICATIONS' :
+      return array(BATIRE_SITE_CT_ACTUALITE, BATIRE_SITE_CT_COMP_TECH, BATIRE_SITE_CT_FM, BATIRE_SITE_CT_LIVRE, BATIRE_SITE_CT_DR);
+    case 'CODES' :
+      return array(BATIRE_SITE_CT_CODE);
+    case 'MODELES-PRATIQUES' :
+      return array(BATIRE_SITE_CT_DOC_PRAT);
+    case 'NORMES' :
+      return array(BATIRE_SITE_CT_TN);
+    case 'TEXTES-OFFICIELS' :
+      return array(BATIRE_SITE_CT_TO);
+  }
+}
+
+/**
+ * Helper function for get xml cat name by CT name
+ * @param $ctype
+ * @return string
+ */
+function _batire_antidot_export_get_xml_cat($ctype) {
+  switch ($ctype) {
+    case BATIRE_SITE_CT_ACTUALITE :
+    case BATIRE_SITE_CT_COMP_TECH :
+    case BATIRE_SITE_CT_FM :
+    case BATIRE_SITE_CT_LIVRE :
+      return 'Publication';
+    case BATIRE_SITE_CT_CODE :
+      return 'Code';
+    case BATIRE_SITE_CT_DOC_PRAT :
+      return 'Pratique';
+    case BATIRE_SITE_CT_TN :
+      return 'Norme';
+    case BATIRE_SITE_CT_TO :
+      return 'Texte officiel';
+    case BATIRE_SITE_CT_DR :
+      return 'Document reference';
+  }
+}
+
+function _batire_antidot_export_job_run($nids, $op, $custom_export = FALSE) {
+  $start = substr(microtime(), 10, 11) . substr(microtime(), 1, 10);
+  batire_antidot_export_upload_files_scp(batire_antidot_export_create_zips($nids, $op, $custom_export));
+  $end = substr(microtime(), 10, 11) . substr(microtime(), 1, 10);
+  $duration = trim($end) - trim($start);
+  $duration = sprintf("%01.4f", $duration);
+  watchdog('ANTIDOT_EXPORT', t('Job duration = @duration', array('@duration' => $duration)));
+}
+
+/**
+ * Implementation of hook_cronapi().
+ */
+function batire_antidot_export_cronapi($op, $job = NULL) {
+  switch ($op) {
+    case 'list':
+      return array(
+        'batire_antidot_export_check_index' => t('Check is new documents indexed in Antidot'),
+        'batire_antidot_export_alerte_documents' => t('Alert Documents'),
+        'batire_antidot_export_remove_index' => t('Check and remove indexed documents in Antidot which comply with the rules'),
+      );
+      break;
+
+    case 'rule':
+      if ($job == 'batire_antidot_export_check_index') {
+        return '0 7 * * *';
+      }
+      if ($job == 'batire_antidot_export_alerte_documents') {
+        return '0 7 * * *';
+      }
+      elseif ($job == 'batire_antidot_export_remove_index') {
+        return '5 0 * * 6';
+      }
+      break;
+
+    case 'execute':
+      if ($job == 'batire_antidot_export_check_index') {
+        batire_antidot_export_check_index();
+      }
+      elseif ($job == 'batire_antidot_export_alerte_documents') {
+        batire_antidot_export_alerte_documents();
+      }
+      elseif ($job == 'batire_antidot_export_remove_index') {
+        batire_antidot_export_remove_index();
+      }
+      break;
+  }
+}
+
+/**
+ * Delete documents from Antidot by some rules
+ * now : Actualite older than 6 month //task #57978
+ */
+function batire_antidot_export_remove_index() {
+  $nids = array();
+  $from =  strtotime('- 6 month');//6 month ago
+
+  $sql = "SELECT n.nid FROM {node} n WHERE n.type  = '%s'";
+  $result = db_query($sql, BATIRE_SITE_CT_ACTUALITE);
+  while ($row = db_fetch_object($result)) {
+    $keys = array('nid' => (int) $row->nid);
+    $page_data = mongodb_select_one(MONGODB_PAGE_COLLECTION, $keys);
+    if ($page_data['doc_type'] == 'Article') {
+      if (is_int($page_data['date_document'])) {//because date_document can be integer or string format in mongodb
+        //document older than 6 month
+        if ($page_data['date_document'] < $from) {
+          $nids[] = $row->nid;
+        }
+      }
+      else {
+        if (strtotime($page_data['date_document']) < $from) {
+          $nids[] = $row->nid;
+        }
+      }
+    }
+  }
+  if (!empty($nids)) {
+    $op = 'delete';
+    $chunked_nids = array_chunk($nids, 100);
+
+    foreach ($chunked_nids as $nids) {
+      job_queue_add('_batire_antidot_export_job_run', 'Antidot '. $op .' documents', array($nids, $op));
+    }
+  }
+}
+
+function batire_antidot_export_check_index() {
+  //$flag = variable_get('batire_xml_parse_last_import', array());
+  /*
+   * If was import
+   */
+  /*if (isset($flag['have_new']) && $flag['have_new']) {
+    $date = date_format_date(date_make_date($flag['date_editoriale'], NULL, 'datestamp'), 'custom', 'Y-m-d');
+    $filter = '(dateMaj="' . $date . '")and(id="' . $flag['last_bid'] . '")';
+    $request = array('afs:filter' => $filter);
+    $antidot_result = batire_antidot_search_run($request, 0);
+
+  */
+    /*
+     * If the last import fully indexed
+     */
+   /* if (isset($antidot_result->total_cnt) && $antidot_result->total_cnt == 1) {
+      //Need to set new docs flag to 1 for all users due to new docs indexed
+      $nodes = db_query('SELECT nid FROM {node} WHERE type = "batire_user_profile" AND status = 1');
+      while ($nid = db_result($nodes)) {
+        $profile = node_load($nid);
+        $profile->field_new_docs_flag[0]['value'] = 1;
+        node_save($profile);
+      }
+   */
+      /*
+       * Searches Alerts Process ot job_queue
+       */
+    /*  if (variable_get('batire_site_process_alerts', TRUE)) {
+        $keys = array('nid' => array('$ne' => NULL));
+        $sids_ar = mongodb_select(MONGODB_SEARCH_COLLECTION, $keys);
+        $sids = array();
+        foreach ($sids_ar as $sid_ar) {
+          $sids[] = $sid_ar['sid'];
+        }
+        $sids_part = array_chunk($sids, BATIRE_ANTIDOT_EXPORT_SAVED_SEARCH_MAX_JOB);
+        $cnt = count($sids_part) - 1;
+        for ($i = 0; $i < $cnt; $i++) {
+          job_queue_add("_batire_antidot_export_saved_searches_job_run", 'Process saved searches', array($sids_part[$i], FALSE));
+        }
+        job_queue_add("_batire_antidot_export_saved_searches_job_run", 'Process saved searches', array($sids_part[$cnt], TRUE));
+      }
+    }
+  }*/
+
+  /*
+   * New version
+   * Run Every Day
+   */
+  $flag = variable_get('batire_xml_parse_last_import', array());
+  if (isset($flag['have_new']) && $flag['have_new']) {
+    $nodes = db_query('SELECT nid FROM {node} WHERE type = "batire_user_profile" AND status = 1');
+    while ($nid = db_result($nodes)) {
+      $profile = node_load($nid);
+      $profile->field_new_docs_flag[0]['value'] = 1;
+      node_save($profile);
+    }
+  }
+  if (variable_get('batire_site_process_alerts', TRUE)) {
+    $keys = array('nid' => array('$ne' => NULL));
+    $sids_ar = mongodb_select(MONGODB_SEARCH_COLLECTION, $keys);
+    $sids = array();
+    foreach ($sids_ar as $sid_ar) {
+      $sids[] = $sid_ar['sid'];
+    }
+    $sids_part = array_chunk($sids, BATIRE_ANTIDOT_EXPORT_SAVED_SEARCH_MAX_JOB);
+    $cnt = count($sids_part) - 1;
+    for ($i = 0; $i < $cnt; $i++) {
+      job_queue_add("_batire_antidot_export_saved_searches_job_run", 'Process saved searches', array($sids_part[$i], FALSE));
+    }
+    job_queue_add("_batire_antidot_export_saved_searches_job_run", 'Process saved searches', array($sids_part[$cnt], TRUE));
+  }
+}
+
+function _batire_antidot_export_saved_searches_job_run($sids, $remove_flag) {
+  $start = substr(microtime(), 10, 11) . substr(microtime(), 1, 10);
+  foreach ($sids as $sid) {
+    $search = mongodb_search_get_search_data($sid);
+    $search_node = node_load($search['nid']);
+    $alerts = _batire_user_searches_get_alerts_for_search($sid);
+
+    if ($alerts) {
+      //alerts process
+      foreach ($alerts as $alert) {
+        if (empty($search['data']['related_search'])) {
+          //checking for sending by periodicity
+          $periodicity = $alert->field_alert_period[0]['value'];
+          if (isset($alert->field_last_run[0]['value']) && $alert->field_last_run[0]['value']) {
+            $last_run = $alert->field_last_run[0]['value'];//get last run date of alert
+          }
+          else {
+            $last_run = $alert->created;//in first send we used date of alert created
+          }
+          $last_run_str = '"' . date_format_date(date_make_date($last_run, NULL, 'datestamp'), 'custom', 'Y-m-d') . '"';
+          $run = FALSE;
+
+          if ($periodicity == 0) {//every day
+            /*
+             * actually it needs always run
+             * but we need additional verification for the case when we run this function manually
+             */
+            if ((strtotime(date('Y-m-d')) - strtotime(date('Y-m-d', $last_run))) >= 86400) {
+              $run = TRUE;
+            }
+          }
+          elseif ($periodicity == 1) {
+            $week_period = $alert->field_alert_period_week[0]['value'];
+            $current_day = date('l', REQUEST_TIME);
+            $arr = array(
+              'Monday'    => 0,
+              'Tuesday'   => 1,
+              'Wednesday' => 2,
+              'Thursday'  => 3,
+              'Friday'    => 4
+            );
+
+            if ($week_period == $arr[$current_day]) {
+              if ($last_run <= strtotime(date('Y-m-d H:i:s') . ' - 1 week')) {
+                $run = TRUE;
+              }
+            }
+          }
+          elseif ($periodicity == 2) {
+            $month_period = $alert->field_alert_period_month[0]['value'];
+            $arr = array(
+              '0'  => strtotime(date('Y-m-d H:i:s') . ' - 1 month'),//every month
+              '1' => strtotime(date('Y-m-d H:i:s') . ' - 10 month'),//every 10 month
+              '2' => strtotime(date('Y-m-d H:i:s') . ' - 20 month'),//every 20 month
+            );
+            if ($last_run <= $arr[$month_period]) {
+              $run = TRUE;
+            }
+          }
+
+          if ($run) {
+            $search['data']['cpids'] = array('new' => array(), 'changed' => array(), 'new_count' => 0, 'changed_count' => 0);
+            //Get total docs cnt
+            $request = batire_search_map_request(
+              $search['data'], NULL, 'relevant', 'desc', 0, 0
+            );
+            $antidot_result = batire_antidot_search_run($request, 0);
+            $total_docs = $antidot_result->total_cnt;
+            $alert->field_search_total = array(array('value' => $antidot_result->total_cnt));
+            if ($total_docs) {//if request is actual
+
+              //Get new docs cnt and cpids
+              $new_search = $search;
+              $new_search['data']['custom_filter'] = '(dateCreation>=' . $last_run_str . ')';
+              $request = batire_search_map_request(
+                $new_search['data'], NULL, 'relevant', 'desc', $total_docs, 0
+              );
+              $new_docs = batire_antidot_search_run($request, 0);
+              if ($new_docs->total_cnt > 0) {
+                /*
+                 * Important:
+                 * Don't change array $search['data']['cpids'] to $search['data']['bids'], because we will lose existing data from mongodb
+                 * It needs for request to antidot for getting full amount of new and changed docs after search creating
+                 * see batire_search_ui_apply_criterias_in_results_page in batire_search_ui.module
+                 */
+                $search['data']['cpids']['new_count'] = $new_docs->total_cnt;
+                foreach ($new_docs->content as $new_doc) {
+                  $search['data']['cpids']['new'][] = $new_doc->node->id;
+                }
+                array_unique($search['data']['cpids']['new']);
+              }
+
+              //Get changed docs cnt and cpids
+              $changed_search = $search;
+              $changed_search['data']['custom_filter'] = '(dateCreation<' . $last_run_str . ')and(dateMaj>=' . $last_run_str . ')';
+              $request = batire_search_map_request(
+                $changed_search['data'], NULL, 'relevant', 'desc', $total_docs, 0
+              );
+              $changed_docs = batire_antidot_search_run($request, 0);
+              if ($changed_docs->total_cnt > 0) {
+                $search['data']['cpids']['changed_count'] = $changed_docs->total_cnt;
+                foreach ($changed_docs->content as $changed_doc) {
+                  $search['data']['cpids']['changed'][] = $changed_doc->node->nid;
+                }
+                array_unique($search['data']['cpids']['changed']);
+              }
+
+              if ($new_docs->total_cnt > 0 || $changed_docs->total_cnt > 0) {
+                //update search node
+                $search_node->field_search_new[0]['value'] = $new_docs->total_cnt;
+                $search_node->field_search_total[0]['value'] = $total_docs;
+                node_save($search_node);
+                /*
+                 * update search collection
+                 */
+                mongodb_update(MONGODB_SEARCH_COLLECTION, array('sid' => $sid), $search);
+              }
+              $search_for_alert = $search;
+              $search_for_alert['data']['custom_filter'] = '(dateCreation>=' . $last_run_str . ')or((dateCreation<' . $last_run_str . ')and(dateMaj>=' . $last_run_str . '))';
+              _batire_antidot_export_process_search_alert($alert, $search_for_alert);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  $end = substr(microtime(), 10, 11) . substr(microtime(), 1, 10);
+  $duration = trim($end) - trim($start);
+  $duration = sprintf("%01.4f", $duration);
+  batire_site_log_watchdog(' Job duration = ' . $duration);
+
+  //If it last job - remove flag
+  if ($remove_flag) {
+    variable_set('batire_xml_parse_last_import', array());
+  }
+}
+
+function _batire_antidot_export_process_search_alert($alert, $search) {
+  $new_docs_count = $search['data']['cpids']['new_count'] + $search['data']['cpids']['changed_count'];
+  if ($new_docs_count > 0) {
+    $search_for_alert = batire_search_create_new_search(NULL, $search['data']);
+    $bids = array_merge($search['data']['cpids']['new'], $search['data']['cpids']['changed']);
+
+    $sql = "SELECT bid, title FROM batire_hierarchy WHERE bid IN(". db_placeholders($bids, 'text') .") ORDER BY version DESC LIMIT 5";
+    $qr = db_query($sql, $bids);
+
+    $docs_list = '';
+    while ($doc_result = db_fetch_array($qr)) {
+      $docs_list .= '- ' . l($doc_result['title'], 'document/' . $doc_result['bid'], array('absolute' => TRUE)) . "\n";
+    }
+
+    $link_to_alert = '';
+    if ($new_docs_count > 5) {
+      $link_to_alert = '<strong>' . l(t('CONSULTER TOUS LES DOCUMENTS DE CETTE ALERTE'),
+          'recherche-avancee/resultats/' . $search_for_alert,
+          array('absolute' => TRUE)
+        ) . '</strong>';
+    }
+
+    $alert->field_search_new = array(array('value' => $new_docs_count));
+    $alert->field_last_run[0]['value'] = strtotime(date('Y-m-d', time()) .' ' . BATIRE_USER_SEARCHES_SEND_ALERTS_TIME);
+    node_save($alert);
+
+    $account = mongodb_user_get_user($alert->uid);
+    $options = array(
+      'module' => 'batire_user_searches',
+      'mailkey' => 'batire_user_searches_search_alert',
+      'recipient' => $account['mail'],
+      'subject' => '',
+      'data' => array(
+        'name' => $account['name'],
+        'surname' => $account['surname'],
+        'salutation' => $account['salut'],
+        'alert_name' => $alert->title,
+        'new_docs_num' => $new_docs_count,
+        'docs_list' => $docs_list,
+        'link_to_alert' => $link_to_alert
+      ),
+      'plaintext' => FALSE,
+    );
+    _batire_user_searches_create_notification_record($alert, $search_for_alert);
+    batire_site_send_mail($options, variable_get('site_mail', 'batire@adyax.com'));
+  }
+  else {
+    $alert->field_last_run[0]['value'] = strtotime(date('Y-m-d', time()) . ' ' .  BATIRE_USER_SEARCHES_SEND_ALERTS_TIME);
+    node_save($alert);
+  }
+}
+
+function batire_antidot_export_alerte_documents() {
+  $flag = variable_get('doc_alerts_last_imported_document', FALSE);
+  if ($flag) {
+    if (variable_get('batire_site_process_alerts', TRUE)) {
+      //process document alerts
+      //get alerts nids
+      $alerts_nids = array();
+
+      //Select nodes of Alerts which created before last import
+      $alerts = db_query('SELECT n.nid FROM {node} n
+                          JOIN {content_type_batire_user_search_profile}  ctbusp ON n.nid = ctbusp.nid
+                          WHERE field_profile_type_value = 2 AND n.created < %s', $flag['import_time']);
+      while ($a_nid = db_result($alerts)) {
+        $alerts_nids[] = $a_nid;
+      }
+      $now = time();//take a runtime of cron
+      //Chunk on parts by 50
+      $alerts_part = array_chunk($alerts_nids, BATIRE_ANTIDOT_EXPORT_SAVED_SEARCH_MAX_JOB);
+      $cnt = count($alerts_part) - 1;
+      for ($i = 0; $i < $cnt; $i++) {
+        job_queue_add("_batire_antidot_export_doc_alerts_job_run", 'Process document alerts', array($alerts_part[$i], $now, FALSE));
+      }
+      job_queue_add("_batire_antidot_export_doc_alerts_job_run", 'Process document alerts', array($alerts_part[$i], $now, TRUE, TRUE));
+    }
+  }
+}
+
+function _batire_antidot_export_doc_alerts_job_run($nids, $time, $remove_flag = FALSE, $finished = FALSE) {
+  $start = substr(microtime(), 10, 11) . substr(microtime(), 1, 10);
+
+  foreach ($nids as $nid) {
+    $alert = node_load($nid);
+    $doc_nid = $alert->field_alert_document[0]['nid'];
+    $actual_doc_node = batire_antidot_export_get_fresh_node($doc_nid);
+
+    /*
+     * Alerts will process only if was import a new version of the document (see import functions of FM and SO (Codes and TO))
+     * Check if new version of the document didn't alert and node of alert created before new version document
+     */
+    if (isset($actual_doc_node->page_data['alerted']) && !is_null($actual_doc_node->page_data['alerted']) && $actual_doc_node->page_data['alerted'] == 0) {
+      //Have changed docs, send mail
+
+        _batire_user_searches_create_notification_record($alert);
+
+        $link_to_doc = '<strong>' . l(t('CONSULTER LE DOCUMENT ACTUALISE'),
+            'node/' . $actual_doc_node->nid,
+            array('absolute' => TRUE)
+          ) . '</strong>';
+
+        $account = mongodb_user_get_user($alert->uid);
+        if ($actual_doc_node->type != BATIRE_SITE_CT_TN && $actual_doc_node->page_data['etat_juridique'] == 'Annulée') {
+          /*
+           * Normes could be replaced by some new version
+           * We should alert the user that the document of his alert is obsolete
+           */
+          $additional_text = t('Cette norme est annulé penser a changer votre alerte vers la nouvelle norme');
+        }
+        $options = array(
+          'module' => 'batire_user_searches',
+          'mailkey' => 'batire_user_searches_doc_alert',
+          'recipient' => $account['mail'],
+          'subject' => '',
+          'data' => array(
+            'name' => $account['name'],
+            'surname' => $account['surname'],
+            'salutation' => $account['salut'],
+            'alert_date' => date_format_date(date_make_date($actual_doc_node->changed, NULL, 'datestamp'), 'custom', 'd/m/Y'),
+            'doc_title' => $actual_doc_node->title,
+            'link_to_doc' => $link_to_doc,
+            'teaser' => batire_site_get_node_in_buildmode($actual_doc_node->nid, 'email'),
+            'additional_text' => $additional_text,
+          ),
+          'plaintext' => FALSE,
+        );
+        batire_site_send_mail($options, variable_get('site_mail', 'batire@adyax.com'));
+    }
+  }
+
+
+  $end = substr(microtime(), 10, 11) . substr(microtime(), 1, 10);
+  $duration = trim($end) - trim($start);
+  $duration = sprintf("%01.4f", $duration);
+  batire_site_log_watchdog(' Job duration = ' . $duration);
+
+  //If it last job - remove flag
+  if ($remove_flag) {
+    variable_set('doc_alerts_last_imported_document', FALSE);
+  }
+  /*
+   * Set the last versions of the documents to ALERTED
+   * Don't set all version to alerted (can import more than 1 version in one import cron process)
+   * because we consider only last version (reason - savings of resources)
+   */
+  if ($finished) {
+    $sql = 'SELECT field_alert_document_nid as nid FROM {content_type_batire_user_search_profile} WHERE field_profile_type_value = 2';
+    $result = db_query($sql);
+    while ($row = db_fetch_array($result)) {
+      $actual_doc_node = batire_antidot_export_get_fresh_node($row['nid']);
+      $keys = array('nid' => (int) $actual_doc_node->nid);
+      $page_data = mongodb_select_one(MONGODB_PAGE_COLLECTION, $keys);
+      $page_data['alerted'] = 1;
+      $keys = array('nid' => (int) $page_data['nid'], 'bid' => $page_data['bid']);
+      mongodb_update(MONGODB_PAGE_COLLECTION, $keys, $page_data);
+    }
+  }
+}
+
+function batire_antidot_export_filter($node) {
+  //Filter out nodes, that shouldn't been indexed.
+  if (isset($node->page_data['not_export']) && $node->page_data['not_export']) {
+    return TRUE;
+  }
+
+  switch ($node->type) {
+    case BATIRE_SITE_CT_TN:
+      //Detailed TN need to export
+      if (isset($node->page_data['notice_seule']) && $node->page_data['notice_seule']) {
+        return FALSE;
+      }
+
+      //Filter out from prebody
+      if (isset($node->page_data['from_prebody']) && $node->page_data['from_prebody']) {
+        return TRUE;
+      }
+
+      //Filter out TN where sub_type != h0, h1, annexX (annexX = annex or annexbl or annexi or _ *annexn * _or *annexz *)
+      $sub_type = isset($node->page_data['sub_type']) ? drupal_strtolower($node->page_data['sub_type']) : '';
+      if ($sub_type != 'h0' && $sub_type != 'h1' && strrpos($sub_type, 'annex') === FALSE) {
+        return TRUE;
+      }
+
+      break;
+    case BATIRE_SITE_CT_ACTUALITE:
+      if ($node->page_data['doc_type'] == BATIRE_HIERARCHY_DT_MEDIA) {
+        return TRUE;
+      }
+      //if document older than 6 month
+      $from =  strtotime('- 6 month');
+      if ($node->page_data['date_document'] < $from) {
+        return TRUE;
+      }
+      break;
+    case BATIRE_SITE_CT_FM:
+      //Filter out archived FM
+      $arr = explode('-', $node->page_data['bid']);
+      if (count($arr) > 2 ||
+          ((!isset($node->page_data['parent_bid']) || empty($node->page_data['parent_bid'])) &&
+            (!isset($node->page_data['parent']['bid']) || empty($node->page_data['parent']['bid'])))) {
+        return TRUE;
+      }
+      //filter out "Documents ne faisant plus l’objet de mise à jour", task #85226
+      $sth = db_query('SELECT * FROM {batire_hierarchy} WHERE type = "%s" AND ISNULL(parent_bid) AND bid = "%s" AND NOT(bid REGEXP "%s") AND nid IS NOT NULL ORDER BY title, id', BATIRE_SITE_CT_FM, $node->page_data['bid'], '-[0-9]{8,}$');
+      $result = db_fetch_object($sth);
+      if ($result) {
+        return TRUE;
+      }
+
+      break;
+    case BATIRE_SITE_CT_TO:
+      //Filter out archived TO complete parts
+      if (!($node->page_data['to_complete'] || (empty($node->page_data['to_complete']) && $node->page_data['bid'] == $node->page_data['super_bid']))) {
+        return TRUE;
+      }
+      //Filter out TO which are not indexed with at least one index "métier" (index métier = Types de bâtiments, or Corps d'état or Thème)
+      if (batire_site_texte_officiel_filter($node)) {
+        return TRUE;
+      }
+      if (isset($node->page_data['to_complete']) && $node->page_data['to_complete']) {
+        $versions = batire_hierarchy_get_versions($node->page_data['id'], 'TO');
+        if (count($versions)) {
+          $last = $bid = 0;
+          $old_bids = array();
+          $old_nids = array();
+          foreach ($versions as $version) {
+            if ($version->version > $last) {
+              $last = $version->version;
+              $bid  = $version->bid;
+              $nid = $version->nid;
+            }
+            elseif ($version->version == $last && !count($version->jorf)) {
+              $old_bids[] = $bid;
+              $old_nids[] = $nid;
+              $bid        = $version->bid;
+            }
+            else {
+              $old_bids[] = $version->bid;
+              $old_nids[] = $version->nid;
+            }
+          }
+
+          if ($node->page_data['bid'] != $bid) {
+            return TRUE;
+          }
+          elseif (count($old_bids)) {
+            job_queue_add("_batire_antidot_export_job_run",  'Antidot delete TO-complete old version documents', array($old_nids, 'delete'));
+          }
+        }
+      }
+      break;
+    case BATIRE_SITE_CT_CODE:
+      //Filter out Codes from this array
+      $codes = array(
+        'LEGITEXT000006074069', 'LEGITEXT000006073984', 'LEGITEXT000006074234', 'LEGITEXT000006070721',
+        'LEGITEXT000005634379', 'LEGITEXT000006069441', 'LEGITEXT000006070162', 'LEGITEXT000006069565',
+        'LEGITEXT000006070208', 'LEGITEXT000006074237', 'LEGITEXT000006071570', 'LEGITEXT000006071191',
+        'LEGITEXT000006070239', 'LEGITEXT000006074224', 'LEGITEXT000006071514',
+        'LEGITEXT000006070299', 'LEGITEXT000006070633', 'LEGITEXT000006069577', 'LEGITEXT000006069568',
+        'LEGITEXT000006069569', 'LEGITEXT000006069574', 'LEGITEXT000006069576', 'LEGITEXT000006070249',
+        'LEGITEXT000006070933', 'LEGITEXT000006069562', 'LEGITEXT000006069564', 'LEGITEXT000006072666',
+        'LEGITEXT000006071785', 'LEGITEXT000006072026', 'LEGITEXT000006074236',
+        'LEGITEXT000006070719', 'LEGITEXT000006071029', 'LEGITEXT000006070987', 'LEGITEXT000006070680',
+        'LEGITEXT000006070716', 'LEGITEXT000006071154', 'LEGITEXT000006069414', 'LEGITEXT000006074228',
+        'LEGITEXT000006074947', 'LEGITEXT000006071366', 'LEGITEXT000006071367', /*'LEGITEXT000006072665',*/
+        'LEGITEXT000006073189', 'LEGITEXT000006071318', 'LEGITEXT000006074073', /*'LEGITEXT000006072050',*/
+        'LEGITEXT000006071344', /*'LEGITEXT000006070667'*/
+      );
+
+      if (in_array($node->page_data['super_id'], $codes)) {
+        return TRUE;
+      }
+
+      //Filter out Codes to_complete
+      if (isset($node->page_data['to_complete']) && $node->page_data['to_complete']) {
+        return TRUE;
+      }
+
+      //Indexing only fresh version, so get fresh version id
+      $fresh = '';
+      foreach ($node->page_data['versions'] as $version) {
+        if (drupal_strtoupper($version['etat']) == 'VIGUEUR') {
+          $fresh = $version['id'];
+          break;
+        }
+      }
+      if ($node->page_data['id'] != $fresh) {
+        return TRUE;
+      }
+
+      break;
+  }
+
+  return FALSE;
+}
+
+function batire_antidot_export_get_fresh_node($nid) {
+  $node = node_load($nid);
+  switch ($node->type) {
+    case BATIRE_SITE_CT_TN:
+    case BATIRE_SITE_CT_LIVRE:
+      return $node;
+    case BATIRE_SITE_CT_FM:
+      $arr = explode('-', $node->page_data['bid']);
+      if (count($arr) > 2) {
+        return node_load(batire_hierarchy_get_by_bid($arr[0] . '-' . $arr[1], 'nid'));
+      }
+
+      return $node;
+    case BATIRE_SITE_CT_TO:
+      $versions = batire_hierarchy_get_versions($node->page_data['id'], 'TO');
+      if (count($versions)) {
+        $last = $bid = 0;
+        foreach ($versions as $version) {
+          if ($version->version > $last) {
+            $last = $version->version;
+            $bid  = $version->bid;
+          }
+          elseif ($version->version == $last && !count($version->jorf)) {
+            $bid = $version->bid;
+          }
+        }
+
+        return node_load(batire_hierarchy_get_by_bid($bid, 'nid'));
+      }
+
+      return $node;
+    case BATIRE_SITE_CT_CODE:
+      $fresh = '';
+      foreach ($node->page_data['versions'] as $version) {
+        if (drupal_strtoupper($version['etat']) == 'VIGUEUR') {
+          $fresh = $version['id'];
+          break;
+        }
+      }
+
+      if (!empty($fresh)) {
+        $prefix = taxonomy_get_term(BATIRE_SITE_TID_TYPE_DE_DOCUMENT_CODE)->description;
+        return node_load(batire_hierarchy_get_by_bid($prefix . '-' . $fresh, 'nid'));
+      }
+
+      return $node;
+    default:
+      return $node;
+  }
+}
+
+/**
+ * Helper function for strip specific tags.
+ * @param $tags
+ * @param $string
+ * @return string
+ */
+function batire_antidot_export_strip_tags($tags, $string) {
+  foreach ($tags as $tag) {
+    $string = preg_replace('#</?'.$tag.'[^>]*>#is', '', $string);
+  }
+  return $string;
+}
+
+function batire_antidot_export_xml_escape($string) {
+  return str_replace(array('&', '<', '>', '\'', '"'), array('&amp;', '&lt;', '&gt;', '&apos;', '&quot;'), $string);
+}
+
+/**
+ * Get root doc types of cites.
+ */
+function batire_antidot_export_get_cites($bid) {
+  $types = array(BATIRE_SITE_VID_FM, BATIRE_SITE_VID_LIVRES);
+  $result = array();
+  $query = db_query('
+    SELECT tn.tid
+    FROM {batire_links} bl
+    INNER JOIN {batire_hierarchy} bh ON bh.bid = bl.bid_from
+    INNER JOIN {term_node} tn ON tn.nid = bh.nid
+    INNER JOIN {term_data} td ON td.tid = tn.tid
+    WHERE bl.bid_to = "%s" AND td.vid IN (' . db_placeholders($types) . ')
+    GROUP BY tn.tid
+  ', array_merge(array($bid), $types));
+  while ($row = db_fetch_object($query)) {
+    $result[] = $row->tid;
+  }
+  return $result;
+}
+/*
+ * Get cities from node
+ */
+function batire_antidot_export_get_cites_by_nid($nid) {
+  $result = array();
+  $query = db_query('
+    SELECT cfc.nid, cfc.field_cites_value as cite
+    FROM {content_field_cites} cfc
+    INNER JOIN {node} n ON n.nid = cfc.nid
+    WHERE cfc.nid = %d'
+  , $nid);
+  while ($row = db_fetch_object($query)) {
+    $result[] = $row->cite;
+  }
+  return $result;
+}
+
+function _batire_antidot_export_update_nodes($nids) {
+  foreach ($nids as $nid) {
+    $node = node_load($nid);
+    $cites = batire_antidot_export_get_cites($node->page_data['bid']);
+    $node->field_cites = array();
+    foreach ($cites as $cite) {
+      $node->field_cites[]['value'] = $cite;
+    }
+    if (!empty($node->field_cites)) {
+      node_save($node);
+    }
+  }
+}

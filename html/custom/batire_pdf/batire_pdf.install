@@ -1,0 +1,28 @@
+<?php
+
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_pdf_install() {
+  db_query("UPDATE {system} SET weight = '100' WHERE name='batire_pdf'");
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_pdf_update_6001() {
+  $result = db_query("SELECT nid FROM {node} WHERE type = 'batire_texte_normatifs'");
+  while($nid = db_result($result)) {
+    $page_data = mongodb_page_get_node_page($nid);
+    if (isset($page_data['attached']) && !empty($page_data['attached'])) {
+      batire_xml_parse_normative_pdf_to_image($nid, $page_data['attached']);
+    }
+  }
+  $ret[] = array('success' => TRUE, 'query' => "Send pdfs to job queue for breakdown to images");
+  return $ret;
+}

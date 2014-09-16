@@ -1,0 +1,935 @@
+<?php
+
+/**
+ * @file
+ * Installation for the module
+ */
+
+/**
+ * Implementation of hook_schema_alter().
+ */
+function batire_site_schema_alter(&$schema) {
+  $schema['node']['fields']['title'] = array(
+    'type' => 'varchar',
+    'length' => 2000,
+    'not null' => TRUE,
+    'default' => ''
+  );
+
+  $schema['node']['indexes']['node_title_type'] = array(array('title', 255), array('type', 4));
+
+  $schema['node_revisions']['fields']['title'] = array(
+    'type' => 'varchar',
+    'length' => 2000,
+    'not null' => TRUE,
+    'default' => ''
+  );
+}
+
+/**
+ * Implementation of hook_install().
+ */
+function batire_site_install() {
+  variable_set('batire_user_statistics_application_format_file', 'xls');
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6001() {
+  $ret = array();
+
+  $schema = drupal_get_schema(NULL, TRUE);
+
+  db_drop_index($ret, 'node', 'node_title_type');
+
+  db_change_field($ret, 'node', 'title', 'title', $schema['node']['fields']['title']);
+  db_change_field($ret, 'node_revisions', 'title', 'title', $schema['node_revisions']['fields']['title']);
+
+  db_add_index($ret, 'node', 'node_title_type', $schema['node']['indexes']['node_title_type']);
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6002() {
+  $ret = array();
+
+  $query = "Bonjour !salutation !name !surname,
+
+Durant ces 5 derniers jours, vous avez bénéficié d’une offre d'essai à !site_name_uc.
+
+<b>Dès demain, vous n’aurez plus accès à la meilleure base de données technique.</b>
+
+Pour continuer d’accéder à l’intégralité des contenus et bénéficier des multiples fonctionnalités du site, nous vous invitons à vous abonner à !site_name_uc au plus vite.
+
+Pour cela, !transform_link sans plus attendre !
+
+En vous remerciant par avance de votre confiance,
+
+Très cordialement,
+L’équipe !site_name_uc
+
+!reg_link
+!contact_link
+!faq_link";
+
+  $result = db_query("UPDATE {mail_edit} SET body = '%s' WHERE id = '%s'", $query, 'batire_user_batire_user_account_trial_offer_2');
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain("UPDATE {mail_edit} SET body = '%s' WHERE id = '%s'"));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6003() {
+  $ret = array();
+
+  $query = "UPDATE {term_data} SET name = 'Ouvrages à actualisation' WHERE tid = 192";
+  $result = db_query($query);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6004() {
+  $ret = array();
+
+  $query = "UPDATE {menu_links} SET link_path = 'http://abonnement.lemoniteur.fr/sources/articles.asp?codepublication=KHEOX&codearticle=abo_2postes', router_path = '', options = 'a:1:{s:10:\"attributes\";a:0:{}}' WHERE mlid = 864";
+  $result = db_query($query);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  $query = "UPDATE {menu_links} SET link_path = 'user/register/1', router_path = 'user/register', options = 'a:1:{s:10:\"attributes\";a:0:{}}' WHERE mlid = 865";
+  $result = db_query($query);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6005() {
+  $ret = array();
+
+  $content = '            <div class="block">
+              <div id="flash-pave-kheox"></div>
+              <div class="flash-pave-kheox-link"><a href="/rebond"></a></div>
+            </div>';
+
+  $query = "UPDATE {content_field_content} SET field_content_value = '" . $content . "' WHERE nid = 761";
+  $result = db_query($query);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6006() {
+  $ret = array();
+
+  $options = 'a:1:{s:10:"attributes";a:0:{}}';
+  $query = "UPDATE {menu_links} SET link_path = 'http://abonnement.lemoniteur.fr/sources/articles.asp?codepublication=KHEOX&codearticle=abo_2postes', router_path = '', options = '%s' WHERE mlid = 864";
+  $result = db_query($query, $options);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  $query = "UPDATE {menu_links} SET link_path = 'user/register/1', router_path = 'user/register', options = '%s' WHERE mlid = 865";
+  $result = db_query($query, $options);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6007() {
+  $ret = array();
+
+  $query = "Demande de bascule offre d’essai vers offre Payante - !salutation !name !company_name";
+
+  $result = db_query("UPDATE {mail_edit} SET subject = '%s' WHERE id = '%s'", $query, 'batire_user_batire_user_gm_convert_annual');
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain("UPDATE {mail_edit} SET subject = '%s' WHERE id = '%s'"));
+
+  return $ret;
+}
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6008() {
+  $ret = array();
+
+  $result = db_query("UPDATE {term_data} SET description = '%s' WHERE tid = '%s'", 'PB', 194);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain("UPDATE {term_data} SET description = '%s' WHERE tid = '%s'"));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6009() {
+  $ret = array();
+
+  $arr = array(
+    'name'      => 'Type du Complement Technique',
+    'relations' => '1',
+    'relations' => '1',
+    'hierarchy' => '0',
+    'multiple'  => '0',
+    'required'  => '1',
+    'tags'      => '0',
+    'nodes'     => array(
+      BATIRE_SITE_CT_COMP_TECH => BATIRE_SITE_CT_COMP_TECH
+    )
+  );
+
+  $result = taxonomy_save_vocabulary($arr);
+
+  $ret[] = array('success' => $result, 'query' => 'Vocabulary "Type du Complement Technique" created.');
+
+  $type_terms = array(
+    'FICHE-DETAIL'     => 'DÉTAIL',
+    'FICHE-DESORDRE'   => 'DÉSORDRES ET PATHOLOGIES',
+    'FICHE-INCENDIE'   => 'SECURITE INCENDIE',
+    'FICHE-DROIT'      => 'DROIT',
+    'FICHE-EQUIPEMENT' => 'ÉQUIPEMENT SPORTIF',
+    'FICHE-NORME'      => 'RÉGLEMENTATION-NORME-DTU',
+    'FICHE-ARTICLE'    => ''
+  );
+
+  foreach ($type_terms as $term_name => $descr) {
+    $term_data = array(
+      'name' => $term_name,
+      'description' => $descr,
+      'vid' => 20,
+    );
+
+    $result = taxonomy_save_term($term_data);
+    $ret[] = array('success' => $result, 'query' => 'Add term "' . $term_name . '" to Vocabulary "Type du Complement Technique".');
+  }
+
+  $arr2 = array(
+    'name'      => 'Rubrique du Complement Technique',
+    'relations' => '1',
+    'relations' => '1',
+    'hierarchy' => '0',
+    'multiple'  => '0',
+    'required'  => '1',
+    'tags'      => '0',
+    'nodes'     => array(
+      BATIRE_SITE_CT_COMP_TECH => BATIRE_SITE_CT_COMP_TECH
+    )
+  );
+  $result = taxonomy_save_vocabulary($arr2);
+
+  $ret[] = array('success' => $result, 'query' => 'Vocabulary "Rubrique du Complement Technique" created.');
+
+  $rub_terms = array(
+    'Décryptage de la réglementation et de la normalisation' => '1',
+    'Construction'            => '2',
+    'Travaux sur existant'    => '3',
+    'Aménagements extérieurs' => '4',
+    'Expertise'               => '5',
+  );
+
+  foreach ($rub_terms as $term_name => $descr) {
+    $term_data = array(
+      'name' => $term_name,
+      'description' => $descr,
+      'vid' => 21,
+    );
+    $result = taxonomy_save_term($term_data);
+    $ret[] = array('success' => $result, 'query' => 'Add term "' . $term_name . '" to Vocabulary "Rubrique du Complement Technique".');
+  }
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6010() {
+  $ret = array();
+
+  $query = "UPDATE {term_data} SET name = 'Classeurs à mises à jour' WHERE tid = 192";
+  $result = db_query($query);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6011() {
+  $ret = array();
+
+  $terms = taxonomy_get_tree(BATIRE_SITE_VID_TYPE_CT);
+
+  foreach ($terms as $term) {
+    $term = (array) $term;
+    $term_desc = $term['description'];
+    $term['description'] = $term['name'];
+    $term['name'] = $term_desc;
+
+    $result = taxonomy_save_term($term);
+
+    $ret[] = array('success' => $result, 'query' => 'Vocabulary "Type du Complement Technique": Term (id: "' . $term['tid'] . '") name<->description swapped.');
+  }
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6012() {
+  $ret = array();
+
+  $content = '            <div class="block">
+              <div id="flash-pave-kheox"></div>
+              <div class="flash-pave-kheox-link"><a href="/abo"></a></div>
+            </div>';
+
+  $query = "UPDATE {content_field_content} SET field_content_value = '" . $content . "' WHERE nid = 761";
+  $result = db_query($query);
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6013() {
+  $ret = array();
+
+  $type_terms = array(
+    'FICHE-DETAIL'     => 'Détail',
+    'FICHE-DESORDRE'   => 'Désordres et pathologies',
+    'FICHE-INCENDIE'   => 'Sécurité incendie',
+    'FICHE-DROIT'      => 'Droit',
+    'FICHE-EQUIPEMENT' => 'Équipement sportif',
+    'FICHE-NORME'      => 'Réglementation-norme-DTU',
+    'FICHE-ARTICLE'    => 'Article'
+  );
+
+  $terms = taxonomy_get_tree(BATIRE_SITE_VID_TYPE_CT);
+
+  foreach ($terms as $term) {
+    $term = (array) $term;
+    if (array_key_exists($term['description'], $type_terms)) {
+      $term['name'] = $type_terms[$term['description']];
+    }
+
+    $result = taxonomy_save_term($term);
+    $ret[] = array('success' => $result, 'query' => 'Term "' . $term['name'] . '" edited in Vocabulary "Type du Complement Technique".');
+  }
+
+  if (count($type_terms) > count($terms)) {
+    $term_data = array(
+      'name' => 'Article',
+      'description' => 'FICHE-ARTICLE',
+      'vid' => 20,
+    );
+
+    $result = taxonomy_save_term($term_data);
+    $ret[] = array('success' => $result, 'query' => 'Term "Article" added to Vocabulary "Type du Complement Technique".');
+  }
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6014() {
+  $ret = array();
+
+  $query = "!salutation !name !surname,
+
+Vous bénéficiez d’une inscription à l’offre d’essai !site_name_uc.
+
+Cette offre vous permet de découvrir gratuitement le contenu et les fonctionnalités du service réglementaire et technique le plus complet.
+
+Vous disposez d’un accès illimité au site et à ses fonctionnalités à l’exception des documents normatifs.
+
+Durant cette période, nous demeurons à votre disposition pour toute question sur le site ou son fonctionnement au 01 40 13 50 88.
+
+Pour créer vos codes d'accès qui vous permettront de consulter immédiatement !site_name_uc, !link.";
+
+  $result = db_query("UPDATE {mail_edit} SET body = '%s' WHERE id = '%s'", $query, 'batire_user_batire_user_account_confirm_free_trial');
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain("UPDATE {mail_edit} SET body = '%s' WHERE id = '%s'"));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6015() {
+  $ret = array();
+
+  $query = "UPDATE {term_data} SET description = 'amenagement' WHERE name = 'Aménagements extérieurs'";
+  $result = db_query($query);
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  $query = "UPDATE {term_data} SET description = 'decryptage' WHERE name = 'Décryptage de la réglementation et de la normalisation'";
+  $result = db_query($query);
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  $query = "UPDATE {term_data} SET description = 'construction' WHERE name = 'Construction'";
+  $result = db_query($query);
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  $query = "UPDATE {term_data} SET description = 'travaux' WHERE name = 'Travaux sur existant'";
+  $result = db_query($query);
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  $query = "UPDATE {term_data} SET description = 'expertise' WHERE name = 'Expertise'";
+  $result = db_query($query);
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain($query));
+
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ * Update weight terms of Themes vocabulary
+ * @see #55253
+ */
+function batire_site_update_6016() {
+  $ret = array();
+
+  $terms = taxonomy_get_tree(BATIRE_SITE_VID_THEMES);
+  $weight = 1;
+
+  foreach ($terms as $term) {
+    $term = (array) $term;
+    $term['weight'] = $weight;
+
+    $result = taxonomy_save_term($term);
+
+    $ret[] = array('success' => $result, 'query' => 'Vocabulary "Themes": Term (id: "' . $term['tid'] . '") weight updated to: ' . $weight . '.');
+    $weight++;
+  }
+
+  return $ret;
+}
+/**
+ * Implementation of hook_update_N().
+ * Update filter of Input formats (add tags <sup>, <sub> to Filtered HTML)
+ * @see #49814
+ */
+function batire_site_update_6017() {
+  $filter = variable_get('allowed_html_1','<a> <em> <strong> <cite> <code> <ul> <ol> <li> <dl> <dt> <dd>');
+  $filter .= ' <sup> <sub>';
+  variable_set('allowed_html_1', $filter);
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6018() {
+  $query = "!salutation !name !surname,
+
+Vous bénéficiez d’une inscription à l’offre d’essai !site_name_uc.
+
+Cette offre vous permet de découvrir gratuitement le contenu et les fonctionnalités du service réglementaire et technique le plus complet.
+
+Vous disposez d’un accès illimité au site et à ses fonctionnalités.
+
+Durant cette période, nous demeurons à votre disposition pour toute question sur le site ou son fonctionnement au 01 40 13 50 88.
+
+Pour créer vos codes d'accès qui vous permettront de consulter immédiatement !site_name_uc, !link.
+
+Cordialement.
+L'équipe !site_name_uc";
+
+  $result = db_query("INSERT INTO {mail_edit} (description, subject, id, language, body) VALUES('%s', '%s', '%s', '%s', '%s')",
+    "Confirmation de l'ouverture du compte offre d'essai",
+    "Votre inscription à l’offre d’essai gratuit !site_name_uc",
+    'batire_user_batire_user_account_confirm_trial_tn',
+    'fr',
+    $query
+  );
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain("INSERT INTO {mail_edit} (description, subject, id, language, body) VALUES('%s', '%s', '%s', '%s', '%s')"));
+}
+
+/**
+ * Implementation of hook_update_N().
+ */
+function batire_site_update_6019() {
+  $top_menu = menu_tree_all_data('menu-batire-site-top');
+  foreach($top_menu as $item) {
+    if ($item['link']['title'] == "S'abonner") {
+      $menu_link = menu_link_load($item['link']['mlid']);
+      $menu_link['link_path'] = 'batire_user/register/offre';
+      menu_link_save($menu_link);
+    }
+  }
+}
+
+/**
+<<<<<<< HEAD
+ * Implementation of hook_update_N().
+ * Delete TO from Antidot which are not indexed with at least one index "métier" (index métier = Types de bâtiments, or Corps d'état or Thème)
+ * see task #53051
+ */
+function batire_site_update_6020() {
+  $nids = array();
+  $sql = 'SELECT nid FROM node WHERE type = "batire_texte_officiel"';
+  $result = db_query($sql);
+  while ($row = db_fetch_object($result)) {
+    if (batire_site_texte_officiel_filter($row)) {
+      $nids[] =  $row->nid;
+    }
+  }
+
+  $parts = array_chunk($nids, 100);
+  foreach ($parts as $part) {
+    job_queue_add("_batire_antidot_export_job_run",  'Antidot delete TO which are not indexed with at least one index "métier"', array($part, 'delete'));
+  }
+}
+
+/*
+ *  Implementation of hook_update_N().
+ *  Add new table for Codes in TDM
+ */
+function batire_site_update_6021() {
+  $schema['batire_codes_trail'] = array(
+    'description' => 'Stores information for files uploaded via the blogapi.',
+    'fields' => array(
+      'bid' => array(
+        'description' => 'Internal BID of top level of the document',
+        'type' => 'varchar',
+        'not null' => TRUE,
+        'default' => '',
+        'length' => 255,
+      ),
+      'parent_bid' => array(
+        'description' => 'Internal parent_bid of top level of the document',
+        'type' => 'varchar',
+        'not null' => TRUE,
+        'default' => '',
+        'length' => 255,
+      ),
+      'title' => array(
+        'description' => 'Title of top level of the document',
+        'type' => 'varchar',
+        'not null' => TRUE,
+        'default' => '',
+        'length' => 255,
+      ),
+      'active' => array(
+        'description' => 'Condition for displaying levels of Codes in TDM',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+    ),
+    'primary key' => array('bid'),
+    'indexes' => array(
+      'bid' => array('bid'),
+    ),
+  );
+  $ret = array();
+
+  if (!db_table_exists('batire_codes_trail')) {
+    db_create_table($ret, 'batire_codes_trail', $schema['batire_codes_trail']);
+  }
+
+  $sql = 'SELECT bid FROM {batire_hierarchy} WHERE type ="%s"';
+  $result = db_query($sql, 'batire_codes');
+  while ($row = db_fetch_array($result)) {
+    $page_data = mongodb_page_get_page_by_bid($row['bid']);
+    if (isset($page_data['persistent']['trail']) && count($page_data['persistent']['trail'])) {
+      foreach ($page_data['persistent']['trail'] as $key => $sub_lvl) {
+        $sql = 'SELECT * FROM {batire_codes_trail} WHERE bid ="%s" LIMIT 1';
+        if (!db_result(db_query($sql, $sub_lvl['bid']))) {
+          if ($key == 0) {
+            $sub_lvl['parent_bid'] = '';
+          }
+          db_query('INSERT INTO {batire_codes_trail} SET bid = "%s", parent_bid = "%s", title ="%s"', $sub_lvl['bid'], $sub_lvl['parent_bid'], $sub_lvl['title']);
+        }
+      }
+    }
+  }
+  return $ret;
+}
+
+/**
+ *  Implementation of hook_update_N().
+ *  
+ */
+function batire_site_update_6022() {
+  // check vocabulaty
+  $vocabularies = taxonomy_get_vocabularies();
+  foreach($vocabularies as $vid => $vocabulary) {
+    if($vocabulary->name == 'Catégories de NF DTU') {
+      $dtu_vid = $vid;
+      break;
+    }
+  }
+  
+  if(isset($dtu_vid)) {
+    // create term fields
+    module_load_include('inc', 'term_fields', 'term_fields.admin');
+    $form = array(
+      'fid' => 'nf_dtu_number',
+      'title' => 'NF DTU number',
+      'description' => '',
+      'type' => 'numeric',
+      'widget' => 'textfield',
+      'vid' => $dtu_vid,
+      'required' => TRUE,
+      'module' => 'term_fields',
+      'weight' => 0,
+    );
+    $form_state = array('values' => $form);
+    term_fields_admin_add_term_form_submit($form, $form_state);
+    $form_state['values']['options'] = array(
+      'default' => array(
+        'value' => '',
+      ),
+      'min' => '',
+      'max' => '',
+      'size' => '',
+      'format' => 'integer',
+      'precision' => 10,
+      'scale' => 2,
+      'decimal' => '.',
+    );
+    term_fields_admin_field_configure_form_submit($form, $form_state);
+    
+    //create terms
+    $terms = array(
+      13 => "13 - FONDATIONS",
+      14 => "14 - CUVELAGE",
+      20 => "20 - MAÇONNERIE", 
+      21 => "21 - BÉTON ARMÉ",
+      22 => "22 - GRANDS PANNEAUX NERVURÉS", 
+      23 => "23 - OUVRAGES EN BÉTON",
+      24 => "24 - FUMISTERIE",
+      25 => "25 - PLÂTRERIE",  
+      26 => "26 - ENDUITS, LIANTS HYDRAULIQUES", 
+      27 => "27 - ENDUITS PROJETÉS", 
+      31 => "31 - CONSTRUCTIONS EN BOIS", 
+      32 => "32 - CONSTRUCTION MÉTALLIQUE", 
+      33 => "33 - FAÇADES LÉGÈRES", 
+      34 => "34 - FERMETURES",
+      35 => "35 - OUVRAGES DIVERS D'AMÉNAGEMENT INTÉRIEUR", 
+      36 => "36 - MENUISERIE", 
+      39 => "39 - VITRERIE, MIROITERIE", 
+      40 => "40 - COUVERTURE", 
+      41 => "41 - BARDAGES",
+      42 => "42 - ETANCHÉITÉ DES FAÇADES", 
+      43 => "43 - ETANCHÉITÉ DES TOITURES", 
+      44 => "44 - JOINTS", 
+      45 => "45 - ISOLATION THERMIQUE", 
+      51 => "51 - PARQUETS",
+      52 => "52 - REVÊTEMENTS DURS", 
+      53 => "53 - REVÊTEMENTS SOUPLES", 
+      54 => "54 - REVÊTEMENTS COULÉS", 
+      55 => "55 - PAREMENTS DE FAÇADE RAPPORTÉS", 
+      57 => "57 - PLANCHERS SURÉLEVÉS",
+      58 => "58 - PLAFONDS", 
+      59 => "59 - REVÊTEMENTS MINCES", 
+      60 => "60 - PLOMBERIE",
+      61 => "61 - GAZ", 
+      64 => "64 - ASSAINISSEMENT", 
+      65 => "65 - CHAUFFAGE",
+      68 => "68 - VENTILATION", 
+      70 => "70 - INSTALLATIONS ÉLECTRIQUES",
+    );
+    
+    foreach ($terms as $key => $value) {
+      $term = array(
+       'name' => $value,
+       'vid' => $dtu_vid,
+      );
+      taxonomy_save_term($term);
+      db_query("INSERT INTO {term_fields_term} SET tid = %d, vid = %d, nf_dtu_number_value = %d", db_last_insert_id('term_data', 'tid'), $dtu_vid, $key);
+    }
+    $ret[] = array('success' => TRUE, 'query' => 'Vocabulary Catégories de NF DTU created');
+  }
+  else {
+    $ret[] = array('success' => FALSE, 'query' => 'Vocabulary Catégories de NF DTU do not found. please check feature Batire Content Types');
+  }
+  
+  return $ret;
+}
+
+/**
+ *  Implementation of hook_update_N().
+ *  Settings of new type Documents de Reference
+ */
+function batire_site_update_6023() {
+  $ret = array();
+  /*
+   * Create document type in Vocabulary
+   */
+  $doc_type_term = array(
+    'name' => 'Documents de référence',
+    'vid' => BATIRE_SITE_VID_DOC_TYPE,
+  );
+  $status = taxonomy_save_term($doc_type_term);
+  if ($status == 1) {
+    $ret[] = array('success' => TRUE, 'query' => 'Term Documents de référence was created');
+  }
+  else {
+    $ret[] = array('success' => FALSE, 'query' => 'Term Documents de référence was not created');
+  }
+  /*
+   * Set vocabulary ID for constants
+   */
+  $vocabularies = taxonomy_get_vocabularies();
+  foreach($vocabularies as $vid => $vocabulary) {
+    if($vocabulary->name == 'Type des Documents de référence') {
+      variable_set('batire_site_type_document_reference_vid', $vid);
+    }
+  }
+  /*
+   * Set term ID for constants
+   */
+  $terms = taxonomy_get_tree(BATIRE_SITE_VID_DOC_TYPE);
+  foreach ($terms as $term) {
+    $term = (array) $term;
+    if ($term['name'] == 'Documents de référence') {
+      variable_set('batire_site_type_document_reference_tid', $term['tid']);
+    }
+  }
+  /*
+   * Fill vocabulary of sub-types and rubric of the Documents Reference
+   */
+  $new_terms = array(
+    'Règles et recommandations professionnelles agréées par la C2P' => array(
+      'Structure',
+      'Façade, bardage',
+      'Couverture, toiture, étanchéité',
+      'Menuiserie, vitrage',
+      'Mise en œuvre des matériaux',
+    ),
+    'Autres règles et recommandations professionnelles',
+    'Règles RAGE' => array(
+      'Recommandations professionnelles',
+      'Guides',
+      'Rapports',
+      'Documents de travail',
+    ),
+    'Études',
+    'Fiches bibliographiques',
+    'Sites internet',
+    'Fiches du Développement Environnemental et Sanitaire (FDES)',
+    'CCTG',
+  );
+
+  $vocabulary_ddr_types = variable_get('batire_site_type_document_reference_vid', 26);
+  $iteration = 1;
+  foreach ($new_terms as $key_or_name => $name_or_names) {
+    if (!is_numeric($key_or_name)) {
+      $term = array(
+        'name' => $key_or_name,
+        'vid' => $vocabulary_ddr_types,
+        'weight' => $iteration,
+      );
+      $status = taxonomy_save_term($term);
+      if ($status == 1) {
+        $ret[] = array('success' => TRUE, 'query' => 'Term ' . $key_or_name . ' was created');
+      }
+      else {
+        $ret[] = array('success' => FALSE, 'query' => 'Term ' . $key_or_name . ' was not created');
+      }
+      $parent_term = taxonomy_get_term_by_name($key_or_name);
+      $internal_iteration = 1;
+      foreach ($name_or_names as $name) {
+        $child_term = array(
+          'name' => $name,
+          'vid' => $vocabulary_ddr_types,
+          'weight' => $internal_iteration,
+          'parent' => $parent_term[0]->tid,
+        );
+        $status = taxonomy_save_term($child_term);
+        if ($status == 1) {
+          $ret[] = array('success' => TRUE, 'query' => 'Term ' . $name . ' was created');
+        }
+        else {
+          $ret[] = array('success' => FALSE, 'query' => 'Term ' . $name . ' was not created');
+        }
+        $internal_iteration++;
+      }
+    }
+    else {
+      $term = array(
+        'name' => $name_or_names,
+        'vid' => $vocabulary_ddr_types,
+        'weight' => $iteration,
+      );
+      $status = taxonomy_save_term($term);
+      if ($status == 1) {
+        $ret[] = array('success' => TRUE, 'query' => 'Term ' . $name_or_names . ' was created');
+      }
+      else {
+        $ret[] = array('success' => FALSE, 'query' => 'Term ' . $name_or_names . ' was not created');
+      }
+    }
+    $iteration++;
+  }
+  /*
+   * Set Règles RAGE tid variable
+   */
+  $regles_term = taxonomy_get_term_by_name('Règles RAGE');
+  if (!empty($regles_term)) {
+    variable_set('batire_site_regles_rage_tid', $regles_term[0]->tid);
+  }
+
+  return $ret;
+}
+
+/**
+ *  Implementation of hook_update_N().
+ *  recreate summary
+ */
+function batire_site_update_6024() {
+  mongodb_site_recreate_summary('batire_texte_normatifs');
+  mongodb_site_recreate_summary('batire_codes');
+  
+  $ret[] = array('success' => TRUE, 'query' => 'Summaryes TN and Codes are recreated');
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ * Register new email template
+ */
+function batire_site_update_6025() {
+  $query = " - Auteur du signalement : !salutation !name !surname (!abo_num),
+
+- Lien signalé erroné : !link_text
+
+- Document de référence : !doc_title
+
+- URL de la page DDR : !document_url
+
+- Sous-type : !sous_type
+
+- Rubrique : !rubrique
+";
+
+  $result = db_query("INSERT INTO {mail_edit} (description, subject, id, language, body) VALUES('%s', '%s', '%s', '%s', '%s')",
+    "Signalement d’un lien erroné",
+    "Signalement d’un lien erroné",
+    'batire_site_batire_site_signaler_link',
+    'fr',
+    $query
+  );
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain("INSERT INTO {mail_edit} (description, subject, id, language, body) VALUES('%s', '%s', '%s', '%s', '%s')"));
+
+  $result = db_query("INSERT INTO {mail_edit_registry} (id, module, mailkey, description) VALUES('%s', '%s', '%s', '%s')",
+    "batire_site_batire_site_signaler_link",
+    "batire_site",
+    'batire_site_signaler_link',
+    'Signalement d’un lien erroné'
+  );
+
+  $ret[] = array('success' => $result !== FALSE, 'query' => check_plain("INSERT INTO {mail_edit_registry} (id, module, mailkey, description) VALUES('%s', '%s', '%s', '%s')"));
+  
+  return $ret;
+}
+
+/**
+ *  Implementation of hook_update_N().
+ *  recreate summary
+ */
+function batire_site_update_6026() {
+  $term = taxonomy_get_term(137);
+  $bid = 'PB-' . $term->description;
+  $hierarchy = batire_hierarchy_get_children($bid, TRUE);
+  batire_site_update_fm_numeroart($hierarchy);
+
+  job_queue_add(
+    'batire_site_fm_summary_rebuild_job',
+    "Recreate summary FM",
+    array()
+  );
+    
+  $ret[] = array('success' => TRUE, 'query' => 'Summarye FM are recreated');
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ * Create cache table for TDM
+ */
+function batire_site_update_6027() {
+  $ret = array();
+  $table_schema = drupal_get_schema('cache');
+  if (!db_table_exists('cache_tdm')) {
+    db_create_table($ret, 'cache_tdm', $table_schema);
+    $ret[] = array('success' => TRUE, 'query' => 'Table cache_tdm successfully created');
+  }
+  else {
+    $ret[] = array('success' => FALSE, 'query' => 'Table has already exist');
+  }
+  return $ret;
+}
+
+/**
+ * Implementation of hook_update_N().
+ * Update Codes Trail
+ */
+function batire_site_update_6028() {
+  $ret = array();
+  $sql = 'DELETE FROM {batire_codes_trail}';
+  db_query($sql);
+
+  $sql = 'SELECT bid FROM {batire_hierarchy} WHERE type ="%s"';
+  $result = db_query($sql, 'batire_codes');
+  while ($row = db_fetch_array($result)) {
+    $page_data = mongodb_page_get_page_by_bid($row['bid']);
+    if (isset($page_data['persistent']['trail']) && count($page_data['persistent']['trail'])) {
+      foreach ($page_data['persistent']['trail'] as $sub_lvl) {
+        $sql = 'SELECT * FROM {batire_codes_trail} WHERE bid ="%s" LIMIT 1';
+        if (!db_result(db_query($sql, $sub_lvl['bid']))) {
+          if (!empty($sub_lvl['bid'])) {
+            db_query('INSERT INTO {batire_codes_trail} SET bid = "%s", parent_bid = "%s", title ="%s"', $sub_lvl['bid'], $page_data['super_bid'], $sub_lvl['title']);
+          }
+        }
+      }
+    }
+  }
+  return $ret;
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function batire_site_uninstall() {
+  variable_del('batire_site_file_separator');
+  variable_del('batire_site_file_enclosure');
+  variable_del('batire_user_statistics_application_format_file');
+}

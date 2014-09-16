@@ -1,0 +1,49 @@
+<?php
+function antidot_textes_normatifs_antidot_info() {
+  return array(
+    BATIRE_SITE_CT_TN => 'antidot_textes_normatifs',
+  );
+}
+
+function antidot_textes_normatifs_xml_preprocess($node, &$data) {
+  $data->numero_ref    = $node->page_data['reference'];
+  $data->etat_norme    = $node->page_data['etat'];
+  $data->sub_title     = '';
+  $data->notice_detail = 0;
+  $data->out_db        = 0;
+
+  if (isset($node->page_data['h1_gtext']) && !empty($node->page_data['h1_gtext'])) {
+    $data->sub_title = '§ ' . $node->page_data['h1_gtext'];
+    if (isset($node->page_data['h1_titre']) && !empty($node->page_data['h1_titre'])) {
+      $data->sub_title .=  ' - ' . $node->page_data['h1_titre'];
+    }
+  }
+  else {
+    $data->sub_title = $node->page_data['h1_titre'];
+  }
+
+  $data->sub_title = batire_antidot_export_xml_escape($data->sub_title);
+
+  if (isset($node->page_data['notice_seule']) && $node->page_data['notice_seule']) {
+    $data->notice_detail = 1;
+  }
+
+  if (isset($node->page_data['attached']) && count($node->page_data['attached']) == 0 && $data->notice_detail) {
+    $data->out_db = 1;
+  }
+
+  foreach ($node->taxonomy as $term) {
+    if ($term->vid == BATIRE_SITE_VID_NORMATIF) {
+      $data->type_source_off = array('name' => $term->name, 'id' => $term->tid, 'priorite' => 0);
+      break;
+    }
+  }
+
+  $data->indice = $node->field_classification_index[0]['value'];
+
+  $data->version = 1;
+
+  if (isset($node->field_cites[0]['value'])) {
+    $data->cites = $node->field_cites;
+  }
+}

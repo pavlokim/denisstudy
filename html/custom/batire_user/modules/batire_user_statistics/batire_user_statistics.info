@@ -1,0 +1,8 @@
+; $Id: batire_user_statistics.info
+name = Batire user statistics
+description = "Batire user statistics functionallity."
+package = Batire
+core = 6.x
+
+dependencies[] = batire_site
+dependencies[] = batire_user

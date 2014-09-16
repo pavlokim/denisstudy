@@ -1,0 +1,41 @@
+<?php
+
+/**
+ * @file
+ * MongoDB site stuff install file.
+ */
+
+/**
+ * Implement hook_install().
+ */
+function mongodb_site_install() {
+  module_load_include('module', 'mongodb');
+  module_load_include('module', 'mongodb_site');
+
+  $mongo = mongodb();
+
+  if ($mongo) {
+    $mongo->createCollection(MONGODB_SITE_COUNTIES_COLLECTION);
+
+    $collection = $mongo->selectCollection(MONGODB_SITE_COUNTIES_COLLECTION);
+
+    $collection->ensureIndex(array('country' => 1), array('background' => TRUE));
+
+    $mongo->createCollection(MONGODB_SITE_SUMMARY_COLLECTION);
+
+    $collection2 = $mongo->selectCollection(MONGODB_SITE_SUMMARY_COLLECTION);
+
+    $collection2->ensureIndex(array('type' => 1), array('background' => TRUE));
+
+    $mongo->createCollection(MONGODB_SITE_SUMMARY_FILTER_COLLECTION);
+
+    $collection3 = $mongo->selectCollection(MONGODB_SITE_SUMMARY_FILTER_COLLECTION);
+
+    $collection3->ensureIndex(array('fid' => 1), array('background' => TRUE));
+  }
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function mongodb_site_uninstall() {}

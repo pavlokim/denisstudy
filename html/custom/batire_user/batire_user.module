@@ -1,0 +1,3574 @@
+<?php
+
+/**
+ * @file
+ * User related functionality
+ */
+define('BATIRE_USER_PROFILE', 'batire_user_profile');
+
+define('BATIRE_USER_LOG', 'batire_user');
+
+define('BATIRE_USER_MONOPOST', 12);
+define('BATIRE_USER_MULTIADMIN', 5);
+define('BATIRE_USER_SUBACCOUNT', 6);
+
+define('BATIRE_USER_PAIDACCOUNT', 9);
+define('BATIRE_USER_FREEACCOUNT', 11);
+define('BATIRE_USER_MONTHACCOUNT', 8);
+
+define('BATIRE_USER_TYPES_VID', 13);
+define('BATIRE_USER_TYPES_PAID', 181);
+define('BATIRE_USER_TYPES_MONTH', 182);
+define('BATIRE_USER_TYPES_FREE', 183);
+
+define('BATIRE_USER_ROLES_VID', 14);
+define('BATIRE_USER_ROLES_MONO', 184);
+define('BATIRE_USER_ROLES_MULTI', 185);
+define('BATIRE_USER_ROLES_SECOND', 186);
+
+define('BATIRE_USER_ABBO_TIME_PAID', 365 * 24 * 60 * 60);
+define('BATIRE_USER_ABBO_TIME_FREE', variable_get('batire_user_free_trial_days', 15) * 24 * 60 * 60);
+
+/**
+ * Types of registration
+ */
+define('BATIRE_USER_REG_TYPE_PAID', 0);
+define('BATIRE_USER_REG_TYPE_DAD', 1);
+define('BATIRE_USER_REG_TYPE_FREE', 2);
+define('BATIRE_USER_REG_TYPE_SUB', 3);
+define('BATIRE_USER_REG_TYPE_TRANS', 4);
+
+define('BATIRE_USER_FREE_TERM', variable_get('batire_user_free_trial_days', 15));
+define('BATIRE_USER_PAID_TERM', 12);
+
+//FREE abbo num separated with ;
+define('BATIRE_ABBO_FREE', 'K1704968;V1704972');
+define('BATIRE_ABBO_FREE_MONO', 'K1704968');
+define('BATIRE_ABBO_FREE_MULTI', 'V1704972');
+
+define('BATIRE_ABBO_PWD_MIN_LEN', 6);
+define('BATIRE_ABBO_PWD_MIN_LEN_EXISTENT_USER', 4);
+
+//Notifications delay
+define('BATIRE_USER_NOTIFICATIONS_DELAY', 3600);
+
+// System log ins
+define('BATIRE_USER_SYSTEM_LOGINS', variable_get('batire_user_system_user_logins', "admin\nwebmaster\nbatire2011\nafnor77"));
+
+module_load_include('inc', 'batire_user', 'includes/batire_user');
+
+module_load_include('inc', 'batire_user', 'includes/views');
+
+/**
+ * Implementation of hook_init().
+ */
+function batire_user_init() {
+  global $user;
+  drupal_add_js(
+  array(
+    'batire_user' => array(
+      'password_recovery_url' => url('js/batire_user/recovery-password'),
+      'activate_abonement_url' => url('js/batire_user/abonement-activation'),
+      'activate_abonement_s2_url' => url('js/batire_user/abonement-activation-s2'),
+    )
+  ), 'setting'
+  );
+
+  if (isset($user->roles[BATIRE_USER_FREEACCOUNT]) && $user->uid && !batire_user_is_restricted_user($user->name)) {
+    $profile = batire_user_profile_load($user->uid);
+
+    if (time() > $profile->field_user_dates[0]['value2']) {
+      variable_set('show_error_login_form', TRUE);
+      watchdog('user', 'Session closed for %name.', array('%name' => $user->name));
+      // Destroy the current session:
+      session_destroy();
+      // Only variables can be passed by reference workaround.
+      $null = NULL;
+      user_module_invoke('logout', $null, $user);
+      // Load the anonymous user
+      $user = drupal_anonymous_user();
+
+      drupal_goto($_REQUEST['q']);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_perm().
+ * @return array
+ */
+function batire_user_perm() {
+  return array('access users list', 'modify free trial term');
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function batire_user_menu() {
+  $items = array();
+
+  $items['js/batire_user/popup'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_popup_js',
+    'page arguments' => array(),
+    'access arguments' => array('access content'),
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  $items['js/batire_user/recovery-password'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_recovery_password_js',
+    'page arguments' => array(),
+    'access arguments' => array('access content'),
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  /**
+   * Accounts list js callback
+   */
+  $items['js/batire_user/accounts-list/%'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_accounts_list_js',
+    'page arguments' => array(3),
+    'access arguments' => array('access content'),
+  );
+
+  /**
+   * Registration
+   */
+  /**
+   * Abonement activation popup
+   */
+  $items['js/batire_user/abonement-activation'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_abonement_activation_js',
+    'page arguments' => array(),
+    'access arguments' => array('access content'),
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  /**
+   * Abonement activation popup step 2
+   */
+  $items['js/batire_user/abonement-activation-s2'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'batire_user_abonement_activation_s2_js',
+    'page arguments' => array(),
+    'access arguments' => array('access content'),
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  /**
+   * Registration thank you page
+   */
+  $items['batire_user/register/thankyou/%'] = array(
+    'page callback' => 'batire_user_user_register_thankyou',
+    'page arguments' => array(3),
+    'access callback' => '_batire_user_register_callback',
+    'access arguments' => array(3),
+    'type' => MENU_CALLBACK,
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  /**
+   * Activate page
+   */
+  $items['batire_user/register/activate'] = array(
+    'page callback' => 'batire_user_register_activate',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  /**
+   * Activate transform page
+   */
+  $items['batire_user/register/activate/transform'] = array(
+    'page callback' => 'batire_user_register_activate',
+    'page arguments' => array(3),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  /**
+   * Activate sub acc page
+   */
+  $items['batire_user/register/activate_sub'] = array(
+    'page callback' => 'batire_user_register_activate',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  /**
+   * Activate free acc page
+   */
+  $items['batire_user/register/activate_free'] = array(
+    'page callback' => 'batire_user_register_activate',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  $items['batire_user/register/offre'] = array(
+    'page callback'     => 'batire_user_products_page',
+    'access arguments'  => array('access content'),
+    'type'              => MENU_CALLBACK,
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc'
+  );
+
+  /**
+   * Administration items
+   */
+  $items['admin/batire-site/settings/abonnement'] = array(
+    'title' => 'Abonnement',
+    'description' => 'Abonnement-related settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_admin_settings'),
+    'access arguments' => array('administer batire configuration'),
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.admin.inc'
+  );
+
+  $items['admin/batire-site/settings/abonnement/settings'] = array(
+    'title' => 'Settings',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+
+  $items['admin/batire-site/settings/abonnement/notification-settings'] = array(
+    'title' => 'Notification settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_admin_notification_settings'),
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('administer batire configuration'),
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.admin.inc'
+  );
+
+  $items['admin/batire-site/users/system-users'] = array(
+    'title' => 'Manage system users',
+    'description' => t('Manage system users logins'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('batire_user_manage_system_users'),
+    'access arguments' => array('administer batire configuration'),
+    'file' => 'batire_user.admin.inc',
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes'
+  );
+
+  // Other stuff
+  $items['batire_user/comptes-utilisateurs-export'] = array(
+    'page callback'     => 'batire_user_comptes_utilisateurs_export',
+    'access arguments'  => array('access content'),
+    'type'              => MENU_CALLBACK,
+    'file path' => drupal_get_path('module', 'batire_user') . '/includes',
+    'file' => 'batire_user.pages.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_menu_alter().
+ */
+function batire_user_menu_alter(&$items) {
+  /**
+   * Overridding user/register path with custom callback
+   */
+  unset($items['user/register']);
+
+  $reg = &$items['user/register'];
+  $reg['title'] = 'S\'abonner';
+  $reg['page callback'] = 'batire_user_user_register';
+  $reg['page arguments'] = array(2);
+  $reg['access callback'] = '_batire_user_register_callback';
+  $reg['access arguments'] = array(2);
+  $reg['file'] = 'batire_user.pages.inc';
+  $reg['file path'] = drupal_get_path('module', 'batire_user') . '/includes';
+
+  $items['user']['page callback'] = 'drupal_goto';
+  $items['user']['page arguments'] = array('mon-compte/mes-documents');
+
+  $items['logout']['access callback'] = TRUE;
+  $items['logout']['page callback'] = 'batire_user_logout';
+  $items['logout']['file'] = 'batire_user.pages.inc';
+  $items['logout']['file path'] = drupal_get_path('module', 'batire_user') . '/includes';
+}
+
+/**
+ * Implementation of hook_form_FORM_ID_alter().
+ */
+function batire_user_form_batire_user_profile_node_form_alter(&$form, &$form_state) {
+  if ('user/register' != arg(0) . '/' . arg(1)) {
+    return;
+  }
+
+  $form['title']['#required'] = 0;
+
+  $form['mail'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Email', // This is correct, should not be wrapped with t()
+    '#maxlength' => EMAIL_MAX_LENGTH,
+    '#default_value' => (isset($form['#node']->mail)) ? $form['#node']->mail : ''
+  );
+
+  $form['when_to_call'] = array(
+    '#type' => 'textarea',
+    '#resizable' => FALSE,
+    '#attributes' => array(
+      'title' => t('Exemple : jeudi 7 avril de 14h à 16h30...')
+    ),
+    '#title' => t('Un conseiller va vous contacter pour vous proposer une démonstration personnalisée de !site_name', array('!site_name' => SITE_NAME_UC)) . ' :',
+    '#description' => t('Vous pouvez nous préciser vos disponibilités en nous indiquant un ou plusieurs créneaux horaires propices à cette prise de contact')
+  );
+
+  if (isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['ident'])) {
+    $form['mail']['#default_value'] = $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['email'];
+
+    $form['my_codes'] = array(
+      '#type' => 'fieldset',
+      '#title' => t("Mes codes d'accès"),
+      '#access' => TRUE
+    );
+    $form['my_codes']['login'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Identifiant'),
+      '#access' => TRUE,
+      '#default_value' => $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['ident'],
+      '#required' => TRUE
+    );
+    $form['my_codes']['password'] = array(
+      '#type' => 'password',
+      '#title' => t('Mot de passe'),
+      '#access' => TRUE
+    );
+    $form['my_codes']['confirm_password'] = array(
+      '#type' => 'password',
+      '#title' => t('Confirmation mot de passe'),
+      '#access' => TRUE
+    );
+    $form['my_codes']['remember_me'] = array(
+      '#type' => 'checkbox',
+      '#title' => t("Mémoriser mes codes d'accès"),
+      '#access' => TRUE
+    );
+
+    $form['my_account_client'] = array(
+      '#type' => 'fieldset',
+      '#title' => t("Mon compte client"),
+      '#access' => TRUE
+    );
+    $abo = $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['abo'];
+    $user_posts_count = batire_svc_get_number_of_accounts_by_product($abo);
+    $form['my_account_client']['number'] = array(
+      '#type' => 'item',
+      '#title' => t('Numéro'),
+      '#value' => $abo,
+      '#description' => format_plural($user_posts_count['count'], 'Cet abonnement comprend <b>@count poste</b>', 'Cet abonnement comprend <b>@count postes</b>'),
+      '#access' => TRUE
+    );
+  }
+
+  $form['registration_type'] = array(
+    '#type' => 'hidden',
+    '#default_value' => $form['#node']->__reg_type
+  );
+
+  if (isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['ident'])) {
+    $form['#validate'] = array('batire_user_register_fast_validate');
+    $form['#submit'] = array('batire_user_register_fast_submit');
+  }
+  else {
+    $form['#validate'] = array('batire_user_register_validate');
+    $form['#submit'] = array('batire_user_register_submit');
+  }
+
+  if (isset($form['#after_build']) && !is_array($form['#after_build'])) {
+    $form['#after_build'] = array();
+  }
+
+  $form['#after_build'][] = 'batire_user_register_after_build';
+}
+
+/**
+ * After build handler for registration form;
+ * @param $form
+ * @param $form_state
+ */
+function batire_user_register_after_build($form, &$form_state) {
+  if (isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['ident'])) {
+    unset($form['group_other']['field_user_posts_count']);
+    unset($form['when_to_call']);
+  }
+  $form['group_my_company']['field_user_company'][0]['value']['#title'] = t('Raison sociale');
+  $hide_fields = content_profile_get_settings(BATIRE_USER_PROFILE, 'registration_hide');
+
+  foreach ($hide_fields as $field) {
+    if ('title' == $field) {
+      unset($form[$field]);
+    }
+    else {
+      unset($form['group_other'][$field]);
+    }
+  }
+
+  unset($form['group_other']['field_user_dates']);
+  unset($form['buttons']);
+
+  return $form;
+}
+
+/**
+ * Validation handler for registration form;
+ * @param $form
+ * @param $form_state
+ */
+function batire_user_register_fast_validate($form, &$form_state) {
+  batire_user_register_validate($form, $form_state);
+
+  $values = &$form_state['values'];
+
+  $required_fields = array(
+    'login',
+    'password',
+    'confirm_password',
+  );
+
+  foreach ($required_fields as $required_field) {
+    $field_error = FALSE;
+    if ('' === $values[$required_field]) {
+      $error = TRUE;
+      $field_error = TRUE;
+    }
+
+    if ($field_error) {
+      form_set_error($required_field, t('Merci de renseigner ce champ'));
+      $field_error = FALSE;
+    }
+  }
+
+  /**
+   * Start validate for user register
+   */
+
+  try {
+    $abo         = batire_site_check_text($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['abo']);
+    $email       = batire_site_check_text($values['mail']);
+    $ident       = batire_site_check_text($values['login']);
+    $pass        = batire_site_check_text($values['password']);
+    $remember_me = isset($values['remember_me']) ? $values['remember_me'] : 0;
+
+    if (!$ident) {
+      throw new Exception(t('Merci de renseigner un identifiant valide'), BATIRE_SITE_ERROR_USER);
+    }
+
+    if (!$pass) {
+      throw new Exception(t('Merci de renseigner un mot de passe valide'), BATIRE_SITE_ERROR_USER);
+    }
+
+    if (batire_user_is_restricted_user($ident) || drupal_is_denied('mail', $email)) {
+      throw new Exception(t('Vos identifiants ne vous donnent pas accès à !site_name.', array('!site_name' => SITE_NAME_FS)), BATIRE_SITE_ERROR_USER);
+    }
+
+    $abon_validate_response = batire_svc_validate_abon_num($abo);
+    if ($abon_validate_response['error']) {
+      throw new Exception($abon_validate_response['error'], BATIRE_SITE_ERROR_USER);
+    }
+
+    /**
+     * We need to validate if given abon num is allowed to access the site
+     *
+     * Only for paid abonnements
+     */
+
+    if (!_batire_user_is_abbo_free($abo)) {
+      $spaces_result = batire_svc_get_authorized_spaces_by_abon($abo);
+
+      if ($spaces_result['error']) {
+        throw new Exception($spaces_result['error'], BATIRE_SITE_ERROR_USER);
+      }
+    }
+
+    $login_exists = batire_svc_login_exists($ident);
+
+    if (isset($login_exists['svc_id']) && $login_exists['svc_id']) {
+      $pwd_min_length = BATIRE_ABBO_PWD_MIN_LEN_EXISTENT_USER;
+    }
+    else {
+      $pwd_min_length = BATIRE_ABBO_PWD_MIN_LEN;
+    }
+
+    if (drupal_strlen($pass) < $pwd_min_length) {
+      throw new Exception(t('Minimal password length is @cnt chars.', array('@cnt' => $pwd_min_length)), BATIRE_SITE_ERROR_USER);
+    }
+
+    //Abonnement stuff
+    $abonnement_dates_raw = batire_svc_get_abonnement_info($abo);
+
+    if ($abonnement_dates_raw['error']) {
+      throw new Exception(t(
+          'An error occured while retreiving information for abon !abon. Error: %error',
+          array(
+            '!abon'   => $abo,
+            '%error'  => $abonnement_dates_raw['error']
+          )),
+        BATIRE_SITE_ERROR_SYSTEM
+      );
+    }
+
+    $abonnement_dates = _batire_svc_unpack_abonnement_info($abonnement_dates_raw['abonnement_info'], $ident);
+    if (!$abonnement_dates) {
+      throw new Exception(t(
+          'An error occured while parsing information for abon !abon. Error: %error',
+          array(
+            '!abon'   => $abo,
+            '%error'  => 'Abonnement not found'
+          )),
+        BATIRE_SITE_ERROR_SYSTEM
+      );
+    }
+
+    //Login exists
+    //Account activation if user exists in SVC
+    if (isset($login_exists['login'])) {
+      throw new Exception(t('Vos identifiants ne vous donnent pas accès à !site_name.', array('!site_name' => SITE_NAME_FS)), BATIRE_SITE_ERROR_USER);
+    }
+    else {
+      $salut = _batire_user_salut_convert($values['field_user_salut'][0]['value']);
+
+      $svc_values = array(
+        'field_abon_company_name' => $values['field_user_company'],
+        'field_abon_function' => $values['field_user_position'],
+        'field_abon_specialty' => $values['field_user_specialty'],
+        'field_abon_fax' => $values['field_user_fax'],
+        'field_abon_tel_2' => $values['field_user_tel_2'],
+        'field_abon_tel_1' => $values['field_user_tel_1'],
+        'field_abon_address_1' => $values['field_user_address_1'],
+        'field_abon_address_2' => $values['field_user_address_2'],
+        'field_abon_post_code' => $values['field_user_zip'],
+        'field_abon_city' => $values['field_user_city'],
+        'field_abon_salutation' => array(array('value' => $salut)),
+        'field_abon_country' => $values['field_user_country'],
+        'field_opt_1' => $values['field_user_opt_1'],
+        'field_opt_2' => $values['field_user_opt_2'],
+        'field_abon_surname' => $values['field_user_surname'],
+        'field_abon_name' => $values['field_user_name'],
+        'name' => $ident,
+        'mail' => $email,
+        'abon_no' => $abo,
+        'pass' => $pass
+      );
+
+      $response = batire_svc_register_user($svc_values);
+      if ($response['error']) {
+        throw new Exception(t('Une erreur s\'est produite.
+                                Nous vous invitons à nous signaler cette anomalie en !link.', array('!link' => batire_site_contact_link())),
+          BATIRE_SITE_ERROR_USER
+        );
+      }
+
+      //Add abbonement
+      batire_svc_add_abonnement_number($abo, $response['id'], '');
+
+      //Create Drupal account
+      //Mono or multi
+      $abo_cnt = batire_svc_get_number_of_accounts_by_product($abo);
+      if ($abo_cnt['count'] > 1) {
+        // allow only multipost free abonnements have multiple admin accounts
+        if (user_load(array('abo_num' => $abo)) && !_batire_user_is_abbo_free($abo)) {
+          $user_roles[BATIRE_USER_SUBACCOUNT] = BATIRE_USER_SUBACCOUNT;
+        }
+        else {
+          $user_roles[BATIRE_USER_MULTIADMIN] = BATIRE_USER_MULTIADMIN;
+        }
+      }
+      else {
+        $user_roles[BATIRE_USER_MONOPOST] = BATIRE_USER_MONOPOST;
+      }
+      // Is GC?
+      if (batire_gc_commercial_get_sales_by_promo($values['field_user_promo'][0]['value'])) {
+        $user_roles[BATIRE_GC_GC_USER_ROLE_ID] = BATIRE_GC_GC_USER_ROLE_ID;
+      }
+
+      //Paid or free
+      $mailkey = 'batire_user_account_confirm_activate';
+      if (_batire_user_is_abbo_free($abo)) {
+        $mailkey = 'batire_user_account_confirm_free_trial';
+        $user_roles[BATIRE_USER_FREEACCOUNT] = BATIRE_USER_FREEACCOUNT;
+        $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']['acc_type'] = 'free';
+        //Store to session expire abo date
+        $abbo_dates = _batire_abonnement_create_dates(BATIRE_USER_FREEACCOUNT, REQUEST_TIME);
+        $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']['free_acc_date'] = format_date($abbo_dates[0]['value2'], 'custom', 'd/m/Y');
+      }
+      else {
+        $user_roles[BATIRE_USER_PAIDACCOUNT] = BATIRE_USER_PAIDACCOUNT;
+        $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']['acc_type'] = 'paid';
+        $abbo_dates = _batire_abonnement_create_dates(BATIRE_USER_PAIDACCOUNT, REQUEST_TIME, $abonnement_dates);
+      }
+
+      $edit = array(
+        'mail' => $email,
+        'name' => $response['id'],
+        'svc_login' => $ident,
+        'pass' => $pass,
+        'status' => 1,
+        'abo_num' => $abo,
+        'remember_me' => $remember_me,
+        'roles' => $user_roles
+      );
+
+      $account = user_save('', $edit);
+
+      //If Paid and sub - add sub acc to admin, base on abo num
+      if (array_key_exists(BATIRE_USER_PAIDACCOUNT, $account->roles) && array_key_exists(BATIRE_USER_SUBACCOUNT, $account->roles)) {
+        $abo_users = db_query("SELECT uid FROM {users} u WHERE abo_num = '%s'", $abo);
+        while ($abo_user = db_fetch_object($abo_users)) {
+          $abo_user = user_load($abo_user->uid);
+          if (array_key_exists(BATIRE_USER_MULTIADMIN, $abo_user->roles) && batire_svc_login_exists($abo_user->svc_login)) {
+            $admin_id = $abo_user->uid;
+            break;
+          }
+        }
+        if (isset($admin_id)) {
+          $admin_profile = batire_user_profile_load($admin_id, TRUE);
+          $admin_profile->field_user_subacc[] = array('uid' => $account->uid);
+          node_save($admin_profile);
+        }
+      }
+
+      $account_profile = (object) array(
+        'title' => _batire_user_get_user_profile_title($account),
+        'type' => BATIRE_USER_PROFILE,
+        'uid' => $account->uid,
+        'status' => 1,
+        'name' => $account->name,
+        'field_user_abon_num' => array(array('value' => $abo)),
+        'field_user_address_1' => $values['field_user_address_1'],
+        'field_user_address_2' => $values['field_user_address_2'],
+        'field_user_zip' => $values['field_user_zip'],
+        'field_user_city' => $values['field_user_city'],
+        'field_user_company' => $values['field_user_address_1'],
+        'field_user_country' => $values['field_user_country'],
+        'field_user_email_format' => $values['field_user_email_format'],
+        'field_user_tel_1' => $values['field_user_tel_1'],
+        'field_user_tel_2' => $values['field_user_tel_2'],
+        'field_user_fax' => $values['field_user_fax'],
+        'field_user_name' => $values['field_user_name'],
+        'field_user_surname' => $values['field_user_surname'],
+        'field_user_position' => $values['field_user_position'],
+        'field_user_specialty' => $values['field_user_specialty'],
+        'field_user_salut' => $values['field_user_salut'],
+        'field_user_dates' => $abbo_dates,
+        'field_user_opt_1' => $values['field_user_opt_1'],
+        'field_user_opt_2' => $values['field_user_opt_2'],
+        'field_user_activity_prv' => $values['field_user_activity_prv'],
+        'field_user_activity_pub' => $values['field_user_activity_pub'],
+        'field_user_posts_count' => array(array('value' => $abo_cnt['count'])),
+        'field_user_statut' => $values['field_user_statut'],
+        'field_user_tva' => $values['field_user_tva'],
+        'field_subscribed_to_newsletter' => isset($user_roles[BATIRE_USER_PAIDACCOUNT]) ? array(array('value' => 1)) : array(array('value' => 0)),
+        'field_user_promo' => $values['field_user_promo'],
+      );
+
+      // Assign products
+      $svc_abon_results = batire_svc_get_user_abonnements($response['id']);
+      if (!$svc_abon_results['error']) {
+        $full_abon_list = _batire_svc_unpack_abonnements_advanced($svc_abon_results['abonnements']);
+        $products = isset($full_abon_list) && count($full_abon_list) ? array_keys($full_abon_list) : NULL;
+        if (isset($user_roles[BATIRE_USER_FREEACCOUNT]) || !$products) {
+          $profile->field_user_products = array(array('nid' => BATIRE_BASE_PRODUCT_ID));
+        }
+        else {
+          $available_products = batire_user_products_get_products();
+          $account_profile->field_user_products = array();
+          foreach ($products as $_prod) {
+            $account_profile->field_user_products[] = array('nid' => $available_products[$_prod]['nid']);
+          }
+        }
+      }
+
+      node_save($account_profile);
+
+      //Send mail
+      $send_mail = batire_user_abonement_activation_s2_normal_mail($email, $ident, $pass, $values['field_user_name'][0]['value'], $values['field_user_surname'][0]['value'], $values['field_user_salut'][0]['value'], $mailkey);
+
+      batire_user_abonement_activation_s2_login($response['id'], $pass, $remember_me, $account);
+
+      $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']['success'] = TRUE;
+
+      drupal_goto();
+    }
+
+  }
+  catch (Exception $e) {
+    form_set_error('login', batire_site_show_message($e->getMessage(), $e->getCode()));
+  }
+}
+
+/**
+ * Validation handler for registration form;
+ * @param $form
+ * @param $form_state
+ */
+function batire_user_register_validate($form, &$form_state) {
+  $error = FALSE;
+
+  $values = &$form_state['values'];
+
+  $values['mail'] = drupal_strtolower(trim($values['mail']));
+
+  /**
+   * Lets do basic validation for required fields
+   */
+  $required_fields = array(
+    'field_user_salut',
+    'field_user_name',
+    'field_user_surname',
+    'field_user_tel_1',
+    'field_user_position',
+    'field_user_specialty',
+//    'field_user_statut',
+    'field_user_company',
+    'field_user_address_1',
+    'field_user_zip',
+    'field_user_city',
+    'field_user_country',
+//    'field_user_activity_pub',
+//    'field_user_activity_prv'
+  );
+
+  $fields_limits = array(
+    'field_user_name' => 60,
+    'field_user_surname' => 80,
+    'field_user_tel_1' => 32,
+    'field_user_position' => 80,
+    'field_user_specialty' => 80,
+    'field_user_company' => 100,
+    'field_user_address_1' => 50,
+    'field_user_address_2' => 50,
+    'field_user_zip' => 20,
+    'field_user_city' => 50,
+  );
+
+  foreach ($fields_limits as $limited_field => $limit) {
+    if (strlen($values[$limited_field][0]['value']) > $limit) {
+      form_set_error($limited_field, t('Entered value is too long. This field has @count symbols limit.', array('@count' => $limit)));
+      $error = TRUE;
+    }
+  }
+
+  if (!$values['mail'] || !batire_site_validate_email_address($values['mail'])) {
+    form_set_error('mail', t('Merci de renseigner ce champ'));
+    $error = TRUE;
+  }
+
+  /**
+   * 0 - private sector
+   * 1 - public sector
+   */
+  $sector = $values['field_user_statut'][0]['value'];
+
+  foreach ($required_fields as $required_field) {
+    $field_error = FALSE;
+    if ('field_user_activity_prv' == $required_field) {
+      /**
+       * Validation for activity based on selected sector
+       */
+      if ($sector) {
+        continue;
+      }
+      if ('' === $values[$required_field][0]['value']) {
+        $error = TRUE;
+        $field_error = TRUE;
+      }
+    }
+    elseif ('field_user_activity_pub' == $required_field) {
+      /**
+       * Validation for activity based on selected sector
+       */
+      if (!$sector) {
+        continue;
+      }
+      if ('' === $values[$required_field][0]['value']) {
+        $error = TRUE;
+        $field_error = TRUE;
+      }
+    }
+    elseif ('' === $values[$required_field][0]['value']) {
+      $error = TRUE;
+      $field_error = TRUE;
+    }
+
+    if ($field_error) {
+      form_set_error($required_field, t('Merci de renseigner ce champ'));
+      $field_error = FALSE;
+    }
+  }
+
+  if (!$error) {
+
+    /**
+     * Removing unnecessary activity;
+     */
+    if ($sector) {
+      unset($values['field_user_activity_prv']);
+    }
+    else {
+      unset($values['field_user_activity_pub']);
+    }
+  }
+}
+
+/**
+ * Validation handler for transformation form;
+ * @param $form
+ * @param $form_state
+ */
+function batire_user_transform_validate($form, &$form_state) {
+  $values = &$form_state['values'];
+
+  $values['mail'] = drupal_strtolower(trim($values['mail']));
+
+  /**
+   * Lets do basic validation for required fields
+   */
+  $required_fields = array(
+    'field_user_name',
+    'field_user_surname',
+    'field_user_tel_1',
+    'field_user_specialty',
+    'field_user_company',
+    'field_user_address_1',
+    'field_user_zip',
+    'field_user_city',
+  );
+
+  $required_arr_fields = array(
+    'field_user_salut',
+    'field_user_position',
+    'field_user_country',
+  );
+
+  if (!$values['mail'] || !batire_site_validate_email_address($values['mail'])) {
+    form_set_error('mail', t('Merci de renseigner ce champ'));
+  }
+
+  foreach ($required_fields as $required_field) {
+    if ('' === $values[$required_field]) {
+      form_set_error($required_field, t('Merci de renseigner ce champ'));
+      $err_arr[] = $required_field;
+    }
+  }
+
+  foreach ($required_arr_fields as $required_field) {
+    if ('' === $values[$required_field]['value']) {
+      form_set_error($required_field, t('Merci de renseigner ce champ'));
+      $err_arr[] = $required_field;
+    }
+  }
+}
+
+/**
+ * Submit handler for fast registration form
+ * @param $form
+ * @param $form_state
+ */
+function batire_user_register_fast_submit($form, &$form_state) {
+  drupal_goto();
+}
+
+  /**
+   * Submit handler for transformation form
+   * @param $form
+   * @param $form_state
+   */
+function batire_user_transform_submit($form, &$form_state) {
+  global $user;
+
+  $values = $form_state['values'];
+
+  $new_values = array();
+  //Normalize values
+
+  $simple_fields = array(
+    'field_user_salut',
+    'field_user_name',
+    'field_user_surname',
+    'field_user_tel_1',
+    'field_user_specialty',
+    'field_user_company',
+    'field_user_address_1',
+    'field_user_address_2',
+    'field_user_zip',
+    'field_user_city',
+    'field_user_email_format',
+    'field_user_promo',
+  );
+
+  foreach ($simple_fields as $field) {
+    $new_values[$field][0]['value'] = $values[$field];
+  }
+
+  $arr_fields = array(
+    'field_user_position',
+    'field_user_country',
+    'field_user_posts_count',
+  );
+
+  foreach ($arr_fields as $field) {
+    $new_values[$field][0] = $values[$field];
+  }
+
+  $new_values['field_user_opt_1'][0]['value'] = $values['field_user_opt_1'][1];
+  $new_values['field_user_opt_2'][0]['value'] = $values['field_user_opt_2'][1];
+  $new_values['mail']         = $values['mail'];
+  $new_values['when_to_call'] = $values['when_to_call'];
+  $new_values['svc_id']       = $user->name;
+
+  $reg_type = 4;
+  /**
+   * For any kind of registrations, we need to
+   *
+   * 1. Store request in our database;
+   * 2. Send email to commercials;
+   */
+
+  $record = (object) array(
+    'id' => 0,
+    'mail' => $new_values['mail'],
+    'type' => $reg_type,
+    'data' => new stdClass(),
+    'created' => time(),
+    'uid' => 0
+  );
+
+  $skip_fields = array(
+    'field_user_dates', // @todo - we may remove this field later, based on SVC abilities
+    'field_user_subacc'
+  );
+
+  $include_fields = array('mail', 'when_to_call', 'svc_id');
+
+  foreach ($new_values as $key => $field) {
+    if (0 === strpos($key, 'field_') && !in_array($key, $skip_fields) || in_array($key, $include_fields)) {
+      $record->data->$key = $field;
+      if (is_array($record->data->$key)) {
+        foreach ($record->data->$key as &$item) {
+          unset($item['_error_element']);
+        }
+      }
+    }
+  }
+
+  /**
+   * Storing record;
+   */
+  drupal_write_record('batire_user_registration_requests', $record);
+
+  /**
+   * Sending email to user and commercials;
+   */
+  try {
+    $request_type = 'Demande de devis';
+
+    /**
+     * User
+     */
+    $options = array(
+      'module' => 'batire_user',
+      'mailkey' => 'batire_user_account_confirm_custom_quote',
+      'recipient' => $record->data->mail,
+      'plaintext' => FALSE,
+      'data' => array(
+        'salutation' => $record->data->field_user_salut[0]['value'],
+        'name' => $record->data->field_user_name[0]['value'],
+        'surname' => $record->data->field_user_surname[0]['value'],
+        'when_to_call' => $record->data->when_to_call,
+        'request_type' => $request_type
+      )
+    );
+
+    $mess = batire_site_send_mail($options, variable_get('site_mail', 'batire@adyax.com'));
+    if (!$mess) {
+      throw new Exception(t("Cann't send email to user."));
+    }
+
+    $svc_profile = batire_svc_get_user_data($user->name);
+    $svc_profile = _batire_svc_unpack_profile($svc_profile['data']);
+
+    $profile = batire_user_profile_load($user->uid);
+
+    /**
+     * Commercials
+     */
+    $options = array(
+      'module'    => 'batire_user',
+      'mailkey'   => 'batire_user_gm_convert_annual',
+      'recipient' => variable_get('batire_user_commercials_email', 'mjcpgm@gmail.com'),
+      'plaintext' => FALSE,
+      'data'      => array(
+        'submission_date' => format_date(time(), 'custom', 'd/m/Y - H/i'),
+        'information'     => theme('batire_user_commercial_transform_info_email', $record, $profile, $svc_profile),
+        'salutation'      => $record->data->field_user_salut[0]['value'],
+        'name'            => $record->data->field_user_surname[0]['value'],
+        'company_name'    => $record->data->field_user_company[0]['value'],
+      )
+    );
+
+    $mess = batire_site_send_mail($options, variable_get('site_mail', 'batire@adyax.com'));
+    if (!$mess) {
+      throw new Exception(t("Cann't send email to commercials."));
+    }
+  }
+  catch (Exception $e) {
+    batire_site_log_watchdog($e->getMessage(), WATCHDOG_ERROR);
+  }
+
+  drupal_goto('batire_user/register/thankyou/transform');
+}
+
+  /**
+ * Submit handler for registration form
+ * @param $form
+ * @param $form_state
+ */
+function batire_user_register_submit($form, &$form_state) {
+  $values = $form_state['values'];
+
+  $reg_type = $values['registration_type'];
+
+  /**
+   * For any kind of registrations, we need to
+   *
+   * 1. Store request in our database;
+   * 2. Send email to commercials;
+   */
+  $record = (object) array(
+    'id' => 0,
+    'mail' => $values['mail'],
+    'type' => $reg_type,
+    'data' => new stdClass(),
+    'created' => time(),
+    'uid' => 0
+  );
+
+  $skip_fields = array(
+    'field_user_dates', // @todo - we may remove this field later, based on SVC abilities
+    'field_user_subacc'
+  );
+
+  $include_fields = array('mail', 'when_to_call');
+
+  foreach ($values as $key => $field) {
+    if (0 === strpos($key, 'field_') && !in_array($key, $skip_fields) || in_array($key, $include_fields)) {
+      $record->data->$key = $field;
+      if (is_array($record->data->$key)) {
+        foreach ($record->data->$key as &$item) {
+          unset($item['_error_element']);
+        }
+      }
+    }
+  }
+
+  /**
+   * Storing record;
+   */
+  drupal_write_record('batire_user_registration_requests', $record);
+
+  /**
+   * Sending email to user and commercials;
+   */
+  try {
+    $request_type = '';
+
+    switch ($reg_type) {
+      case BATIRE_USER_REG_TYPE_DAD :
+        $request_type = 'Demande de demonstration';
+        break;
+      case BATIRE_USER_REG_TYPE_PAID :
+        $request_type = 'Demande de devis';
+        $options      = array(
+          'module' => 'batire_user',
+          'mailkey' => 'batire_user_account_confirm_custom_quote',
+          'recipient' => $record->data->mail,
+          'plaintext' => FALSE,
+          'data' => array(
+            'salutation' => $record->data->field_user_salut[0]['value'],
+            'name' => $record->data->field_user_name[0]['value'],
+            'surname' => $record->data->field_user_surname[0]['value'],
+            'when_to_call' => $record->data->when_to_call,
+            'request_type' => $request_type
+          )
+        );
+
+        $mess = batire_site_send_mail($options);
+        if (!$mess) {
+          throw new Exception(t("Cann't send email to user."));
+        }
+
+        break;
+      case BATIRE_USER_REG_TYPE_FREE:
+        $request_type = 'Inscription à l\'offre d\'essai gratuite';
+        $options      = array(
+          'module' => 'batire_user',
+          'mailkey' => 'batire_user_account_confirm_free_trial',
+          'recipient' => $record->data->mail,
+          'plaintext' => FALSE,
+          'data' => array(
+            'salutation' => $record->data->field_user_salut[0]['value'],
+            'name' => $record->data->field_user_name[0]['value'],
+            'surname' => $record->data->field_user_surname[0]['value'],
+            'link' => batire_user_generate_activate_free_link($record->id),
+          )
+        );
+
+        $mess = batire_site_send_mail($options, variable_get('site_mail', 'kheox@groupemoniteur.fr'));
+        if (!$mess) {
+          throw new Exception(t("Cann't send email to user."));
+        }
+
+        break;
+      case BATIRE_USER_REG_TYPE_TRIAL_TN:
+        $request_type = 'Inscription à l\'offre d\'essai gratuite';
+        $options      = array(
+          'module' => 'batire_user',
+          'mailkey' => 'batire_user_account_confirm_trial_tn',
+          'recipient' => $record->data->mail,
+          'plaintext' => FALSE,
+          'data' => array(
+            'salutation' => $record->data->field_user_salut[0]['value'],
+            'name' => $record->data->field_user_name[0]['value'],
+            'surname' => $record->data->field_user_surname[0]['value'],
+            'link' => batire_user_generate_activate_free_link($record->id),
+          )
+        );
+
+        $mess = batire_site_send_mail($options, variable_get('site_mail', 'kheox@groupemoniteur.fr'));
+        if (!$mess) {
+          throw new Exception(t("Cann't send email to user."));
+        }
+
+        break;
+    }
+
+    /**
+     * User
+     */
+    if ($reg_type != BATIRE_USER_REG_TYPE_DAD) {
+    }
+
+    /**
+     * Commercials
+     */
+    $options = array(
+      'module'    => 'batire_user',
+      'mailkey'   => 'batire_user_gm_custom_quote',
+      'recipient' => variable_get('batire_user_commercials_email', 'mjcpgm@gmail.com'),
+      'plaintext' => FALSE,
+      'data'      => array(
+        'submission_date'      => format_date(time(), 'custom', 'd/m/Y - H/i'),
+        'information'          => theme('batire_user_commercial_info_email', $record),
+        'salutation'           => $record->data->field_user_salut[0]['value'],
+        'name'                 => $record->data->field_user_surname[0]['value'],
+        'company_name'         => $record->data->field_user_company[0]['value'],
+        'request_type'         => $request_type,
+        'subject_request_type' => drupal_strtoupper($request_type)
+      )
+    );
+
+    $mess = batire_site_send_mail($options);
+    if (!$mess) {
+      throw new Exception(t("Cann't send email to commercials."));
+    }
+  }
+  catch (Exception $e) {
+    batire_site_log_watchdog($e->getMessage(), WATCHDOG_ERROR);
+  }
+
+  drupal_goto('batire_user/register/thankyou/' . $reg_type);
+}
+
+/**
+ * Access callback for multipost
+ */
+function _batire_user_is_multipost($account = NULL, $only_admin = FALSE) {
+  if (!$account) {
+    global $user;
+    $account = $user;
+  }
+
+  if (isset($account->roles)) {
+
+    $roles = array(BATIRE_USER_MULTIADMIN);
+    /**
+     * If $only_admin = FALSE - we need to include subaccount as well
+     */
+    if (!$only_admin) {
+      $roles[] = BATIRE_USER_SUBACCOUNT;
+    }
+
+    return (bool) array_intersect($roles, array_keys($account->roles));
+  }
+  return FALSE;
+}
+
+/**
+ * Access callback for multipost
+ */
+function _batire_user_is_monopost($account = NULL) {
+  if (!$account) {
+    global $user;
+    $account = $user;
+  }
+
+  return array_key_exists(BATIRE_USER_MONOPOST, $account->roles);
+}
+
+/**
+ * Access callback for register thankyou page and registration page
+ * @param string $section
+ */
+function _batire_user_register_callback($section = NULL) {
+  global $user;
+  if ($section == 'transform') {
+    return $user->uid > 0;
+  }
+
+  return $user->uid == 0 || $user->uid == 1;
+}
+
+/**
+ * Implementation of hook_batire_site_breadcrumb().
+ */
+function batire_user_batire_site_breadcrumb($args) {
+  $crumbs = array();
+
+  $args2 = isset($args[2]) ? $args[2] : '';
+  $args3 = isset($args[3]) ? $args[3] : '';
+  $args1 = isset($args[1]) ? $args[1] : '';
+  $args0 = isset($args[0]) ? $args[0] : '';
+
+  if ("$args0/$args1" == 'user/register') {
+    $path = '';
+
+    if (!$args2 || $args2 == BATIRE_USER_REG_TYPE_PAID) {
+      $title = 'Demande de devis personnalisé';
+    }
+    elseif ($args2 == BATIRE_USER_REG_TYPE_DAD) {
+      $title = 'Demande de démonstration personnalisée';
+      $path = '/dad';
+    }
+    elseif ($args2 == BATIRE_USER_REG_TYPE_FREE) {
+      $title = 'Inscription à l\'offre d\'essai gratuite';
+      $path = '/free';
+    }
+
+    $crumbs[] = array(
+      'title' => t($title),
+      'href' => 'user/register' . $path,
+      'weight' => 1
+    );
+  }
+  elseif ("$args0/$args1/$args2" == 'batire_user/register/thankyou') {
+    $crumbs[] = array(
+      'title' => t('Remerciements'),
+      'href' => 'batire_user/register/thankyou/' . $args3,
+      'weight' => 1
+    );
+  }
+  elseif ("$args0" == 'mon-compte') {
+    $crumbs[] = array(
+      'title' => t('Mon compte'),
+      'href' => 'mon-compte/mes-documents',
+      'weight' => 0
+    );
+    switch ($args1) {
+      case 'mes-documents':
+        $crumbs[] = array(
+          'title' => t('Mes documents'),
+          'href' => 'mon-compte/mes-documents',
+          'weight' => 1
+        );
+        $crumbs[] = array(
+          'title' => t('Mes documents classés'),
+          'href' => 'mon-compte/mes-documents',
+          'weight' => 2
+        );
+        break;
+      case 'mes-dossiers':
+        $crumbs[] = array(
+          'title' => t('Mes documents'),
+          'href' => 'mon-compte/mes-documents',
+          'weight' => 1
+        );
+        $crumbs[] = array(
+          'title' => t('Mes dossiers'),
+          'href' => 'mon-compte/mes-dossiers',
+          'weight' => 2
+        );
+        break;
+      case 'mes-annotations':
+        $crumbs[] = array(
+          'title' => t('Mes documents'),
+          'href' => 'mon-compte/mes-documents',
+          'weight' => 1
+        );
+        $crumbs[] = array(
+          'title' => t('Mes annotations'),
+          'href' => 'mon-compte/mes-annotations',
+          'weight' => 2
+        );
+        break;
+      case 'mon-espace-partage':
+        $crumbs[] = array(
+          'title' => t('Mes documents'),
+          'href' => 'mon-compte/mes-documents',
+          'weight' => 1
+        );
+        switch ($args2) {
+          case 'documents-partages':
+            $crumbs[] = array(
+              'title' => t('Documents partagés'),
+              'href' => 'mon-compte/mon-espace-partage/documents-partages',
+              'weight' => 2
+            );
+            break;
+          case 'dossiers-partages':
+            $crumbs[] = array(
+              'title' => t('Dossiers partagés'),
+              'href' => 'mon-compte/mon-espace-partage/dossiers-partages',
+              'weight' => 2
+            );
+            break;
+          case 'annotations-partages':
+            $crumbs[] = array(
+              'title' => t('Annotations partagées'),
+              'href' => 'mon-compte/mon-espace-partage/annotations-partages',
+              'weight' => 2
+            );
+            break;
+        }
+        break;
+      case 'mes-recherches':
+        $crumbs[] = array(
+          'title' => t('Mes recherches/alertes'),
+          'href' => 'mon-compte/mes-recherches/mes-profils-enregistres',
+          'weight' => 1
+        );
+        switch ($args2) {
+          case 'mes-profils-enregistres':
+            $crumbs[] = array(
+              'title' => t('Mes profils enregistrés'),
+              'href' => 'mon-compte/mes-recherches/mes-profils-enregistres',
+              'weight' => 2
+            );
+            break;
+          case 'mes-alertes-recues':
+            $crumbs[] = array(
+              'title' => t('Mes dernières alertes reçues'),
+              'href' => 'mon-compte/mes-recherches/mes-alertes-recues',
+              'weight' => 2
+            );
+            break;
+        }
+        break;
+      case 'mon-abonnement':
+        $crumbs[] = array(
+          'title' => t('Mon abonnement'),
+          'href' => 'mon-compte/mon-abonnement/detail-de-mon-abonnement',
+          'weight' => 1
+        );
+        switch ($args2) {
+          case 'detail-de-mon-abonnement' :
+            $crumbs[] = array(
+              'title' => t('Détail de mon abonnement'),
+              'href' => 'mon-compte/mon-abonnement/detail-de-mon-abonnement',
+              'weight' => 2
+            );
+            break;
+          case 'comptes-utilisateurs' :
+            $crumbs[] = array(
+              'title' => t('Comptes utilisateurs'),
+              'href' => 'mon-compte/mon-abonnement/comptes-utilisateurs',
+              'weight' => 2
+            );
+            break;
+          case 'membres-du-groupe' :
+            $crumbs[] = array(
+              'title' => t('Membres du groupe'),
+              'href' => 'mon-compte/mon-abonnement/membres-du-groupe',
+              'weight' => 2
+            );
+            break;
+          case 'date-echeance' :
+            $crumbs[] = array(
+              'title' => t('Date d\'échéance'),
+              'href' => 'mon-compte/mon-abonnement/date-echeance',
+              'weight' => 2
+            );
+            break;
+        }
+        break;
+    }
+  }
+
+  return $crumbs;
+}
+
+/**
+ * Implements hook_mailkeys().
+ */
+function batire_user_mailkeys() {
+  return array(
+    'batire_user_account_confirm_custom_quote' => t('Confirmation de la demande de devis'),
+    'batire_user_account_confirm_activate' => t('Confirmation d\'activation du compte'),
+    'batire_user_account_confirm_activate_free' => t('Confirmation d\'activation du compte offre d\'essai'),
+    'batire_user_account_confirm_free_trial' => t('Confirmation de l\'ouverture du compte offre d\'essai'),
+    'batire_user_account_confirm_trial_tn' => t('Confirmation de l\'ouverture du compte offre d\'essai'),
+    'batire_user_account_lost_pass' => t('Oubli du mot de passe'),
+    'batire_user_account_paid_activate' => t('Remerciement après demande de conversion d\'un abo offre d\'essai gratuite en abonnement payant'),
+    'batire_user_account_trial_offer_1' => t('Relance 1 offre d\'essai'),
+    'batire_user_account_trial_offer_2' => t('Relance 2 offre d\'essai'),
+    'batire_user_account_trial_offer_3' => t('Relance 3 offre d\'essai'),
+    'batire_user_account_trial_offer_4' => t('Relance 4 offre d\'essai'),
+    'batire_user_account_create_subaccount' => t('Invitation à la création d\'un compte secondaire'),
+    'batire_user_account_confirm_subaccount' => t('Confirmation d\'inscription – compte secondaire'),
+    'batire_user_account_confirm_access_code' => t('Confirmation modification des codes d\'accès'),
+    'batire_user_gm_custom_quote' => t('Rapport au conseiller GM – devis personnalisé'),
+    'batire_user_gm_convert_annual' => t('Rapport au conseiller GM – demande de transformation d\'une offre d\'essai en Abonnement annuel payant'),
+  );
+}
+
+/**
+ * Implementation of hook_mail_edit_tokens_value().
+ * @param $mailkey
+ * @param $mail
+ */
+function batire_user_mail_edit_tokens_value($mailkey, $mail) {
+  $tokens = array();
+
+  $tokens['!site_name_uc'] = SITE_NAME_UC;
+  $tokens['!site_name_lc'] = SITE_NAME_LC;
+  $tokens['!site_name_fs'] = SITE_NAME_FS;
+
+  switch ($mailkey) {
+    case 'batire_user_gm_custom_quote':
+      $tokens['!salutation']           = $mail['params']['data']['salutation'];
+      $tokens['!name']                 = $mail['params']['data']['name'];
+      $tokens['!company_name']         = $mail['params']['data']['company_name'];
+      $tokens['!date_time']            = $mail['params']['data']['submission_date'];
+      $tokens['!data_block']           = $mail['params']['data']['information'];
+      $tokens['!request_type']         = $mail['params']['data']['request_type'];
+      $tokens['!subject_request_type'] = $mail['params']['data']['subject_request_type'];
+      break;
+    case 'batire_user_gm_convert_annual':
+      $tokens['!salutation']           = $mail['params']['data']['salutation'];
+      $tokens['!name']                 = $mail['params']['data']['name'];
+      $tokens['!company_name']         = $mail['params']['data']['company_name'];
+      $tokens['!date_time']            = $mail['params']['data']['submission_date'];
+      $tokens['!data_block']           = $mail['params']['data']['information'];
+      break;
+    case 'batire_user_account_confirm_custom_quote':
+      $tokens['!name']         = $mail['params']['data']['name'];
+      $tokens['!surname']      = $mail['params']['data']['surname'];
+      $tokens['!salutation']   = $mail['params']['data']['salutation'];
+      $tokens['!availability'] = $mail['params']['data']['when_to_call'];
+      $tokens['!request_type'] = $mail['params']['data']['request_type'];
+      break;
+    case 'batire_user_account_create_subaccount':
+      $tokens['!name']          = $mail['params']['data']['name'];
+      $tokens['!surname']       = $mail['params']['data']['surname'];
+      $tokens['!salutation']    = $mail['params']['data']['salutation'];
+      $tokens['!org_type']      = $mail['params']['data']['org_type'];
+      $tokens['!activate_link'] = $mail['params']['data']['activate_link'];
+      break;
+    case 'batire_user_account_confirm_activate':
+      $tokens['!name']       = $mail['params']['data']['name'];
+      $tokens['!surname']    = $mail['params']['data']['surname'];
+      $tokens['!salutation'] = $mail['params']['data']['salutation'];
+      $tokens['!faq_link']   = $mail['params']['data']['faq_link'];
+      $tokens['!login']      = $mail['params']['data']['login'];
+      $tokens['!password']   = $mail['params']['data']['password'];
+      break;
+    case 'batire_user_account_confirm_activate_free':
+      $tokens['!name']       = $mail['params']['data']['name'];
+      $tokens['!surname']    = $mail['params']['data']['surname'];
+      $tokens['!salutation'] = $mail['params']['data']['salutation'];
+      $tokens['!faq_link']   = $mail['params']['data']['faq_link'];
+      $tokens['!login']      = $mail['params']['data']['login'];
+      $tokens['!password']   = $mail['params']['data']['password'];
+      break;
+    case 'batire_user_account_confirm_free_trial':
+    case 'batire_user_account_confirm_trial_tn':
+      $tokens['!name']       = $mail['params']['data']['name'];
+      $tokens['!surname']    = $mail['params']['data']['surname'];
+      $tokens['!salutation'] = $mail['params']['data']['salutation'];
+      $tokens['!link']       = $mail['params']['data']['link'];
+      break;
+    case 'batire_user_account_confirm_subaccount':
+      $tokens['!name']       = $mail['params']['data']['name'];
+      $tokens['!surname']    = $mail['params']['data']['surname'];
+      $tokens['!salutation'] = $mail['params']['data']['salutation'];
+      $tokens['!login']      = $mail['params']['data']['login'];
+      $tokens['!password']   = $mail['params']['data']['password'];
+      break;
+    case 'batire_user_account_lost_pass':
+      $tokens['!name']          = $mail['params']['data']['name'];
+      $tokens['!surname']       = $mail['params']['data']['surname'];
+      $tokens['!salutation']    = $mail['params']['data']['salutation'];
+      $tokens['!space']         = $mail['params']['data']['space'];
+      $tokens['!accounts_list'] = $mail['params']['data']['accounts_list'];
+      break;
+    case 'batire_user_account_confirm_access_code':
+      $tokens['!name']       = $mail['params']['data']['name'];
+      $tokens['!surname']    = $mail['params']['data']['surname'];
+      $tokens['!salutation'] = $mail['params']['data']['salutation'];
+      $tokens['!login']      = $mail['params']['data']['login'];
+      $tokens['!password']   = $mail['params']['data']['password'];
+      break;
+    case 'batire_user_account_trial_offer_1':
+      $tokens['!name']         = $mail['params']['data']['name'];
+      $tokens['!surname']      = $mail['params']['data']['surname'];
+      $tokens['!salutation']   = $mail['params']['data']['salutation'];
+      $tokens['!reg_link']     = $mail['params']['data']['reg_link'];
+      $tokens['!contact_link'] = $mail['params']['data']['contact_link'];
+      $tokens['!faq_link']     = $mail['params']['data']['faq_link'];
+      break;
+    case 'batire_user_account_trial_offer_2':
+      $tokens['!name']           = $mail['params']['data']['name'];
+      $tokens['!surname']        = $mail['params']['data']['surname'];
+      $tokens['!salutation']     = $mail['params']['data']['salutation'];
+      $tokens['!reg_link']       = $mail['params']['data']['reg_link'];
+      $tokens['!contact_link']   = $mail['params']['data']['contact_link'];
+      $tokens['!faq_link']       = $mail['params']['data']['faq_link'];
+      $tokens['!transform_link'] = $mail['params']['data']['transform_link'];
+      break;
+    case 'batire_user_account_trial_offer_3':
+      $tokens['!name']           = $mail['params']['data']['name'];
+      $tokens['!surname']        = $mail['params']['data']['surname'];
+      $tokens['!salutation']     = $mail['params']['data']['salutation'];
+      $tokens['!reg_link']       = $mail['params']['data']['reg_link'];
+      $tokens['!contact_link']   = $mail['params']['data']['contact_link'];
+      $tokens['!faq_link']       = $mail['params']['data']['faq_link'];
+      $tokens['!transform_link'] = $mail['params']['data']['transform_link'];
+      break;
+    case 'batire_user_account_trial_offer_4':
+      $tokens['!name']           = $mail['params']['data']['name'];
+      $tokens['!surname']        = $mail['params']['data']['surname'];
+      $tokens['!salutation']     = $mail['params']['data']['salutation'];
+      $tokens['!reg_link']       = $mail['params']['data']['reg_link'];
+      $tokens['!contact_link']   = $mail['params']['data']['contact_link'];
+      $tokens['!faq_link']       = $mail['params']['data']['faq_link'];
+      $tokens['!transform_link'] = $mail['params']['data']['transform_link'];
+      break;
+  }
+
+  return $tokens;
+}
+
+/**
+ * Implements hook_tokens_list().
+ */
+function batire_user_mail_edit_tokens_list($mailkey, $options = array()) {
+  $tokens = array();
+
+  $tokens['!name']         = t('Name');
+  $tokens['!surname']      = t('Surname');
+  $tokens['!email']        = 'Email'; // This is correct, should not be wrapped with t()
+  $tokens['!salutation']   = t('Salutation');
+  $tokens['!site_name_uc'] = SITE_NAME_UC;
+  $tokens['!site_name_lc'] = SITE_NAME_LC;
+  $tokens['!site_name_fs'] = SITE_NAME_FS;
+
+  switch ($mailkey) {
+    case 'batire_user_account_confirm_custom_quote':
+      $tokens['!availability'] = t('Disponibilité data from the form');
+      $tokens['!request_type'] = t('Request type');
+      break;
+    case 'batire_user_account_confirm_activate':
+      $tokens['!faq_link'] = t('FAQ link');
+      $tokens['!login']    = t('Login');
+      $tokens['!password'] = t('Password');
+      break;
+    case 'batire_user_account_confirm_activate_free':
+      $tokens['!faq_link'] = t('FAQ link');
+      $tokens['!login']    = t('Login');
+      $tokens['!password'] = t('Password');
+      break;
+    case 'batire_user_account_confirm_free_trial':
+    case 'batire_user_account_confirm_trial_tn':
+      $tokens['!link']    = t('Activation link');
+      break;
+    case 'batire_user_account_lost_pass':
+      $tokens['!space']         = t('Space char');
+      $tokens['!accounts_list'] = t('For each account linked to email: Identifiant : <login> Mot de passe : <password>');
+      break;
+    case 'batire_user_account_paid_activate':
+      $tokens['!available_info'] = t('disponibilité information');
+      break;
+    case 'batire_user_account_trial_offer_1':
+      $tokens['!links_block'] = t('Vous souhaitez vous abonner ? Si vous avez des questions, n\'hésitez pas à nous contacter ! Retrouvez les réponses aux questions les plus fréquentes');
+      break;
+    case 'batire_user_account_trial_offer_2':
+      $tokens['!transform_link'] = t('cliquez ici - link to transform form');
+      $tokens['!links_block']    = t('Vous souhaitez vous abonner ? Si vous avez des questions, n\'hésitez pas à nous contacter ! Retrouvez les réponses aux questions les plus fréquentes');
+      break;
+    case 'batire_user_account_trial_offer_3':
+      $tokens['!links_block'] = t('Vous souhaitez vous abonner ? Si vous avez des questions, n\'hésitez pas à nous contacter ! Retrouvez les réponses aux questions les plus fréquentes');
+      break;
+    case 'batire_user_account_trial_offer_4':
+      $tokens['!links_block'] = t('Vous souhaitez vous abonner ? Si vous avez des questions, n\'hésitez pas à nous contacter ! Retrouvez les réponses aux questions les plus fréquentes');
+      break;
+    case 'batire_user_account_create_subaccount':
+      $tokens['!org_type']      = t('abonnement multiposte de votre entreprise si statut = privé / organisme si statut = public si abonnement payant)');
+      $tokens['!activate_link'] = t('Activate link');
+      break;
+    case 'batire_user_account_confirm_subaccount':
+      $tokens['!login']    = t('Login');
+      $tokens['!password'] = t('Password');
+      break;
+    case 'batire_user_account_confirm_access_code':
+      $tokens['!login']    = t('Login');
+      $tokens['!password'] = t('Password');
+      break;
+    case 'batire_user_gm_custom_quote':
+      $tokens['!salutation']           = t('Salutation');
+      $tokens['!name']                 = t('Name');
+      $tokens['!company_name']         = t('Company name');
+      $tokens['!date_time']            = t('DD/MM/YYYY – HH/MM');
+      $tokens['!data_block']           = t('Big data block');
+      $tokens['!request_type']         = t('Request type');
+      $tokens['!subject_request_type'] = t('Subject request type');
+      break;
+    case 'batire_user_gm_convert_annual':
+      $tokens['!salutation']   = t('Salutation');
+      $tokens['!name']         = t('Name');
+      $tokens['!company_name'] = t('Company name');
+      $tokens['!date_time']    = t('DD/MM/YYYY – HH/MM');
+      $tokens['!data_block']   = t('Big data block');
+      break;
+  }
+
+  return $tokens;
+}
+
+/*
+ * Implementation of hook_theme().
+ */
+
+function batire_user_theme() {
+  $items = array(
+    'batire_user_popup_login_content' => array(
+      'arguments' => array(),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_popup_activate_abonement' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_popup_activate_abonement_s2' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_popup_activate_abonement_s2_form' => array(
+      'arguments' => array('form' => NULL, 'full_name' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_popup_activate_abonement_success' => array(
+      'arguments' => array(),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_popup_activate_abonement_success_free' => array(
+      'arguments' => array('date' => NULL),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_popup_recovery_password' => array(
+      'arguments' => array(),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_popup_where_to_find' => array(
+      'arguments' => array(),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_recovery_password_form' => array(
+      'arguments' => array(),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_thank_you' => array(
+      'arguments' => array('data'),
+      'file' => 'theme/theme.inc',
+    ),
+    'batire_user_subscription_page' => array(
+      'arguments' => array('content' => NULL, 'title' => NULL, 'subtitle' => NULL, 'type' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_user_group_members' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_user_group_member' => array(
+      'arguments' => array('profile' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_user_commercial_info_email' => array(
+      'arguments' => array('data' => NULL),
+      'template' => 'commercial-email',
+      'path' => drupal_get_path('module', 'batire_user') . '/theme/templates'
+    ),
+    'batire_user_commercial_transform_info_email' => array(
+      'arguments' => array('data' => NULL, 'profile' => NULL, 'svc_profile' => NULL),
+      'template' => 'commercial-transform-email',
+      'path' => drupal_get_path('module', 'batire_user') . '/theme/templates'
+    ),
+    'batire_user_abonement_date' => array(
+      'arguments' => array('data' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_user_detail_abonnement' => array(
+      'arguments' => array('content' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_user_detail_abonnement_form' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+    'batire_user_transform_abonnement_form' => array(
+      'arguments' => array('form' => NULL),
+      'file' => 'theme/theme.inc'
+    ),
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_batire_site_popups_info().
+ */
+function batire_user_batire_site_popups_info($type) {
+  switch ($type) {
+    case 'recovery-password':
+    case 'where-to-find':
+    case 'activate-abonement-success':
+    case 'activate-abonement':
+    case 'activate-abonement-s2':
+      return 'batire_user';
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_batire_site_popups().
+ */
+function batire_user_batire_site_popups($type, $nids = array()) {
+  global $user;
+
+  $result = array(
+    'error' => FALSE,
+    'data' => ''
+  );
+
+  switch ($type) {
+    case 'recovery-password':
+      $result['data'] = theme('batire_user_popup_recovery_password');
+      break;
+    case 'where-to-find':
+      $result['data'] = theme('batire_user_popup_where_to_find');
+      break;
+    case 'activate-abonement':
+      $result['data'] = theme(
+      'batire_user_popup_activate_abonement', drupal_get_form('batire_user_activate_abonement_form')
+      );
+      break;
+    case 'activate-abonement-s2':
+      $sub_id = isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_sub']['id']) ? $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_sub']['id'] : '';
+      if ($sub_id) {
+        $accs = db_query_range("
+          SELECT data FROM {batire_user_registration_requests}
+          WHERE id = %d AND type = %d", $sub_id, BATIRE_USER_REG_TYPE_SUB, 0, 1
+        );
+
+        $member = db_fetch_object($accs);
+        if (isset($member->data) && $member->data) {
+          $member->data = unserialize($member->data);
+
+          $full_name = $member->data->field_user_name[0]['value'] . ' ' . $member->data->field_user_surname[0]['value'];
+          $result['data'] = theme(
+          'batire_user_popup_activate_abonement_s2', drupal_get_form('batire_user_activate_abonement_s2_form'), $full_name
+          );
+        }
+      }
+      else {
+        $result['data'] = theme(
+        'batire_user_popup_activate_abonement_s2', drupal_get_form('batire_user_activate_abonement_s2_form')
+        );
+      }
+      break;
+    case 'activate-abonement-success':
+      if (isset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']['success']) && $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']['success']) {
+        $result['data'] = theme('batire_user_popup_activate_abonement_success');
+
+        //Unset to prevent next shows
+        unset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation_trans']);
+      }
+      else {
+        switch ($_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['acc_type']) {
+          case 'paid':
+            $result['data'] = theme('batire_user_popup_activate_abonement_success');
+            break;
+          case 'free':
+            $date = $_SESSION[BATIRE_USERSESSION_NAMESPACE]['activation']['free_acc_date'];
+            $result['data'] = theme('batire_user_popup_activate_abonement_success_free', $date);
+            break;
+        }
+      }
+      break;
+  }
+
+  if (!$result['data']) {
+    return array();
+  }
+
+  return $result;
+}
+
+/**
+ * Abonnement activation form;
+ * @param $form_state
+ */
+function batire_user_activate_abonement_form(&$form_state) {
+  $form = array();
+
+  $form['abo'] = array(
+    '#type' => 'textfield',
+    '#title' => t('N° abonné')
+  );
+
+  $form['email'] = array(
+    '#type' => 'textfield',
+    '#title' => 'Email'
+  );
+
+  $form['error'] = array(
+    '#value' => '<div class="popup-messages messages show-hide-block-non"><div class="messages-content"></div></div>'
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider'),
+    '#prefix' => '<div class="button-form-submit">',
+    '#suffix' => '</div>'
+  );
+
+  return $form;
+}
+
+/**
+ * Abonnement activation step 2 form;
+ * @param $form_state
+ */
+function batire_user_activate_abonement_s2_form(&$form_state) {
+  $form = array();
+
+  $form['ident'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Identifiant')
+  );
+
+  $form['pass'] = array(
+    '#type' => 'password',
+    '#title' => t('Mot de passe')
+  );
+
+  $form['pass2'] = array(
+    '#type' => 'password',
+    '#title' => t('Confirmation mot de passe')
+  );
+
+  $form['remember_me'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Mémoriser mes codes d\'accès'),
+    '#default_value' => variable_get('remember_me_checkbox', 0),
+  );
+
+  $form['info'] = array(
+    '#value' => '<div class="description-info">' . t('6 caractères minimum, sans accent, ni espace, ni caractères spéciaux') . '</div>'
+  );
+
+  $form['error'] = array(
+    '#value' => '<div class="popup-messages messages show-hide-block-non"><div class="messages-content"></div></div>'
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider'),
+    '#prefix' => '<div class="button-form-submit">',
+    '#suffix' => '</div>'
+  );
+
+  $form['#theme'] = 'batire_user_popup_activate_abonement_s2_form';
+  return $form;
+}
+
+/**
+ * Build the form to recovery password
+ *
+ * @ingroup forms.
+ */
+function batire_user_recovery_password_form(&$form_state) {
+  $form = array();
+  $form['email'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Votre e-mail')
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Valider')
+  );
+
+  $form['#theme'] = 'batire_user_recovery_password_form';
+  return $form;
+}
+
+/**
+ * Preprocess for batire_user_commercial_info_email
+ * @param $vars
+ */
+function batire_user_preprocess_batire_user_commercial_info_email(&$vars) {
+  $data = $vars['data'];
+
+  foreach ($data->data as $field => $value) {
+    if ('field_user_abon_list' == $field && isset($value[0]['value'])) {
+      $field_data = array();
+      foreach ($value as $multi) {
+        $field_data[] = $multi['value'];
+      }
+      $vars[$field] = implode(' / ', $field_data);
+    }
+    elseif (isset($value[0]) && is_array($value[0])) {
+      if ('field_user_statut' == $field) {
+        $vars[$field] = $value[0]['value'] ? 'Secteur public' : 'Secteur privé';
+      }
+      elseif (in_array($field, array('field_user_opt_1', 'field_user_opt_2'))) {
+        $vars[$field] = $value[0]['value'] ? 'Oui' : 'Non';
+      }
+      else {
+        $vars[$field] = $value[0]['value'] !== '' ? $value[0]['value'] : ' ---- ';
+      }
+    }
+    else {
+      $vars[$field] = $value;
+    }
+  }
+}
+
+/**
+ * Preprocess for batire_user_commercial_info_email
+ * @param $vars
+ */
+function batire_user_preprocess_batire_user_commercial_transform_info_email(&$vars) {
+  batire_user_preprocess_batire_user_commercial_info_email($vars);
+  $profile     = $vars['profile'];
+  $svc_profile = $vars['svc_profile'];
+
+  $vars['user_login'] = $svc_profile['login'];
+  $vars['user_pass']  = $svc_profile['pass'];
+
+  $vars['subacc_num'] = $profile->field_user_posts_count[0]['value'];
+
+  foreach ($profile->field_user_subacc as $subacc) {
+    if (!empty($subacc['uid'])) {
+      $sub = user_load($subacc['uid']);
+      if ($sub->uid) {
+        $sub_profile = batire_user_profile_load($subacc['uid']);
+
+        $subaccs_p['name']    = $sub_profile->field_user_name[0]['value'];
+        $subaccs_p['surname'] = $sub_profile->field_user_surname[0]['value'];
+        $subaccs_p['mail']    = $sub->mail;
+
+        $subaccs[] = $subaccs_p;
+      }
+    }
+  }
+
+  $vars['subaccs'] = $subaccs;
+}
+
+/**
+ * Check if current user owner of selected folder
+ */
+function _batire_user_is_owner_folder($fid, $uid = NULL) {
+  if (is_null($uid)) {
+    global $user;
+    $uid = $user->uid;
+  }
+  if (!empty($fid)) {
+    $folder = node_load(array('nid' => $fid, 'type' => 'batire_user_folder'));
+    if (isset($folder->nid) && $folder->nid && $folder->uid == $uid) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Access callback for paid account
+ */
+function _batire_user_is_paid($account = NULL) {
+  if (!$account) {
+    global $user;
+    $account = $user;
+  }
+
+  return array_key_exists(BATIRE_USER_PAIDACCOUNT, $account->roles);
+}
+
+/**
+ * Access callback for paid account
+ */
+function _batire_user_is_free($account = NULL) {
+  if (!$account) {
+    global $user;
+    $account = $user;
+  }
+
+  return array_key_exists(BATIRE_USER_FREEACCOUNT, $account->roles);
+}
+
+/**
+ * Access callback for trial TN account
+ */
+function _batire_user_is_trialtn($account = NULL) {
+  if (!$account) {
+    global $user;
+    $account = $user;
+  }
+
+  return array_key_exists(BATIRE_USER_TRIALTNACCOUNT, $account->roles);
+}
+
+function batire_user_accounts_list_js($op) {
+  global $user;
+
+  $result = array(
+    'error' => FALSE,
+    'data' => NULL,
+  );
+
+  switch ($op) {
+    case 'new' :
+      $cnt = isset($_GET['cnt']) ? $_GET['cnt'] : '0';
+
+      $data['acc_id'] = 'id' . time();
+      $data['hash'] = 0;
+      $result['data'] = theme('batire_user_list_account', $data, $cnt);
+      break;
+    case 'update' :
+      if (array_key_exists(BATIRE_USER_MULTIADMIN, $user->roles)) {
+        $s_accs = isset($_POST['accs']) ? ($_POST['accs']) : '';
+        $accs = json_decode($s_accs);
+        //Process new accounts
+        if (count($accs->newacc)) {
+          $values = batire_user_profile_load($user->uid);
+          foreach ($accs->newacc as $acc) {
+            $values->field_user_name[0]['value'] = batire_site_check_text($acc->name);
+            $values->field_user_surname[0]['value'] = batire_site_check_text($acc->surname);
+            $record = (object) array(
+              'id' => 0,
+              'mail' => batire_site_check_text($acc->mail),
+              'type' => BATIRE_USER_REG_TYPE_SUB,
+              'data' => new stdClass(),
+              'created' => time(),
+              'uid' => $user->uid
+            );
+
+            $skip_fields = array(
+              'field_user_last_login_date',
+              'field_user_posts_count',
+              'field_user_login_date',
+              'field_default_search',
+              'field_user_subacc',
+            );
+
+            foreach ($values as $key => $field) {
+              if (0 === strpos($key, 'field_') && !in_array($key, $skip_fields)) {
+                $record->data->$key = $field;
+              }
+            }
+
+            /**
+             * Storing record;
+             */
+            drupal_write_record('batire_user_registration_requests', $record);
+            //Get HTML from pre-reg table to redisplay
+            $member = array();
+            $member['mail'] = batire_site_check_text($acc->mail);
+            $member['name'] = batire_site_check_text($acc->name);
+            $member['surname'] = batire_site_check_text($acc->surname);
+            $member['hash'] = md5($member['name'] . $member['surname'] . $member['mail']);
+            $member['acc_type'] = 'preacc';
+            $member['acc_id'] = $record->id;
+
+            $result['data'] .= theme('batire_user_list_account', $member, 0);
+
+            // Sending mail
+            if (isset($user->roles[BATIRE_USER_FREEACCOUNT])) {
+              $f_org_type = t('Dans le cadre de l\'offre d\'essai gratuite multiposte, vous beneficiez d\'un acces de @cnt jours au site !site_name.', array('@cnt' => BATIRE_USER_FREE_TERM, '!site_name' => SITE_NAME_UC));
+            }
+            else {
+              $month_cnt = BATIRE_USER_PAID_TERM;
+              //Abonnement stuff
+              $abonnement_dates_raw = batire_svc_get_abonnement_info($user->abo_num);
+
+              if (!$abonnement_dates_raw['error']) {
+                $abonnement_dates = _batire_svc_unpack_abonnement_info($abonnement_dates_raw['abonnement_info'], $user->svc_login);
+                if ($abonnement_dates) {
+                  $month_cnt = floor(($abonnement_dates['end_timestamp'] - $abonnement_dates['start_timestamp']) / 30 / 24 / 60 / 60);
+                }
+              }
+
+              $org_type = $values->field_user_statut[0]['value'] ? t('abonnement multiposte de votre organisme') : t('abonnement multiposte de votre entreprise');
+              if (isset($user->roles[BATIRE_GC_GC_USER_ROLE_ID])) {
+                $f_org_type = t('Dans le cadre d’un !org_type, vous bénéficiez d’un accès au site !site_name.', array('!org_type' => $org_type, '!site_name' => SITE_NAME_UC));
+              }
+              else {
+                $f_org_type = t('Dans le cadre d’un !org_type, vous bénéficiez d’un accès de @cnt mois au site !site_name.', array('!org_type' => $org_type, '@cnt' => $month_cnt, '!site_name' => SITE_NAME_UC));
+              }
+            }
+            $options = array(
+              'module' => 'batire_user',
+              'mailkey' => 'batire_user_account_create_subaccount',
+              'recipient' => $member['mail'],
+              'subject' => '',
+              'data' => array(
+                'name' => $member['name'],
+                'surname' => $member['surname'],
+                'salutation' => $values->field_user_salut[0]['value'],
+                'org_type' => $f_org_type,
+                'activate_link' => batire_user_generate_activate_sub_link($record->id),
+              ),
+              'plaintext' => FALSE
+            );
+
+            if (!batire_site_send_mail($options, variable_get('site_mail', 'batire@adyax.com'))) {
+              batire_site_log_watchdog(t("Can't send email."), BATIRE_SITE_ERROR_SYSTEM);
+            }
+          }
+        }
+
+        //Proceed pre accounts
+        if (count($accs->preacc)) {
+          foreach ($accs->preacc as $aid => $acc) {
+            if ($acc->changed) {
+              //Get from MySQL
+              $aid = substr($aid, 1);
+              $maccs = db_query('SELECT * FROM {batire_user_registration_requests} WHERE id = %d AND uid = %d LIMIT 1', $aid, $user->uid);
+              $member = db_fetch_object($maccs);
+              if (isset($member->id) && $member->id) {
+                $member->data = unserialize($member->data);
+                $member->mail = $acc->mail;
+                $member->data->field_user_name[0]['value'] = $acc->name;
+                $member->data->field_user_surname[0]['value'] = $acc->surname;
+                drupal_write_record('batire_user_registration_requests', $member, array(0 => 'id'));
+              }
+            }
+          }
+        }
+
+        //Proceed real accounts
+        if (count($accs->acc)) {
+          $a_members = mongodb_user_get_members($user->uid);
+          foreach ($accs->acc as $aid => $acc) {
+            if ($acc->changed) {
+              //Update user for mail
+              $aid = substr($aid, 1);
+              //Check is it admin member
+              if (array_key_exists('u' . $aid, $a_members)) {
+                $auser = user_load($aid);
+                //Exists user?
+                if (isset($auser->uid) && $auser->uid) {
+                  user_save($auser, array('mail' => $acc->mail));
+                  //Update name and surname in profile
+                  $aprofile = batire_user_profile_load($aid);
+                  $aprofile->field_user_name[0]['value'] = $acc->name;
+                  $aprofile->field_user_surname[0]['value'] = $acc->surname;
+                  node_save($aprofile);
+                }
+              }
+            }
+          }
+        }
+      }
+      else {
+        $result['error'] = TRUE;
+      }
+      break;
+    case 'del' :
+      $atype = isset($_POST['type']) ? batire_site_check_text($_POST['type']) : '';
+      $aid = isset($_POST['nid']) ? batire_site_check_text($_POST['nid']) : '';
+      if (_batire_user_is_multipost($user, TRUE)) {
+        switch ($atype) {
+          case 'acc' :
+            $members = mongodb_user_get_members($user->uid);
+            //Check in profile is subacc member of admin
+            $profile = batire_user_profile_load($user->uid);
+            $is_member = FALSE;
+            foreach ($profile->field_user_subacc as $subacc) {
+              if ($subacc['uid'] == $aid) {
+                $is_member = TRUE;
+                break;
+              }
+            }
+            if (array_key_exists('u' . $aid, $members) && $is_member) {
+              batire_user_delete_user_delete($aid, TRUE, TRUE, TRUE);
+              drupal_get_messages();
+
+              //update counters
+              $result['data'] = array(
+                'folders' => mongodb_user_count_folders($user->uid, 's'),
+                'docs' => mongodb_user_count_docs($user->uid, 's'),
+                'annos' => mongodb_docs_count_user_annotations($user->uid, 's')
+              );
+            }
+            else {
+              $result['error'] = TRUE;
+            }
+            break;
+          case 'preacc' :
+            db_query('DELETE FROM {batire_user_registration_requests} WHERE id = %d AND uid = %d', $aid, $user->uid);
+            $result['data'] = 'ok';
+            break;
+        }
+        break;
+      }
+      else {
+        $result['error'] = TRUE;
+      }
+  }
+  drupal_json($result);
+}
+
+function _batire_user_accounts_list_cnt() {
+  global $user;
+  $cntr = 0;
+
+  $members = mongodb_user_get_members();
+
+  foreach ($members as $member) {
+    if (!$member['is_admin']) {
+      $cntr++;
+    }
+  }
+
+  //Get accounts from MySQL pre-reg table
+  $accs_q = db_query('SELECT COUNT(id) data FROM {batire_user_registration_requests} WHERE uid = %d', $user->uid);
+  $cnt = db_result($accs_q);
+
+  $cntr += $cnt;
+
+  return $cntr;
+}
+
+function batire_user_generate_activate_sub_link($reg_id) {
+  return l('en cliquant ici', 'batire_user/register/activate_sub', array('absolute' => TRUE, 'query' => array('id' => $reg_id)));
+}
+
+function batire_user_generate_activate_free_link($reg_id) {
+  return l('cliquez ici', 'batire_user/register/activate_free', array('absolute' => TRUE, 'query' => array('fid' => $reg_id)));
+}
+
+/**
+ * Validate detail my abonnement form
+ */
+function batire_user_detail_abonnement_form_validate($form, &$form_state) {
+  global $user;
+
+  $error = FALSE;
+
+  $values = $form_state['values'];
+
+  // check email
+  if (!batire_site_validate_email_address($values['field_user_email'])) {
+    form_set_error('field_user_email', t('The e-mail address %mail is not valid.', array('%mail' => $values['field_user_email'])));
+    $error = TRUE;
+  }
+  $message = user_validate_name($values['login']);
+  if (!empty($message)) {
+    form_set_error('login', $message);
+    $error = TRUE;
+  }
+  if (!empty($values['password']) || !empty($values['confirm_password'])) {
+    if ($values['password'] != $values['confirm_password']) {
+      form_set_error('password', t("Password doesn't match confirmation"));
+      $error = TRUE;
+    }
+    elseif (strlen($values['password']) < BATIRE_ABBO_PWD_MIN_LEN) {
+      form_set_error('password', t("Password length is less than @cnt", array('@cnt' => BATIRE_ABBO_PWD_MIN_LEN)));
+      $error = TRUE;
+    }
+  }
+
+  if (!$error) {
+    //We need to validate profile update in SVC
+    $stored_svc_profile = $_SESSION[BATIRE_USERSESSION_NAMESPACE]['__edit_profile_svc_data'];
+
+    $is_subaccount = array_key_exists(BATIRE_USER_SUBACCOUNT, $user->roles);
+
+    /**
+     * At first, we're validating login|password
+     * (if they gets changed since last update)
+     */
+    $login_pwd_changed = $values['password'] && $values['password'] != $stored_svc_profile['pass'] ||
+    $values['login'] != $stored_svc_profile['login'];
+
+    $validate_codes = $login_pwd_changed || $values['mail'] != $stored_svc_profile['mail'];
+
+    if ($validate_codes) {
+      /**
+       * We need to validate login and password, if they were changed;
+       *
+       * if login was changed, we need to use VerifValiditeInfosAcces method
+       */
+      if ($values['field_user_email'] != $stored_svc_profile['mail'] && !batire_site_validate_email_address($values['field_user_email'])) {
+        form_set_error('field_user_email', t('Merci de renseigner ce champ'));
+        return;
+      }
+
+      if ($values['login'] != $stored_svc_profile['login']) {
+        $response = batire_svc_validate_access_codes(
+          $values['login'],
+          $values['password'] && $values['password'] != $stored_svc_profile['pass'] ?
+          $values['password'] :
+          $stored_svc_profile['pass'],
+          $values['field_user_email'] != $stored_svc_profile['mail'] ?
+          $values['field_user_email'] : $stored_svc_profile['mail']
+        );
+
+        if ($response['error']['message']) {
+          if ('form' == $response['error']['element']) {
+            drupal_set_message($response['error']['message'], 'error');
+          }
+          form_set_error(
+          'login', $response['error']['message']
+          );
+          return;
+        }
+      }
+
+      //Now we need to update SVC with new data;
+      $response = batire_svc_modify_user_access_data($user->name, $values);
+
+      if ($response['error']) {
+        form_set_error('login', $response['error']);
+        return;
+      }
+      else {
+        /**
+         * here we need to send confirmation email, that codes d'access
+         * were modified;
+         *
+         * And we also need to update drupal account with the changes;
+         */
+        user_save(
+        $user, array(
+          'pass' => $values['password'],
+          'mail' => $values['field_user_email'],
+          'svc_login' => $values['login']
+        )
+        );
+
+        //We need to send email only if login or password gets modified
+        if ($login_pwd_changed) {
+          //Send mail
+          $options = array(
+            'module' => 'batire_user',
+            'mailkey' => 'batire_user_account_confirm_access_code',
+            'recipient' => $user->mail,
+            'subject' => '',
+            'data' => array(
+              'name' => $values['field_user_name'],
+              'surname' => $values['field_user_surname'],
+              'salutation' => $values['field_user_salut'],
+              'login' => $values['login'],
+              'password' => $values['password'] ? $values['password'] : $stored_svc_profile['pass'],
+            ),
+            'plaintext' => FALSE
+          );
+
+          batire_site_send_mail($options, variable_get('site_mail', 'batire@adyax.com'));
+        }
+      }
+    }
+
+    if ($is_subaccount) {
+      //Here we need to fill data from parent account
+      _batire_user_get_admin_fields_data($values, $user->uid);
+    }
+
+    //Now we need to update user data in SVC
+    $salut = '';
+    switch ($values['field_user_salut']) {
+      case 'Monsieur' :
+        $salut = 'M';
+        break;
+      case 'Madame' :
+        $salut = 'MME';
+        break;
+      case 'Mademoiselle' :
+        $salut = 'MLLE';
+        break;
+    }
+    $svc_values = array(
+      'name' => $values['login'],
+      'pass' => $values['password'],
+      'mail' => $values['field_user_email'],
+      'field_abon_salutation' => array(array('value' => $salut)),
+      'field_abon_country' => array(array('value' => $values['field_user_country'])),
+      'field_abon_company_name' => array(array('value' => $values['field_user_company'])),
+      'field_abon_function' => array(array('value' => $values['field_user_position'])),
+      'field_abon_specialty' => array(array('value' => $values['field_user_specialty'])),
+      'field_abon_tel_1' => array(array('value' => $values['field_user_tel_1'])),
+      'field_abon_tel_2' => array(array('value' => $values['field_user_tel_2'])),
+      'field_abon_fax' => array(array('value' => $values['field_user_fax'])),
+      'field_abon_address_1' => array(array('value' => $values['field_user_address_1'])),
+      'field_abon_address_2' => array(array('value' => $values['field_user_address_2'])),
+      'field_abon_post_code' => array(array('value' => $values['field_user_zip'])),
+      'field_abon_city' => array(array('value' => $values['field_user_city'])),
+      'field_abon_name' => array(array('value' => $values['field_user_name'])),
+      'field_abon_surname' => array(array('value' => $values['field_user_surname'])),
+      'field_opt_1' => array(array('value' => $values['field_user_opt_1'])),
+      'field_opt_2' => array(array('value' => $values['field_user_opt_2'])),
+    );
+    $response = batire_svc_modify_user_data($user->name, '', $svc_values);
+    if ($response['error']) {
+      form_set_error(NULL, $response['error']);
+      drupal_set_message($response['error']);
+      //@todo need to review errors view
+      return;
+    }
+
+
+    //Modifying drupal account data
+    $drupal_profile = batire_user_profile_load($user->uid, TRUE);
+
+    $drupal_profile->field_user_email_format[0]['value'] = $values['field_user_email_format'];
+    $drupal_profile->field_user_tva[0]['value'] = $values['field_user_tva'];
+    $drupal_profile->field_user_promo[0]['value'] = $values['field_user_promo'];
+    $drupal_profile->field_user_name[0]['value'] = $values['field_user_name'];
+    $drupal_profile->field_user_surname[0]['value'] = $values['field_user_surname'];
+    $drupal_profile->field_user_statut[0]['value'] = $values['field_user_statut'];
+    $drupal_profile->field_user_activity_pub[0]['value'] = $values['field_user_activity_pub'];
+    $drupal_profile->field_user_activity_prv[0]['value'] = $values['field_user_activity_prv'];
+    $drupal_profile->name = $user->name;
+    $drupal_profile->title = _batire_user_get_user_profile_title($user);
+
+    node_save($drupal_profile);
+
+    // Save GC role if Code privilege was set
+    if (batire_gc_commercial_get_sales_by_promo($values['field_user_promo'])) {
+      $user->roles[BATIRE_GC_GC_USER_ROLE_ID] = BATIRE_GC_GC_USER_ROLE_ID;
+    }
+    else {
+      unset($user->roles[BATIRE_GC_GC_USER_ROLE_ID]);
+    }
+    user_save($user, array('roles' => $user->roles));
+  }
+}
+
+/**
+ * Callback for detail abonnement form
+ */
+function batire_user_detail_abonnement_form_submit($form, &$form_state) {
+  unset($_SESSION[BATIRE_USERSESSION_NAMESPACE]['__edit_profile_svc_data']);
+  drupal_set_message(t('Votre profil a été mis à jour.'));
+  drupal_goto('mon-compte/mon-abonnement/detail-de-mon-abonnement');
+}
+
+/**
+ * Is abbo number is free
+ * @param $abbo_num
+ * @return bool
+ */
+function _batire_user_is_abbo_free($abbo_num) {
+  $free_abo = explode(';', BATIRE_ABBO_FREE);
+  return in_array($abbo_num, $free_abo);
+}
+
+/**
+ * Returns user profile title
+ */
+function _batire_user_get_user_profile_title($usr) {
+  return sprintf('User profile %s-%d', $usr->svc_login, $usr->uid);
+}
+
+/**
+ * Fills $values with profile data of group admin for user $uid
+ * @param array $values
+ *   Array of values
+ * @param int $uid
+ *   User to fill data for
+ * @param bool $is_admin
+ */
+function _batire_user_get_admin_fields_data(&$values, $uid, $is_admin = FALSE) {
+
+  if (!$is_admin) {
+    $group_admin = mongodb_user_get_admin($uid);
+  }
+  else {
+    $group_admin = $uid;
+  }
+
+  $group_admin_profile = batire_user_profile_load($group_admin);
+
+  $admin_fields = array(
+    'user_tel_1',
+    'user_tel_2',
+    'user_fax',
+    'user_position',
+    'user_statut',
+    'user_company',
+    'user_activity_pub',
+    'user_activity_prv',
+    'user_address_1',
+    'user_address_2',
+    'user_zip',
+    'user_city',
+    'user_country',
+    'user_tva',
+    'user_abon_num',
+    'user_opt_1',
+    'user_opt_2',
+    'user_email_format'
+  );
+
+  foreach ($admin_fields as $admin_field) {
+    $values['field_' . $admin_field] = $group_admin_profile->{'field_' . $admin_field}[0]['value'];
+  }
+}
+
+function batire_user_form_user_login_block_alter(&$form, &$form_state) {
+  $form['destination'] = array(
+  	'#type' => 'hidden',
+    '#value' => 'home'    
+  );
+  $form['#validate'] = array('_batire_user_user_login_validate');
+  $form['#submit'] = array('_batire_user_user_login_submit');
+  $form['#after_build'] = array('_batire_user_user_login_afterbuild');
+}
+
+function _batire_user_user_login_afterbuild($form, &$form_state) {
+  $form['name']['#attributes']['tabindex'] = '29991';
+  $form['pass']['#attributes']['tabindex'] = '29992';
+  $form['remember_me']['#attributes']['tabindex'] = '29993';
+  $form['submit']['#attributes']['tabindex'] = '29994';
+  return $form;
+}
+
+function _batire_user_user_login_validate($form, &$form_state) {
+  /**
+   * If elements didn't pass validation, break the process;
+   */
+  if (form_get_errors()) {
+    form_set_error(NULL, '', TRUE);
+    $error_txt = t('Identifiant ou mot de passe non reconnu.');
+    drupal_set_message($error_txt, 'error');
+    form_set_error('name', $error_txt);
+    return;
+  }
+
+  $values = &$form_state['values'];
+
+  //Check is admin or webmaster? if it is - custom validators otherwise via SVC
+  if (batire_user_is_restricted_user($values['name'])) {
+    user_login_name_validate($form, $form_state);
+    user_login_authenticate_validate($form, $form_state);
+    global $user;
+    if (!$user->uid) {
+      $error_txt = t('Identifiant ou mot de passe non reconnu.');
+      drupal_set_message($error_txt, 'error');
+      form_set_error('name', $error_txt);
+    }
+  }
+  else {
+    $result = batire_svc_authentificate($values['name'], $values['pass']);
+
+    /**
+     * An error occured during user authentication
+     */
+    if ($result['error']['message']) {
+      $error_txt = t('Identifiant ou mot de passe non reconnu.');
+      form_set_error('name', $error_txt);
+      drupal_set_message($error_txt);
+      watchdog(
+      BATIRE_SVC_LOG, 'An error occured while authenticating user %user. Error: %error', array('%user' => $values['name'], '%error' => $result['error']['message']), WATCHDOG_ALERT
+      );
+    }
+    else {
+
+      /**
+       * We need to validate user input against drupal database
+       * E.g. user might be blocked, so we need to check that
+       *
+       * Since we have user login as SVC id
+       */
+      $form_state['values']['svc_login'] = $form_state['values']['name'];
+      $form_state['values']['name']      = $result['id'];
+
+      user_login_name_validate($form, $form_state);
+
+      if (form_get_errors()) {
+        form_set_error(NULL, '', TRUE);
+        $error_txt = t('Identifiant ou mot de passe non reconnu.');
+        drupal_set_message($error_txt, 'error');
+        form_set_error('name', $error_txt);
+        return;
+      }
+
+      $values['name'] = $result['id'];
+      $account = user_load(array('name' => $values['name']));
+      if (!$account->uid) {
+        $account = NULL;
+      }
+      $profile        = _batire_user_validate_login_profile($values['name'], $account);
+
+      if (isset($profile['error'])) {
+        form_set_error('name', $profile['error']);
+        drupal_set_message($profile['error'], 'error');
+      }
+      else {
+        $values['svc_profile'] = $profile;
+
+        /**
+         * Validate ip access for GC users @see task #67280
+         */
+        $admin_account = user_load(batire_gc_ip_get_gc_admin_id($account->uid));
+        $admin_account_data = unserialize($admin_account->data);
+        // (is GC user or subaccaunt) AND is set lock setting of ip access
+        if (array_key_exists(BATIRE_GC_GC_USER_ROLE_ID, $admin_account->roles) && $admin_account_data['deny_access_outside_ip_range'] == 1) {
+          $user_ip = ip_address();
+          $svc_id = batire_svc_get_svc_id_by_mapping(BATIRE_SVC_APPELANT_ID, $user_ip);
+          if (!$svc_id['error']) {
+            $replace_user = user_load(array('name' => $svc_id['svc_id']));
+            if ($replace_user->uid == 0) {
+              $existing_error = t('Vous ne pouvez pas vous connecter à l\'extérieur de votre organisation');
+              form_set_error('name', $existing_error);
+              drupal_set_message($existing_error, 'error');
+            }
+          }
+        }
+
+        /**
+         * Disallow multiple monopost for the same abo num
+         */
+        if ($profile['subacc_number'] == 1 && !$profile['is_free']) {
+          $existing_monopost = user_load(array('abo_num' => $profile['abon_no']));
+          if ($existing_monopost && $existing_monopost->name != $profile['cpt_id']) {
+            $existing_error = t('Votre identifiant ne vous permet pas d\'accéder au site');
+            form_set_error('name', $existing_error);
+            drupal_set_message($existing_error, 'error');
+          }
+        }
+
+        if ($profile['is_free']) {
+          /**
+           * We need to see if profile is expired or not.
+           */
+          $error = _batire_user_validate_abonement_expiration($account);
+          if ($error) {
+            form_set_error('name', $error);
+            drupal_set_message($error, 'error');
+          }
+        }
+        else {
+          /**
+           * Else we need to check spaces...
+           */
+          $spaces_result = batire_svc_get_authorized_spaces($result['id']);
+
+          if ($spaces_result['error']) {
+            form_set_error('name', $spaces_result['error']);
+            drupal_set_message($spaces_result['error'], 'error');
+            watchdog(
+              BATIRE_SVC_LOG,
+              'An error occured while listing spaces for user %user. Error: %error',
+              array('%user' => $values['name'], '%error' => $spaces_result['error']),
+              WATCHDOG_ALERT
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Submit handler for user login block
+ */
+function _batire_user_user_login_submit($form, &$form_state) {
+  $values = &$form_state['values'];
+
+  if (batire_user_is_restricted_user($values['name'])) {
+    user_login_submit($form, $form_state);
+  }
+  else {
+    __batire_user_user_login_submit($form, $form_state);
+  }
+
+  /**
+   * Set summary lock to 1
+   */
+
+  _batire_site_set_cookie('summary_lock', 1);
+  
+  //redirect to destination url
+  if(!empty($form_state['clicked_button']['#post']['destination'])){
+    $url = parse_url($form_state['clicked_button']['#post']['destination']);
+    if(is_array($url) && strlen($url['path']) > 0){
+      $url['path'] = substr($url['path'],1);
+      drupal_goto($url['path'], $url['query']);
+    }else{
+      drupal_goto('home');
+    }
+  }
+}
+
+/**
+ * This function validates user profile from SVC
+ * @param int $svc_id
+ *   SVC_ID
+ * @return
+ *   Returns unpacked profile or error
+ */
+function _batire_user_validate_login_profile($svc_id, $account) {
+  $profile = batire_svc_get_user_data($svc_id);
+  if ($profile['error']) {
+    watchdog(
+    BATIRE_SVC_LOG, 'An error occured while retreiving user profile for ID %id. Error: %error', array('%id' => $svc_id, '%error' => $profile['error']), WATCHDOG_ERROR
+    );
+    return array('error' => $profile['error']);
+  }
+
+  $profile = _batire_svc_unpack_profile($profile['data']);
+
+  /**
+   * For free users we're using abon no from drupal database;
+   */
+  $profile['is_free'] = FALSE;
+  if (!empty($account->abo_num) && _batire_user_is_abbo_free($account->abo_num)) {
+    $profile['abon_no'] = $account->abo_num;
+    $profile['is_free'] = TRUE;
+  }
+  else {
+    $svc_abon = batire_svc_get_user_abonnements($svc_id);
+
+    if ($svc_abon['error']) {
+      watchdog(
+        BATIRE_SVC_LOG,
+        'An error occured while retreiving user abonnements for ID %id. Error: %error',
+        array('%id' => $svc_id, '%error' => $svc_abon['error']),
+        WATCHDOG_ERROR
+      );
+      return array('error' => $svc_abon['error']);
+    }
+    else {
+      $abonnements_list = _batire_svc_unpack_abonnements_advanced($svc_abon['abonnements']);
+
+      $profile['full_abon_list'] = $abonnements_list;
+      if (isset($abonnements_list[BATIRE_SVC_PRODUCT_ID]) && !empty($abonnements_list[BATIRE_SVC_PRODUCT_ID])) {
+        $profile['abon_no'] = array_shift(explode('-', $abonnements_list[BATIRE_SVC_PRODUCT_ID]));
+      }
+      else {
+        $profile['abon_no'] = array_shift(explode('-', array_shift($abonnements_list)));
+      }
+    }
+  }
+
+  $number_of_posts = batire_svc_get_number_of_accounts_by_product($profile['abon_no']);
+
+  if ($number_of_posts['error']) {
+    watchdog(
+    BATIRE_SVC_LOG, 'An error occured while retreiving number of exemplars for abon !abon. Error: %error', array(
+      '!abon' => $profile['abon_no'],
+      '%error' => $number_of_posts['error']
+    ), WATCHDOG_ERROR
+    );
+    return array('error' => $number_of_posts['error']);
+  }
+  else {
+    $profile['subacc_number'] = $number_of_posts['count'];
+  }
+
+  if ($profile['is_free']) {
+    // For free users we don't need to load dates;
+    return $profile;
+  }
+
+  $abonnement_dates = batire_svc_get_abonnement_info($profile['abon_no']);
+
+
+  if ($abonnement_dates['error']) {
+    watchdog(
+    BATIRE_SVC_LOG, 'An error occured while retreiving information for abon !abon. Error: %error', array(
+      '!abon' => $profile['abon_no'],
+      '%error' => $abonnement_dates['error']
+    ), WATCHDOG_ERROR
+    );
+    return array('error' => $abonnement_dates['error']);
+  }
+  else {
+    $profile['abonnement_dates'] = _batire_svc_unpack_abonnement_info($abonnement_dates['abonnement_info'], $profile['login']);
+  }
+
+  return $profile;
+}
+
+/**
+ * Validation of abonnement expiration date;
+ * @param array $profile
+ *   User SVC profile data;
+ */
+function _batire_user_validate_abonement_expiration($account) {
+  $error = FALSE;
+    /**
+     * refs #20209
+     * If user does not exists in Drupal, we're assuming he just got registered in SVC.
+     * Therefore we need to pass expiration validation
+     */
+  if (isset($account->uid) && $account->uid) {
+    $account_profile = batire_user_profile_load($account->uid, TRUE);
+    if (isset($account_profile->uid) && $account_profile->uid && $account_profile->field_user_dates[0]['value2']) {
+      $date = $account_profile->field_user_dates[0]['value2'];
+    }
+  }
+
+  if (!$date) {
+    $date = REQUEST_TIME + 10000000;
+  }
+
+  if ($date < REQUEST_TIME) {
+    $error = TRUE;
+  }
+
+
+  if ($error) {
+    variable_set('show_error_login_form', TRUE);
+    return t('Votre abonnement est arrivé à échéance.');
+  }
+
+  return FALSE;
+}
+
+/**
+ * Helper for user login
+ */
+function __batire_user_user_login_submit($form, &$form_state) {
+  $values = $form_state['values'];
+  /**
+   * We need to find user in Drupal database; if there is no user, then we need
+   * to create user account;
+   */
+  $existing_user = user_load(array('name' => $values['name']));
+
+  $profile = FALSE;
+
+  if ($existing_user) {
+    /**
+     * User found; lets update his profile info with data from SVC;
+     */
+    $role = array_shift(array_keys($existing_user->roles));
+    $profile = batire_user_profile_load($existing_user->uid, TRUE);
+
+    //Lets check if existing user could have new role (Monopost or Multipost)
+    $roles = $existing_user->roles;
+    if ($values['svc_profile']['subacc_number'] > 1) {
+      $roles[BATIRE_USER_MULTIADMIN] = BATIRE_USER_MULTIADMIN;
+    }
+    else {
+      $roles[BATIRE_USER_MONOPOST] = BATIRE_USER_MONOPOST;
+    }
+    user_save($existing_user, array('roles' => (is_array($roles)) ? $roles : array()));
+  }
+  else {
+    watchdog(
+    BATIRE_USER_LOG, 'User with name %name was not found. Creating user', array('%name' => $values['name'])
+    );
+
+    //We need to create user;
+    //We need to figure out if it is monopost | multipost
+
+    if ($values['svc_profile']['subacc_number'] > 1) {
+      /**
+       * Now we need to see if user is admin or subaccount;
+       * The following RULE is applied:
+       * -- The first logged in user with such abonement ID = admin,
+       * -- Other users = subaccounts;
+       */
+      if ($admin_user = user_load(array('abo_num' => $values['svc_profile']['abon_no']))) {
+        $role[BATIRE_USER_SUBACCOUNT] = BATIRE_USER_SUBACCOUNT;
+      }
+      else {
+        $role[BATIRE_USER_MULTIADMIN] = BATIRE_USER_MULTIADMIN;
+      }
+    }
+    else {
+      //Monopost
+      $role[BATIRE_USER_MONOPOST] = BATIRE_USER_MONOPOST;
+    }
+
+    //We need to figure out if it is free or paid
+    if (_batire_user_is_abbo_free($values['svc_profile']['abon_no'])) {
+      $role[BATIRE_USER_FREEACCOUNT] = BATIRE_USER_FREEACCOUNT;
+      $abbo_dates = _batire_abonnement_create_dates(
+      BATIRE_USER_FREEACCOUNT, REQUEST_TIME
+      );
+    }
+    else {
+      $role[BATIRE_USER_PAIDACCOUNT] = BATIRE_USER_PAIDACCOUNT;
+      $abbo_dates = _batire_abonnement_create_dates(
+      BATIRE_USER_PAIDACCOUNT, REQUEST_TIME, $values['svc_profile']['abonnement_dates']
+      );
+    }
+
+    $user = array(
+      'name' => $values['name'],
+      'svc_login' => isset($values['svc_login']) ? $values['svc_login'] : $values['name'],
+      'mail' => $values['svc_profile']['mail'],
+      'pass' => $values['pass'],
+      'status' => 1,
+      'abo_num' => $values['svc_profile']['abon_no'],
+      'roles' => (is_array($role)) ? $role : array()
+    );
+    $existing_user = user_save('', $user);
+
+    //If Paid and sub - add sub acc to admin, base on abo num
+    if (array_key_exists(BATIRE_USER_PAIDACCOUNT, $existing_user->roles) && array_key_exists(BATIRE_USER_SUBACCOUNT, $existing_user->roles)) {
+      $admin_id = mongodb_user_get_admin($admin_user->uid);
+      $admin_profile = batire_user_profile_load($admin_id, TRUE);
+      $admin_profile->field_user_subacc[] = array('uid' => $existing_user->uid);
+      node_save($admin_profile);
+    }
+  }
+
+  if (!$profile) {
+    //Creating a profile for user, if no any
+    $profile = (object) array(
+      'title' => _batire_user_get_user_profile_title($existing_user),
+      'type' => BATIRE_USER_PROFILE,
+      'uid' => $existing_user->uid,
+      'status' => 1,
+      'name' => $existing_user->name,
+      'field_user_dates' => $abbo_dates,
+    );
+  }
+  if (array_key_exists(BATIRE_USER_MULTIADMIN, $existing_user->roles)) {
+    $profile->field_user_posts_count = array(
+      array(
+        'value' => $values['svc_profile']['subacc_number']
+      )
+    );
+  }
+  // update abo dates for paid user
+  if (array_key_exists(BATIRE_USER_PAIDACCOUNT, $existing_user->roles)) {
+    $abbo_dates = _batire_abonnement_create_dates(
+      BATIRE_USER_PAIDACCOUNT, REQUEST_TIME, $values['svc_profile']['abonnement_dates']
+    );
+    $profile->field_user_dates = $abbo_dates;
+  }
+
+  $products = isset($values['svc_profile']['full_abon_list']) &&
+              count($values['svc_profile']['full_abon_list']) ?
+              array_keys($values['svc_profile']['full_abon_list']) : NULL;
+
+  $free_trial = (isset($existing_user->roles[BATIRE_USER_FREEACCOUNT]) && $existing_user->roles[BATIRE_USER_FREEACCOUNT]) ||
+    (isset($existing_user->roles[BATIRE_USER_TRIALTNACCOUNT]) && $existing_user->roles[BATIRE_USER_TRIALTNACCOUNT]);
+  if ($free_trial || !$products) {
+    $profile->field_user_products = array(array('nid' => BATIRE_BASE_PRODUCT_ID));
+  }
+  else {
+    $available_products = batire_user_products_get_products();
+    $profile->field_user_products = array();
+    foreach ($products as $_prod) {
+      $profile->field_user_products[] = array('nid' => $available_products[$_prod]['nid']);
+    }
+  }
+
+  _batire_user_fill_profile_with_svc_data($profile, $values['svc_profile']);
+
+  //Set flag due to new doc may imported
+  $profile->field_new_docs_flag[0]['value'] = 1;
+  $profile->field_new_docs_cnt[0]['value'] = 0;
+
+  node_save($profile);
+
+  /**
+   * Logging user in
+   */
+  global $user;
+  $user = $existing_user;
+
+  /**
+   * We need to disallow more that one login at a time;
+   */
+  $clean = variable_get('batire_site_clean_sessions', 0);
+  if ($clean) {
+    _batire_user_drop_all_user_sessions($user->uid);
+  }
+
+  user_authenticate_finalize($values);
+  return $user;
+}
+
+/**
+ * Creates a "date" field for abonnement
+ * @param int $tid
+ *  Term ID, that represents abonnement type (payant|decouverte)
+ * @param int $time
+ *  Start time
+ */
+function _batire_abonnement_create_dates($tid, $time, $dates = NULL) {
+  if (BATIRE_USER_PAIDACCOUNT == $tid && $dates) {
+    $data = array(
+      array(
+        'value' => $dates['start_timestamp'],
+        'value2' => $dates['end_timestamp']
+      )
+    );
+  }
+  else {
+    $data = array(
+      array(
+        'value' => $time,
+        'value2' => $time + BATIRE_USER_ABBO_TIME_FREE
+      )
+    );
+  }
+
+  return $data;
+}
+
+/**
+ * Fills profile with SVC data
+ * @param $profile
+ * @param $svc_data
+ */
+function _batire_user_fill_profile_with_svc_data(&$profile, $svc_data) {
+
+  switch ($svc_data['salutation']) {
+    case 'M' :
+      $salut = 'Monsieur';
+      break;
+    case 'MME' :
+      $salut = 'Madame';
+      break;
+    case 'MLLE' :
+      $salut = 'Mademoiselle';
+      break;
+  }
+  $profile->field_user_salut = array(
+    array(
+      'value' => $salut
+    )
+  );
+
+  $profile->field_user_name = array(
+    array(
+      'value' => $svc_data['name']
+    )
+  );
+
+  $profile->field_user_surname = array(
+    array(
+      'value' => $svc_data['surname']
+    )
+  );
+
+  $profile->field_user_company = array(
+    array(
+      'value' => $svc_data['company_name']
+    )
+  );
+  $profile->field_user_tel_1 = array(
+    array(
+      'value' => $svc_data['tel_1']
+    )
+  );
+  $profile->field_user_tel_2 = array(
+    array(
+      'value' => $svc_data['tel_2']
+    )
+  );
+  $profile->field_user_fax = array(
+    array(
+      'value' => $svc_data['fax']
+    )
+  );
+  $profile->field_user_position = array(
+    array(
+      'value' => $svc_data['function']
+    )
+  );
+  $profile->field_user_specialty = array(
+    array(
+      'value' => $svc_data['service']
+    )
+  );
+  $profile->field_user_address_1 = array(
+    array(
+      'value' => $svc_data['address_1']
+    )
+  );
+  $profile->field_user_address_2 = array(
+    array(
+      'value' => $svc_data['address_2']
+    )
+  );
+  $profile->field_user_zip = array(
+    array(
+      'value' => $svc_data['post_code']
+    )
+  );
+  $profile->field_user_city = array(
+    array(
+      'value' => $svc_data['city']
+    )
+  );
+  $profile->field_user_country = array(
+    array(
+      'value' => $svc_data['country']
+    )
+  );
+  $profile->field_user_opt_1 = array(
+    array(
+      'value' => $svc_data['opt_1']
+    )
+  );
+  $profile->field_user_opt_2 = array(
+    array(
+      'value' => $svc_data['opt_2']
+    )
+  );
+  $profile->field_user_abon_num = array(
+    array(
+      'value' => $svc_data['abon_no'],
+    ),
+  );
+}
+
+function batire_user_is_restricted_user($user_name) {
+  $user = user_load(array('name' => $user_name, 'status' => 1));
+  return in_array(drupal_strtolower($user_name), array_map('drupal_strtolower', array_map('trim', explode("\n", BATIRE_USER_SYSTEM_LOGINS)))) ||
+    (isset($user->roles) && in_array(BATIRE_GC_GC_COMMERCIAL_ROLE_ID, array_keys($user->roles)));
+}
+
+/**
+ * Implementation of hook_cronapi().
+ */
+function batire_user_cronapi($op, $job = NULL) {
+  switch ($op) {
+    case 'list':
+      return array(
+        'batire_user_send_mail_run_cron' => t('Send free offer emails'),
+      );
+      break;
+
+    case 'rule':
+      if ($job == 'batire_user_send_mail_run_cron') {
+        return '0 0 * * *';
+      }
+      break;
+
+    case 'execute':
+      if ($job == 'batire_user_send_mail_run_cron') {
+        batire_user_send_mail_run_cron();
+      }
+      break;
+  }
+}
+
+function batire_user_send_mail_run_cron() {
+  $notifications_check_last = variable_get('batire_user_notifications_last', 0);
+  //check notifications twice a day
+  if (REQUEST_TIME > $notifications_check_last + BATIRE_USER_NOTIFICATIONS_DELAY) {
+    $check_result = _batire_user_check_notifications();
+    if ($check_result) {
+      //update last notification sending
+      variable_set('batire_user_notifications_last', REQUEST_TIME);
+    }
+  }
+}
+
+function _batire_user_check_notifications() {
+  $in_array = array(
+    variable_get('batire_user_notifications_delay_1', 2),
+    variable_get('batire_user_notifications_delay_2', 4),
+    variable_get('batire_user_notifications_delay_3', 10),
+    variable_get('batire_user_notifications_delay_4', 25),
+  );
+
+  $args = array_merge(array(BATIRE_USER_FREEACCOUNT, BATIRE_USER_TRIALTNACCOUNT), $in_array);
+
+  $sql = "SELECT u.uid, DATEDIFF(CURRENT_DATE(), FROM_UNIXTIME(ctup.field_user_dates_value)) diff
+          FROM {users} u
+            JOIN {node} n USING (uid)
+            JOIN {users_roles} ur USING (uid)
+            JOIN {content_type_batire_user_profile} ctup USING (vid)
+            WHERE n.type = 'batire_user_profile'
+            AND ur.rid = %d
+            HAVING diff IN (" . db_placeholders($in_array) . ")";
+
+  $result = db_query($sql, $args);
+
+  $success = TRUE;
+  while ($data = db_fetch_array($result)) {
+    //here we get an user who should get notification
+    $type = array_search($data['diff'], $in_array) + 1;
+
+    $mkeys = array('uid' => (int) $data['uid']);
+    $mdata = mongodb_select_one(MONGODB_USER_MAIL_COLLECTION, $mkeys);
+
+    //check whether already sent a notice
+    $exists = (isset($mdata['action']) && $mdata['action'] == $type);
+
+    //prepare & sent notification email if it is not sent yet
+    if (!$exists) {
+      $mdata = array(
+        'uid' => (int) $data['uid'],
+        'action' => $type,
+        'senttime' => REQUEST_TIME,
+      );
+
+      //Send mail
+      $transform_link = '';
+      switch ($type) {
+        case 2:
+          $transform_link = l('cliquez ici', 'user/register', array('absolute' => TRUE));
+          break;
+        case 3:
+          $transform_link = l('vous abonner', 'user/register', array('absolute' => TRUE));
+          break;
+        case 4:
+          $transform_link = l('abonnez-vous', 'user/register', array('absolute' => TRUE));
+          break;
+      }
+      $u_user = user_load($data['uid']);
+      $u_profile = batire_user_profile_load($data['uid']);
+      $options = array(
+        'module' => 'batire_user',
+        'mailkey' => 'batire_user_account_trial_offer_' . $type,
+        'recipient' => $u_user->mail,
+        'subject' => '',
+        'data' => array(
+          'name' => $u_profile->field_user_name[0]['value'],
+          'surname' => $u_profile->field_user_surname[0]['value'],
+          'salutation' => $u_profile->field_user_salut[0]['value'],
+          'reg_link' => l('Vous souhaitez vous abonner ?', 'user/register', array('absolute' => TRUE)),
+          'contact_link' => batire_site_contact_link('Si vous avez des questions, n\'hésitez pas à nous contacter !'),
+          'faq_link' => l('Retrouvez les réponses aux questions les plus fréquentes', 'faq', array('absolute' => TRUE)),
+          'transform_link' => $transform_link
+        ),
+        'plaintext' => FALSE
+      );
+
+      $mail_success = batire_site_send_mail($options);
+      if ($mail_success) {
+        mongodb_update(MONGODB_USER_MAIL_COLLECTION, $mkeys, $mdata);
+      }
+      $success = $success && $mail_success;
+    }
+  }
+  return $success;
+}
+
+/**
+ * Implementation of hook_user().
+ */
+function batire_user_user($op, &$edit, &$account, $category = NULL) {
+  switch ($op) {
+    case 'update' :
+      $profile = batire_user_profile_load($account->uid);
+
+      if ($profile->uid) {
+        //Types
+        $type_tid = 0;
+        if (array_key_exists(BATIRE_USER_PAIDACCOUNT, $account->roles)) {
+          $type_tid = BATIRE_USER_TYPES_PAID;
+        }
+        if (array_key_exists(BATIRE_USER_MONTHACCOUNT, $account->roles)) {
+          $type_tid = BATIRE_USER_TYPES_MONTH;
+        }
+        if (array_key_exists(BATIRE_USER_FREEACCOUNT, $account->roles)) {
+          $type_tid = BATIRE_USER_TYPES_FREE;
+        }
+        if (array_key_exists(BATIRE_USER_TRIALTNACCOUNT, $account->roles)) {
+          $type_tid = BATIRE_USER_TYPES_TRIALTN;
+        }
+
+        //Roles
+        $role_tid = 0;
+        if (array_key_exists(BATIRE_USER_MONOPOST, $account->roles)) {
+          $role_tid = BATIRE_USER_ROLES_MONO;
+        }
+        if (array_key_exists(BATIRE_USER_MULTIADMIN, $account->roles)) {
+          $role_tid = BATIRE_USER_ROLES_MULTI;
+        }
+        if (array_key_exists(BATIRE_USER_SUBACCOUNT, $account->roles)) {
+          $role_tid = BATIRE_USER_ROLES_SECOND;
+        }
+
+        //Update user profile taxonomy
+        $profile->taxonomy = array();
+        if ($type_tid) {
+          $profile->taxonomy[$type_tid] = taxonomy_get_term($type_tid);
+        }
+        if ($role_tid) {
+          $profile->taxonomy[$role_tid] = taxonomy_get_term($role_tid);
+        }
+        node_save($profile);
+      }
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function batire_user_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  if ($node->type == 'batire_user_profile') {
+    switch ($op) {
+      case 'insert' :
+        $account = user_load($node->uid);
+        if ($account->uid) {
+          //Types
+          $type_tid = 0;
+          if (array_key_exists(BATIRE_USER_PAIDACCOUNT, $account->roles)) {
+            $type_tid = BATIRE_USER_TYPES_PAID;
+          }
+          if (array_key_exists(BATIRE_USER_MONTHACCOUNT, $account->roles)) {
+            $type_tid = BATIRE_USER_TYPES_MONTH;
+          }
+          if (array_key_exists(BATIRE_USER_FREEACCOUNT, $account->roles)) {
+            $type_tid = BATIRE_USER_TYPES_FREE;
+          }
+          if (array_key_exists(BATIRE_USER_TRIALTNACCOUNT, $account->roles)) {
+            $type_tid = BATIRE_USER_TYPES_TRIALTN;
+          }
+
+          //Roles
+          $role_tid = 0;
+          if (array_key_exists(BATIRE_USER_MONOPOST, $account->roles)) {
+            $role_tid = BATIRE_USER_ROLES_MONO;
+          }
+          if (array_key_exists(BATIRE_USER_MULTIADMIN, $account->roles)) {
+            $role_tid = BATIRE_USER_ROLES_MULTI;
+          }
+          if (array_key_exists(BATIRE_USER_SUBACCOUNT, $account->roles)) {
+            $role_tid = BATIRE_USER_ROLES_SECOND;
+          }
+
+          //Update user profile taxonomy
+          $node->taxonomy = array();
+          if ($type_tid) {
+            $node->taxonomy[$type_tid] = taxonomy_get_term($type_tid);
+          }
+          if ($role_tid) {
+            $node->taxonomy[$role_tid] = taxonomy_get_term($role_tid);
+          }
+        }
+
+        break;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_form-alter().
+ *
+ * Alter form for content types Products Module 1-2 and Module 3
+ */
+function batire_user_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'batire_product_module_1_2_node_form') {
+    $form['taxonomy']['#tree'] = FALSE;
+    $form['taxonomy']['#title'] = t('Included items');
+
+    // Move needed fields to right column
+    $form['taxonomy']['field_product_actuality'] = $form['field_product_actuality'];
+    $form['taxonomy']['field_product_tn'] = $form['field_product_tn'];
+    $form['taxonomy']['field_product_ct'] = $form['field_product_ct'];
+    $form['taxonomy']['field_codes_espaces'] = $form['field_codes_espaces'];
+    unset($form['field_product_actuality']);
+    unset($form['field_product_tn']);
+    unset($form['field_product_ct']);
+    unset($form['field_codes_espaces']);
+    unset($form['taxonomy'][BATIRE_USER_PRODUCTS_CODES_VID]);
+    // Add autocomplete for codes d'espaces field
+    foreach ($form['taxonomy']['field_codes_espaces'] as $key => $field) {
+      if (is_numeric($key)) {
+        $form['taxonomy']['field_codes_espaces'][$key]['#autocomplete_path'] = 'taxonomy/autocomplete/' . BATIRE_USER_PRODUCTS_CODES_VID;
+      }
+    }
+    $form['taxonomy']['field_product_actuality']['#weight'] = '0';
+    $form['taxonomy']['field_product_tn']['#weight'] = '1';
+    $form['taxonomy']['field_product_ct']['#weight'] = '2';
+    $form['taxonomy'][BATIRE_SITE_VID_PRODUCT_TYPES]['#weight'] = '3';
+    $form['taxonomy']['field_codes_espaces']['#weight'] = '4';
+
+    $form['taxonomy'][BATIRE_SITE_VID_LIVRES]['#weight'] = '10';
+    $form['taxonomy'][BATIRE_SITE_VID_FM]['#weight'] = '20';
+    //add new option for select all Livres
+    $form['taxonomy'][BATIRE_SITE_VID_LIVRES]["#options"][0] = " - Tous les livres - ";
+    unset($form['taxonomy'][BATIRE_SITE_VID_LIVRES]["#options"][""]);
+
+    //add new option for select all Livres
+    $form['taxonomy'][BATIRE_SITE_VID_LIVRES]["#options"][0] = " - Tous les livres - ";
+    unset($form['taxonomy'][BATIRE_SITE_VID_LIVRES]["#options"][""]);
+
+    $form['#submit'][] = 'batire_user_product_form_submit';
+  }
+
+  if ($form_id == 'batire_product_module_3_node_form') {
+    $form['taxonomy']['#tree'] = FALSE;
+    $form['taxonomy']['#title'] = t('Included items');
+
+    // Move needed fields to right column
+    $form['taxonomy']['field_product_actuality'] = $form['field_product_actuality'];
+    $form['taxonomy']['field_product_ct'] = $form['field_product_ct'];
+    $form['taxonomy']['field_codes_espaces'] = $form['field_codes_espaces'];
+    unset($form['field_product_actuality']);
+    unset($form['field_product_ct']);
+    unset($form['field_codes_espaces']);
+    unset($form['taxonomy'][BATIRE_USER_PRODUCTS_CODES_VID]);
+    // Add autocomplete for codes d'espaces field
+    foreach ($form['taxonomy']['field_codes_espaces'] as $key => $field) {
+      if (is_numeric($key)) {
+        $form['taxonomy']['field_codes_espaces'][$key]['#autocomplete_path'] = 'taxonomy/autocomplete/' . BATIRE_USER_PRODUCTS_CODES_VID;
+      }
+    }
+    // add new fieldset "Regroupement"
+    $form['taxonomy']['regroupement'] = array(
+      '#type'         => 'fieldset',
+      '#title'        => t('Regroupement:'),
+      '#collapsible'  => FALSE,
+      '#collapsed'    => FALSE,
+      '#weight'       => '20',
+      '#tree'         => TRUE,
+    );
+    $form['taxonomy']['regroupement'][BATIRE_SITE_VID_THEMES] = $form['taxonomy'][BATIRE_SITE_VID_THEMES];
+    $form['taxonomy']['regroupement'][BATIRE_SITE_VID_CORPS] = $form['taxonomy'][BATIRE_SITE_VID_CORPS];
+    $form['taxonomy']['regroupement'][BATIRE_SITE_VID_BATIMENT] = $form['taxonomy'][BATIRE_SITE_VID_BATIMENT];
+    unset($form['taxonomy'][BATIRE_SITE_VID_THEMES]);
+    unset($form['taxonomy'][BATIRE_SITE_VID_CORPS]);
+    unset($form['taxonomy'][BATIRE_SITE_VID_BATIMENT]);
+
+    // Sort vocabularies in Taxonomy fieldset
+    $form['taxonomy']['field_product_actuality']['#weight'] = '0';
+    $form['taxonomy']['field_product_tn']['#weight'] = '1';
+    $form['taxonomy']['field_product_ct']['#weight'] = '2';
+    $form['taxonomy'][BATIRE_SITE_VID_PRODUCT_TYPES]['#weight'] = '3';
+    $form['taxonomy']['field_codes_espaces']['#weight'] = '4';
+    $form['taxonomy'][BATIRE_SITE_VID_LIVRES]['#weight'] = '10';
+    $form['taxonomy'][BATIRE_SITE_VID_FM]['#weight'] = '11';
+    $form['taxonomy']['regroupement'][BATIRE_SITE_VID_THEMES]['#weight'] = '30';
+    $form['taxonomy']['regroupement'][BATIRE_SITE_VID_CORPS]['#weight'] = '40';
+    $form['taxonomy']['regroupement'][BATIRE_SITE_VID_BATIMENT]['#weight'] = '50';
+    //add new option for select all Livres
+    $form['taxonomy'][BATIRE_SITE_VID_LIVRES]["#options"][0] = " - Tous les livres - ";
+    unset($form['taxonomy'][BATIRE_SITE_VID_LIVRES]["#options"][""]);
+
+    $form['#submit'][] = 'batire_user_product_form_submit';
+
+    // validate taxonomy for product module 3
+    $form['#validate'][] = 'batire_user_product_form_validate';
+  }
+  // Add autocomplete for multiple valued field
+  if ($form_id == 'content_add_more_js' && isset($form['field_codes_espaces'])) {
+    foreach ($form['field_codes_espaces'] as $key => $value) {
+      if (is_numeric($key)) {
+        $form['field_codes_espaces'][$key]['#autocomplete_path'] = 'taxonomy/autocomplete/' . BATIRE_USER_PRODUCTS_CODES_VID;
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_validate()/
+ */
+function batire_user_product_form_validate(&$form, $form_state) {
+  if (empty($form_state['values']['regroupement'][BATIRE_SITE_VID_THEMES])
+     && empty($form_state['values']['regroupement'][BATIRE_SITE_VID_CORPS])
+     && empty($form_state['values']['regroupement'][BATIRE_SITE_VID_BATIMENT]))  {
+    form_set_error('batire_product_module_3_node_form', t('At least one value of the block "Regroupement" need to be selected'));
+  }
+}
+
+/**
+ * Products form submit handler
+ */
+function batire_user_product_form_submit($form, &$form_state) {
+  foreach ($form_state['values'] as $key => $value) {
+    if (is_numeric($key)) {
+      $form_state['values']['taxonomy'][$key] = $value;
+      unset($form_state['values'][$key]);
+    }
+  }
+
+  // move indexation fields
+  if (isset($form_state['values']['regroupement'][BATIRE_SITE_VID_THEMES]) &&
+      isset($form_state['values']['regroupement'][BATIRE_SITE_VID_CORPS]) &&
+      isset($form_state['values']['regroupement'][BATIRE_SITE_VID_BATIMENT]))
+  {
+    $form_state['values']['taxonomy'][BATIRE_SITE_VID_THEMES] = $form_state['values']['regroupement'][BATIRE_SITE_VID_THEMES];
+    $form_state['values']['taxonomy'][BATIRE_SITE_VID_CORPS] = $form_state['values']['regroupement'][BATIRE_SITE_VID_CORPS];
+    $form_state['values']['taxonomy'][BATIRE_SITE_VID_BATIMENT] = $form_state['values']['regroupement'][BATIRE_SITE_VID_BATIMENT];
+    unset($form_state['values']['regroupement'][BATIRE_SITE_VID_THEMES]);
+    unset($form_state['values']['regroupement'][BATIRE_SITE_VID_CORPS]);
+    unset($form_state['values']['regroupement'][BATIRE_SITE_VID_BATIMENT]);
+  }
+
+  if (in_array(0, $form_state['values']['taxonomy'][BATIRE_SITE_VID_LIVRES])) {
+    foreach (taxonomy_get_tree(BATIRE_SITE_VID_LIVRES) as $term) {
+      $livres_term[] = $term->tid;
+    }
+    $form_state['values']['taxonomy'][BATIRE_SITE_VID_LIVRES] = $livres_term;
+  }
+
+  foreach ($form_state['values']['taxonomy'] as $vid => &$values) {
+    switch ($vid) {
+      case BATIRE_SITE_VID_CORPS:
+      case BATIRE_SITE_VID_BATIMENT:
+        foreach ($values as $tid) {
+          $children = taxonomy_get_children($tid);
+          foreach ($children as $child_term) {
+            $values[$child_term->tid] = $child_term->tid;
+          }
+        }
+        break;
+    }
+  }
+
+  // handle codes d'espaces
+  $form_state['values']['taxonomy'][BATIRE_USER_PRODUCTS_CODES_VID] = array();
+  foreach ($form_state['values']['field_codes_espaces'] as $key => $value) {
+    $term = _batire_user_get_term_by_name($value['value'], BATIRE_USER_PRODUCTS_CODES_VID);
+    if ($term && !in_array($term->tid, $form_state['values']['taxonomy'][BATIRE_USER_PRODUCTS_CODES_VID])) {
+      $form_state['values']['taxonomy'][BATIRE_USER_PRODUCTS_CODES_VID][] = $term->tid;
+    }
+    else {
+      unset($form_state['values']['field_codes_espaces'][$key]);
+    }
+  }
+}
+
+function _batire_user_get_term_by_name($name, $vid) {
+  $db_result = db_query("SELECT t.tid, t.* FROM {term_data} t WHERE t.name = '%s' AND t.vid = %d", trim($name), $vid);
+  return db_fetch_object($db_result);
+}

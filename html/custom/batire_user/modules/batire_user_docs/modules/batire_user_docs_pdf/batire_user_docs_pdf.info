@@ -1,0 +1,9 @@
+;$Id: batire_user_docs_pdf.info
+name = "Batire user docs PDF"
+description = Generate pdf version of documents.
+package = Batire
+core = 6.x
+
+dependencies[] = batire_site
+dependencies[] = batire_user_docs
+dependencies[] = print_pdf
